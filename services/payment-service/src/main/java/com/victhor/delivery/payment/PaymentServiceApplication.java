@@ -1,4 +1,4 @@
-package com.victhor.delivery.payment.payment_service;
+package com.victhor.delivery.payment;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

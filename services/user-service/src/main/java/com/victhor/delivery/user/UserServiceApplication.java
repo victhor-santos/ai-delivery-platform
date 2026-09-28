@@ -1,4 +1,4 @@
-package com.victhor.delivery.user.user_service;
+package com.victhor.delivery.user;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

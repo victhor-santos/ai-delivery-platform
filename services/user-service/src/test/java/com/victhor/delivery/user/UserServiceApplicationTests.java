@@ -1,10 +1,10 @@
-package com.victhor.delivery.catalog.catalog_service;
+package com.victhor.delivery.user;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class CatalogServiceApplicationTests {
+class UserServiceApplicationTests {
 
 	@Test
 	void contextLoads() {
