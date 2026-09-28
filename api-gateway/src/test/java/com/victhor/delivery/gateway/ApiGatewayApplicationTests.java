@@ -1,10 +1,10 @@
-package com.victhor.delivery.delivery.delivery_service;
+package com.victhor.delivery.gateway;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class DeliveryServiceApplicationTests {
+class ApiGatewayApplicationTests {
 
 	@Test
 	void contextLoads() {

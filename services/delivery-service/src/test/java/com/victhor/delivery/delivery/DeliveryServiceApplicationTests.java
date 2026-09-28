@@ -1,10 +1,10 @@
-package com.victhor.delivery.payment.payment_service;
+package com.victhor.delivery.delivery;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class PaymentServiceApplicationTests {
+class DeliveryServiceApplicationTests {
 
 	@Test
 	void contextLoads() {

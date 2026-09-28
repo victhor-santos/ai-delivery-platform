@@ -1,13 +1,13 @@
-package com.victhor.delivery.gateway.api_gateway;
+package com.victhor.delivery.order;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class ApiGatewayApplication {
+public class OrderServiceApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(ApiGatewayApplication.class, args);
+		SpringApplication.run(OrderServiceApplication.class, args);
 	}
 
 }

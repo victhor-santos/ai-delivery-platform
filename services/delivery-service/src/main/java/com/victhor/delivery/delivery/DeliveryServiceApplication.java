@@ -1,13 +1,13 @@
-package com.victhor.delivery.catalog.catalog_service;
+package com.victhor.delivery.delivery;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class CatalogServiceApplication {
+public class DeliveryServiceApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(CatalogServiceApplication.class, args);
+		SpringApplication.run(DeliveryServiceApplication.class, args);
 	}
 
 }
