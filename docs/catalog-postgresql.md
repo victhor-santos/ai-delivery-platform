@@ -1,6 +1,6 @@
 # PostgreSQL local do catálogo
 
-O Catalog Service conecta ao PostgreSQL e usa Flyway para controlar o schema. Esta etapa prepara a persistência; o adaptador JPA dos restaurantes e os endpoints HTTP serão entregues separadamente.
+O Catalog Service conecta ao PostgreSQL e usa Flyway para controlar o schema. Os casos de uso já cadastram e consultam restaurantes por um adaptador JPA. Os endpoints HTTP de restaurantes serão entregues na próxima etapa.
 
 Execute os comandos abaixo na raiz do repositório, com Docker e Docker Compose v2 instalados e o Docker em execução:
 
@@ -51,9 +51,17 @@ Com Docker funcionando, execute na raiz:
 .\services\catalog-service\mvnw.cmd -f .\services\catalog-service\pom.xml clean verify
 ```
 
-Os testes de integração criam um PostgreSQL 17 descartável via Testcontainers, separado do volume local. Não precisam de Compose ou `.env`. Verificam a inicialização do contexto, a migration Flyway e as restrições de nome no banco, além dos testes existentes de domínio e casos de uso. A suíte falha se Docker estiver indisponível.
+Os testes de integração criam bancos PostgreSQL 17 descartáveis via Testcontainers, separados do volume local. Não precisam de Compose ou `.env`. Verificam a inicialização do contexto, a migration Flyway, as restrições de nome, os dados gravados pelos casos de uso, as consultas e a paginação. Os testes de domínio e casos de uso também continuam na suíte, que falha se Docker estiver indisponível.
 
 O build gera `services/catalog-service/target/catalog-service-0.0.1-SNAPSHOT.jar`. As versões de JPA, driver PostgreSQL, Flyway e Testcontainers são geridas pelo Spring Boot 4.1.1.
+
+## Integração dos casos de uso com JPA
+
+`RestaurantService` depende da interface `RestaurantRepository`. A configuração Spring em `infrastructure` fornece o serviço com o adaptador `JpaRestaurantRepository`, que converte entre `Restaurant` e `RestaurantEntity`. O domínio e os casos de uso permanecem independentes de Spring e JPA.
+
+O adaptador abre uma transação de escrita para salvar e transações de leitura para consultar. O cadastro retorna após a confirmação da transação. Cada caso de uso atual faz uma única chamada de persistência; futuros fluxos com várias gravações precisarão de uma transação que englobe todas elas.
+
+A listagem ordena por `name ASC, id ASC`, permitindo nomes repetidos com desempate por UUID. O limite de tamanho é 100, e a resposta da camada de aplicação inclui conteúdo, página, tamanho e total de registros.
 
 ## Preservar os dados
 
