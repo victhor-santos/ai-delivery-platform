@@ -12,10 +12,14 @@ import tools.jackson.databind.type.LogicalType;
 class JsonConfiguration {
 
     @Bean
-    JsonMapperBuilderCustomizer requireJsonStrings() {
+    JsonMapperBuilderCustomizer requireMatchingJsonTypes() {
         return builder -> builder.withCoercionConfig(LogicalType.Textual, config -> config
                 .setCoercion(CoercionInputShape.Integer, CoercionAction.Fail)
                 .setCoercion(CoercionInputShape.Float, CoercionAction.Fail)
-                .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail));
+                .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail))
+                .withCoercionConfig(LogicalType.Float, config -> config
+                        .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
+                        .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail)
+                        .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail));
     }
 }

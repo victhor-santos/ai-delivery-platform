@@ -65,12 +65,110 @@ class RestaurantApiIntegrationTests {
 		assertThat(response.headers().firstValue("Location")).contains(RESTAURANTS + "/" + id);
 		assertThat(response.body().path("name").asText()).isEqualTo("Cantina Vitória");
 		assertThat(response.body().path("active").asBoolean()).isTrue();
-		assertThat(response.body().size()).isEqualTo(3);
+		assertThat(response.body().size()).isEqualTo(4);
+		assertThat(response.body().path("pickupLocation").isNull()).isTrue();
 
 		Map<String, Object> stored = jdbc.queryForMap("SELECT id, name, active FROM restaurants WHERE id = ?", id);
 		assertThat(stored).containsEntry("id", id)
 				.containsEntry("name", "Cantina Vitória")
 				.containsEntry("active", true);
+	}
+
+	@Test
+	void createsAndQueriesARestaurantWithPickupLocation() throws Exception {
+		Response created = post("""
+				{"name":"Cantina","pickupLocation":{"latitude":-23.5505,"longitude":-46.6333}}
+				""");
+
+		assertThat(created.status()).isEqualTo(201);
+		String id = created.body().path("id").asText();
+		assertThat(created.headers().firstValue("Location")).contains(RESTAURANTS + "/" + id);
+		assertThat(created.body().path("pickupLocation").path("latitude").asDouble()).isEqualTo(-23.5505);
+		assertThat(created.body().path("pickupLocation").path("longitude").asDouble()).isEqualTo(-46.6333);
+		assertThat(get(RESTAURANTS + "/" + id).body()).isEqualTo(created.body());
+		assertThat(get(RESTAURANTS).body().path("content").get(0)).isEqualTo(created.body());
+		assertThat(jdbc.queryForMap("SELECT pickup_latitude, pickup_longitude FROM restaurants WHERE id = ?",
+				UUID.fromString(id))).containsEntry("pickup_latitude", -23.5505)
+				.containsEntry("pickup_longitude", -46.6333);
+	}
+
+	@Test
+	void acceptsAnExplicitlyNullLocationOnCreation() throws Exception {
+		Response response = post("{\"name\":\"Cantina\",\"pickupLocation\":null}");
+
+		assertThat(response.status()).isEqualTo(201);
+		assertThat(response.body().path("pickupLocation").isNull()).isTrue();
+	}
+
+	@Test
+	void assignsAndReplacesPickupLocationWithoutChangingRestaurantIdentity() throws Exception {
+		Response created = post("{\"name\":\"Cantina\"}");
+		assertThat(created.status()).isEqualTo(201);
+		String id = created.body().path("id").asText();
+		jdbc.update("UPDATE restaurants SET active = false WHERE id = ?", UUID.fromString(id));
+		String path = RESTAURANTS + "/" + id + "/pickup-location";
+		assertThat(put(path, "{\"latitude\":-23.5505,\"longitude\":-46.6333}").status()).isEqualTo(200);
+
+		Response updated = put(path, "{\"latitude\":0,\"longitude\":180}");
+
+		assertThat(updated.status()).isEqualTo(200);
+		assertThat(updated.body().path("id").asText()).isEqualTo(id);
+		assertThat(updated.body().path("name").asText()).isEqualTo("Cantina");
+		assertThat(updated.body().path("active").asBoolean()).isFalse();
+		assertThat(updated.body().path("pickupLocation").path("latitude").asDouble()).isZero();
+		assertThat(updated.body().path("pickupLocation").path("longitude").asDouble()).isEqualTo(180);
+		assertThat(get(RESTAURANTS + "/" + id).body()).isEqualTo(updated.body());
+		Response repeated = put(path, "{\"latitude\":0,\"longitude\":180}");
+		assertThat(repeated.status()).isEqualTo(200);
+		assertThat(repeated.body()).isEqualTo(updated.body());
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurants", Integer.class)).isEqualTo(1);
+	}
+
+	@ParameterizedTest
+	@MethodSource("invalidLocations")
+	void rejectsInvalidLocationsWithoutCreatingOrChangingRestaurants(String location) throws Exception {
+		assertProblem(post("{\"name\":\"Cantina\",\"pickupLocation\":" + location + "}"), 400);
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurants", Integer.class)).isZero();
+		Response created = post("""
+				{"name":"Cantina","pickupLocation":{"latitude":-23.5505,"longitude":-46.6333}}
+				""");
+		assertThat(created.status()).isEqualTo(201);
+		String path = RESTAURANTS + "/" + created.body().path("id").asText();
+
+		assertProblem(put(path + "/pickup-location", location), 400);
+
+		assertThat(get(path).body()).isEqualTo(created.body());
+	}
+
+	static Stream<String> invalidLocations() {
+		return Stream.of("{}", "[]", "true",
+				"{\"latitude\":0}", "{\"longitude\":0}",
+				"{\"latitude\":null,\"longitude\":0}", "{\"latitude\":0,\"longitude\":null}",
+				"{\"latitude\":90.000001,\"longitude\":0}", "{\"latitude\":-90.000001,\"longitude\":0}",
+				"{\"latitude\":0,\"longitude\":180.000001}", "{\"latitude\":0,\"longitude\":-180.000001}",
+				"{\"latitude\":\"-23.5505\",\"longitude\":0}", "{\"latitude\":0,\"longitude\":\"\"}",
+				"{\"latitude\":true,\"longitude\":0}", "{\"latitude\":0,\"longitude\":\"NaN\"}",
+				"{\"latitude\":1e309,\"longitude\":0}");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "null", "", "{" })
+	void rejectsAnEmptyOrMalformedLocationUpdate(String body) throws Exception {
+		Response created = post("{\"name\":\"Cantina\"}");
+		assertThat(created.status()).isEqualTo(201);
+		String path = RESTAURANTS + "/" + created.body().path("id").asText();
+
+		assertProblem(put(path + "/pickup-location", body), 400);
+		assertThat(get(path).body()).isEqualTo(created.body());
+	}
+
+	@Test
+	void rejectsAnUnknownRestaurantOrMalformedIdWhenUpdatingLocation() throws Exception {
+		String body = "{\"latitude\":-23.5505,\"longitude\":-46.6333}";
+
+		assertProblem(put(RESTAURANTS + "/" + UUID.randomUUID() + "/pickup-location", body), 404);
+		assertProblem(put(RESTAURANTS + "/invalid/pickup-location", body), 400);
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurants", Integer.class)).isZero();
 	}
 
 	@Test
@@ -230,6 +328,12 @@ class RestaurantApiIntegrationTests {
 		return send(HttpRequest.newBuilder(uri(RESTAURANTS)).timeout(Duration.ofSeconds(10))
 				.header("Content-Type", "application/json")
 				.POST(HttpRequest.BodyPublishers.ofString(body)).build());
+	}
+
+	private Response put(String path, String body) throws Exception {
+		return send(HttpRequest.newBuilder(uri(path)).timeout(Duration.ofSeconds(10))
+				.header("Content-Type", "application/json")
+				.PUT(HttpRequest.BodyPublishers.ofString(body)).build());
 	}
 
 	private Response send(HttpRequest request) throws Exception {

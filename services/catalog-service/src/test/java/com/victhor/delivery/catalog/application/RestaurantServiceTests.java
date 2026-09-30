@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.victhor.delivery.catalog.domain.Restaurant;
+import com.victhor.delivery.catalog.domain.PickupLocation;
 
 @ExtendWith(MockitoExtension.class)
 class RestaurantServiceTests {
@@ -54,6 +55,44 @@ class RestaurantServiceTests {
     @ValueSource(strings = { " ", "\t\n" })
     void rejectsInvalidNamesBeforeSaving(String name) {
         assertThatIllegalArgumentException().isThrownBy(() -> service.create(name));
+
+        verifyNoInteractions(restaurants);
+    }
+
+    @Test
+    void createsARestaurantWithPickupLocation() {
+        var location = new PickupLocation(-23.5505, -46.6333);
+        when(restaurants.save(any(Restaurant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Restaurant created = service.create("Cantina", location);
+
+        assertThat(created.pickupLocation()).isEqualTo(location);
+        verify(restaurants).save(created);
+    }
+
+    @Test
+    void returnsTheRestaurantAfterUpdatingItsPickupLocation() {
+        UUID id = UUID.randomUUID();
+        var location = new PickupLocation(-23.5505, -46.6333);
+        var updated = new Restaurant(id, "Cantina", false, location);
+        when(restaurants.updatePickupLocation(id, location)).thenReturn(Optional.of(updated));
+
+        assertThat(service.updatePickupLocation(id, location)).isEqualTo(updated);
+    }
+
+    @Test
+    void reportsAMissingRestaurantWhenUpdatingItsLocation() {
+        UUID id = UUID.randomUUID();
+        var location = new PickupLocation(-23.5505, -46.6333);
+        when(restaurants.updatePickupLocation(id, location)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updatePickupLocation(id, location))
+                .isInstanceOf(RestaurantNotFoundException.class);
+    }
+
+    @Test
+    void rejectsRemovingThePickupLocation() {
+        assertThatIllegalArgumentException().isThrownBy(() -> service.updatePickupLocation(UUID.randomUUID(), null));
 
         verifyNoInteractions(restaurants);
     }

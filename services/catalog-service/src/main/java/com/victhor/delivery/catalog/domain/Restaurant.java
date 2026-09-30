@@ -3,7 +3,7 @@ package com.victhor.delivery.catalog.domain;
 import java.util.Objects;
 import java.util.UUID;
 
-public record Restaurant(UUID id, String name, boolean active) {
+public record Restaurant(UUID id, String name, boolean active, PickupLocation pickupLocation) {
 
     public static final int MAX_NAME_LENGTH = 120;
 
@@ -19,6 +19,14 @@ public record Restaurant(UUID id, String name, boolean active) {
     }
 
     public static Restaurant create(String name) {
-        return new Restaurant(UUID.randomUUID(), name, true);
+        return create(name, null);
+    }
+
+    public static Restaurant create(String name, PickupLocation pickupLocation) {
+        return new Restaurant(UUID.randomUUID(), name, true, pickupLocation);
+    }
+
+    public Restaurant(UUID id, String name, boolean active) {
+        this(id, name, active, null);
     }
 }

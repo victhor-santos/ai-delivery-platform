@@ -3,6 +3,7 @@ package com.victhor.delivery.catalog.application;
 import java.util.UUID;
 
 import com.victhor.delivery.catalog.domain.Restaurant;
+import com.victhor.delivery.catalog.domain.PickupLocation;
 
 public class RestaurantService {
 
@@ -15,7 +16,19 @@ public class RestaurantService {
     }
 
     public Restaurant create(String name) {
-        return restaurants.save(Restaurant.create(name));
+        return create(name, null);
+    }
+
+    public Restaurant create(String name, PickupLocation pickupLocation) {
+        return restaurants.save(Restaurant.create(name, pickupLocation));
+    }
+
+    public Restaurant updatePickupLocation(UUID id, PickupLocation pickupLocation) {
+        if (pickupLocation == null) {
+            throw new IllegalArgumentException("Pickup location is required");
+        }
+        return restaurants.updatePickupLocation(id, pickupLocation)
+                .orElseThrow(RestaurantNotFoundException::new);
     }
 
     public Restaurant findById(UUID id) {

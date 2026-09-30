@@ -32,7 +32,9 @@ Na raiz do repositório:
 
 O diretório explícito permite carregar o `.env` da raiz. A aplicação recebe `CATALOG_DB_URL`, `CATALOG_DB_USERNAME` e `CATALOG_DB_PASSWORD` pelo arquivo ou por variáveis de ambiente. A senha é obrigatória. Pela IDE, configure a raiz como diretório de trabalho ou forneça essas variáveis ao processo.
 
-Flyway aplica `V1__create_restaurants.sql` na inicialização, criando a tabela `restaurants` e o índice `(name, id)`. O Hibernate usa `ddl-auto=validate`, e `open-in-view` fica desabilitado. Não edite migrations já aplicadas: mudanças futuras devem usar uma nova versão.
+Flyway aplica as migrations pendentes na inicialização. `V1__create_restaurants.sql` cria a tabela `restaurants` e o índice `(name, id)`. `V2__add_restaurant_pickup_location.sql` adiciona `pickup_latitude` e `pickup_longitude` como `DOUBLE PRECISION`, sem alterar os registros existentes. O Hibernate usa `ddl-auto=validate`, e `open-in-view` fica desabilitado. Não edite migrations já aplicadas: mudanças futuras devem usar uma nova versão.
+
+As coordenadas podem estar ambas vazias ou ambas preenchidas. Constraints do PostgreSQL rejeitam pares incompletos, valores fora dos limites geográficos, `NaN` e infinitos. A ausência de localização é representada por `NULL`, sem usar coordenadas fictícias.
 
 Com a aplicação iniciada:
 
@@ -59,7 +61,7 @@ O build gera `services/catalog-service/target/catalog-service-0.0.1-SNAPSHOT.jar
 
 `RestaurantService` depende da interface `RestaurantRepository`. A configuração Spring em `infrastructure` fornece o serviço com o adaptador `JpaRestaurantRepository`, que converte entre `Restaurant` e `RestaurantEntity`. O domínio e os casos de uso permanecem independentes de Spring e JPA.
 
-O adaptador abre uma transação de escrita para salvar e transações de leitura para consultar. O cadastro retorna após a confirmação da transação. Cada caso de uso atual faz uma única chamada de persistência; futuros fluxos com várias gravações precisarão de uma transação que englobe todas elas.
+O adaptador abre uma transação de escrita para cadastrar ou atualizar a localização, e transações de leitura para consultar. A atualização busca a entidade e altera suas coordenadas na mesma transação; o JPA grava a mudança ao confirmar a operação. O caso de uso recebe o restaurante atualizado pela porta de persistência. Requisições simultâneas de localização seguem a última gravação confirmada. Futuros fluxos com várias gravações relacionadas precisarão de uma transação que englobe todas elas.
 
 A listagem ordena por `name ASC, id ASC`, permitindo nomes repetidos com desempate por UUID. O limite de tamanho é 100, e a resposta da camada de aplicação inclui conteúdo, página, tamanho e total de registros.
 
@@ -67,13 +69,16 @@ A listagem ordena por `name ASC, id ASC`, permitindo nomes repetidos com desempa
 
 | Requisição | Resposta |
 | --- | --- |
-| `POST /api/catalog/restaurants` com `{"name":"Cantina Central"}` | `201`, cabeçalho `Location` e corpo `{id, name, active}` |
+| `POST /api/catalog/restaurants` com `{"name":"Cantina Central"}` | `201`, cabeçalho `Location` e corpo `{id, name, active, pickupLocation}` |
 | `GET /api/catalog/restaurants/{id}` | `200` com o restaurante ou `404` |
 | `GET /api/catalog/restaurants?page=0&size=20` | `200` com `{content, page, size, totalElements, totalPages}` |
+| `PUT /api/catalog/restaurants/{id}/pickup-location` com `{latitude, longitude}` | `200` com o restaurante atualizado ou `404` |
 
 O nome deve ser uma string não vazia, com até 120 caracteres após remover espaços nas extremidades. UUID e `active=true` são definidos pelo servidor; campos adicionais no JSON são ignorados. A página começa em zero, e o tamanho padrão é 20, com valores permitidos de 1 a 100. O produto `page * size` deve ser no máximo `2147483647`, limite de offset do JPA. A ordenação é fixa por nome e UUID, ambos ascendentes.
 
 Entrada inválida retorna `400`; UUID válido sem restaurante correspondente retorna `404`. Os erros usam `application/problem+json`, com `status`, `title` e `detail`. Falhas inesperadas retornam `500` com mensagem genérica, sem detalhes internos.
+
+`pickupLocation` é opcional no cadastro e aparece como `null` nas respostas quando ausente. Se informado, deve conter latitude e longitude numéricas e finitas, nos limites inclusivos de -90 a 90 e -180 a 180, respectivamente. O `PUT` exige o par completo, preserva os demais dados do restaurante e é idempotente. Os testes também verificam a migração de um banco com dados na V1 para a V2, a preservação dos registros e a rejeição de coordenadas inválidas pela API e pelo banco.
 
 ```powershell
 $baseUrl = 'http://localhost:8082'
