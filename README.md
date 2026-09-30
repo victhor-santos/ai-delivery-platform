@@ -1,12 +1,23 @@
 # Delivery Order System
 
-Projeto educacional de pedidos para delivery em Java e Spring Boot. O repositório reúne seis aplicações independentes: um API Gateway e cinco serviços.
+Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projeto de portfólio em AI Engineering. O repositório reúne um API Gateway e cinco serviços.
 
 ## Estado atual
 
 O Catalog Service cadastra e consulta restaurantes em PostgreSQL, com migrations Flyway, validação de entrada, paginação e testes de integração com Testcontainers. Um restaurante tem UUID, nome obrigatório e indicador `active`; o cadastro gera o UUID e inicia o restaurante ativo.
 
 Os cinco serviços mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações expõem Actuator. Os outros serviços ainda são a base inicial, sem persistência ou regras de negócio. Produtos, cardápios, pedidos reais, pagamentos, entregas, RabbitMQ e autenticação estão fora desta etapa.
+
+## Evolução para AI Engineering
+
+O próximo passo é preparar pedidos e entregas para integrar um serviço Python de roteamento. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
+
+Por enquanto, essa parte está documentada e ainda não foi implementada. A primeira demonstração usará dados e grafo sintéticos. Python não é necessário para executar o backend atual.
+
+- [Arquitetura de Route Intelligence e domínio de Delivery](docs/route-intelligence.md).
+- [Contrato futuro Java ↔ Python](docs/route-intelligence-contract.md).
+- [Dados, prevenção de leakage e avaliação dos modelos](docs/route-intelligence-data.md).
+- [Roadmap por feature branch](docs/roadmap.md).
 
 ## Requisitos
 
