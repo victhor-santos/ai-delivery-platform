@@ -1,6 +1,6 @@
 # Roadmap
 
-O catálogo foi integrado pelo PR #6. As próximas entregas preparam o fluxo de pedidos e entregas e, depois, adicionam previsão de tempo e roteamento em Python.
+O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8 e o ciclo mínimo de pedidos pelo PR #9. O domínio de entregas está implementado em Java puro; a próxima etapa acrescenta persistência e API. Depois, o fluxo receberá previsão de tempo e roteamento em Python.
 
 A base necessária para ML é uma entrega com origem, destino e ciclo de vida definido. Pagamentos, cardápios completos e autenticação podem evoluir separadamente.
 

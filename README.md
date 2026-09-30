@@ -10,11 +10,13 @@ A localização de coleta pode ser informada no cadastro ou atualizada depois. E
 
 O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Cada pedido guarda a referência ao restaurante e uma cópia do endereço de destino. Ainda não há itens, valores, validação remota do restaurante ou criação de entrega.
 
-Os cinco serviços mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações expõem Actuator. Usuários, pagamentos e entregas ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
+O Delivery Service possui regras de domínio para atribuição, coleta, transporte, chegada, conclusão e cancelamento, com testes em Java puro. Ainda não há persistência ou API de negócio de entregas. Veja o [domínio de entregas](docs/delivery-domain.md).
+
+Os cinco serviços mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações expõem Actuator. Usuários e pagamentos ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
 
 ## Evolução para AI Engineering
 
-O próximo passo é modelar o domínio de entregas, antes de integrar um serviço Python de roteamento. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
+O próximo passo é persistir e expor o ciclo de entregas, antes de integrar pedidos e o serviço Python de roteamento. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
 
 Por enquanto, essa parte está documentada e ainda não foi implementada. A primeira demonstração usará dados e grafo sintéticos. Python não é necessário para executar o backend atual.
 
@@ -301,6 +303,6 @@ foreach ($project in $projects) {
 }
 ```
 
-Substitua `clean test` por `clean verify` para também gerar os JARs em `target/` de cada aplicação. Pedidos têm testes de domínio, HTTP, persistência e concorrência, também com PostgreSQL descartável. Gateway, usuários, pagamentos e entregas mantêm os testes de inicialização de contexto. As integrações automatizadas testam HTTP diretamente nos serviços; confira também o encaminhamento real pelo Gateway usando os exemplos documentados.
+Substitua `clean test` por `clean verify` para também gerar os JARs em `target/` de cada aplicação. Pedidos têm testes de domínio, HTTP, persistência e concorrência, também com PostgreSQL descartável. Entregas têm testes de domínio e de contexto, sem dependência de banco ou Docker. Gateway, usuários e pagamentos mantêm os testes de inicialização de contexto. As integrações automatizadas testam HTTP diretamente nos serviços; confira também o encaminhamento real pelo Gateway usando os exemplos documentados.
 
 Veja o fluxo e as responsabilidades em [docs/architecture.md](docs/architecture.md), os detalhes de persistência em [docs/catalog-postgresql.md](docs/catalog-postgresql.md) e o [registro de validação do catálogo](docs/catalog-validation.md).

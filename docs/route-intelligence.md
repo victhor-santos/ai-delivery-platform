@@ -1,6 +1,6 @@
 # Route Intelligence
 
-Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento; Delivery ainda tem apenas a estrutura inicial do Spring, ping e Actuator. O serviço Python será desenvolvido depois da base de entregas.
+Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), mas ainda não tem persistência ou API de negócio. O serviço Python será desenvolvido depois da base de entregas.
 
 ## Objetivo
 
@@ -42,9 +42,9 @@ O cliente acessa o sistema pelo Gateway. O Delivery chama o serviço Python inte
 
 ## O que falta no backend
 
-O restaurante precisa de uma localização de coleta. As coordenadas serão informadas no cadastro ou em uma atualização, sem serviço externo de geocodificação. Restaurantes existentes serão preservados pela migration e precisarão receber uma localização antes de serem usados em uma entrega.
+O catálogo já permite informar coordenadas no cadastro ou em uma atualização, sem serviço externo de geocodificação. Restaurantes sem localização continuam válidos no catálogo, mas precisarão desse dado antes de serem usados em uma entrega.
 
-O primeiro pedido terá UUID, `restaurantId`, destino, timestamps e os estados `CREATED`, `CONFIRMED` e `CANCELLED`. A confirmação será manual e não indicará pagamento aprovado, já que produtos e cobrança ainda não estarão implementados.
+O pedido já possui UUID, `restaurantId`, destino, timestamps e os estados `CREATED`, `CONFIRMED` e `CANCELLED`. A confirmação é manual e não indica pagamento aprovado; produtos e cobrança ainda não foram implementados.
 
 Somente um pedido confirmado poderá solicitar entrega. Antes da criação, a integração verificará se o restaurante está ativo e tem localização. Cancelar o pedido depois de solicitar uma entrega exige coordenação entre serviços; essa operação será rejeitada na primeira versão.
 
@@ -53,7 +53,7 @@ Somente um pedido confirmado poderá solicitar entrega. Antes da criação, a in
 | Elemento | Dados propostos |
 | --- | --- |
 | `Delivery` | `id`, `orderId`, `origin`, `destination`, `courierId` opcional até a atribuição, `status` e versão para concorrência |
-| `DeliveryLocation` | Endereço descritivo e `GeoPoint`, copiados para a entrega |
+| `DeliveryLocation` | Descrição do local e `GeoPoint`, copiados para a entrega; não presume geocodificação |
 | `GeoPoint` | Latitude finita entre -90 e 90 e longitude finita entre -180 e 180, em WGS84 |
 | `Courier` | Identidade local mínima e indicador ativo; atribuição manual |
 | `RoutePlan` | Origem/destino usados, partida planejada, instante da previsão, trechos ordenados, distância, tempo previsto e versões do modelo/grafo |
