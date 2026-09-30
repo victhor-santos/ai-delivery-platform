@@ -4,7 +4,7 @@
 
 Monorepo com seis aplicações Spring Boot executadas separadamente. Cada aplicação tem seu próprio build Maven, configuração e testes. Nenhum serviço depende do código Java de outro serviço.
 
-O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O Order Service cria, consulta, confirma e cancela pedidos em outro PostgreSQL. Usuários, pagamentos e entregas mantêm a base inicial, com endpoints de demonstração e Actuator.
+O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O Order Service cria, consulta, confirma e cancela pedidos em outro PostgreSQL. Delivery possui regras de domínio testadas, mas ainda não tem persistência ou API de negócio. Usuários e pagamentos mantêm a base inicial, com endpoints de demonstração e Actuator.
 
 ```mermaid
 flowchart TD
@@ -52,7 +52,15 @@ O domínio não contém anotações JPA ou de validação HTTP. A entidade JPA n
 
 `RestaurantConfiguration`, em `infrastructure`, fornece o serviço de aplicação como bean Spring e injeta o adaptador. `JpaRestaurantRepository` abre transações de escrita no cadastro e na atualização de localização, e transações de leitura nas consultas. Cada operação retorna depois da confirmação da transação. Um fluxo futuro com várias gravações relacionadas precisará de uma transação que englobe a operação inteira.
 
-Usuários, pagamentos e entregas continuam com a classe `*Application` no pacote-base e controllers em `api`. Novas camadas serão criadas quando houver código que as justifique. O Gateway mantém organização própria para configuração e filtros.
+Usuários e pagamentos continuam com a classe `*Application` no pacote-base e controllers em `api`. Novas camadas serão criadas quando houver código que as justifique. O Gateway mantém organização própria para configuração e filtros.
+
+## Domínio de entregas
+
+O pacote `domain` de Delivery contém `Delivery`, `DeliveryStatus`, `DeliveryLocation`, `GeoPoint` e a identidade mínima de `Courier`. Não depende de Spring, HTTP, JPA ou código de outros serviços. `Delivery` encapsula suas alterações em comandos; origem e destino são valores imutáveis.
+
+O ciclo é `CREATED → ASSIGNED → PICKED_UP → IN_TRANSIT → DELIVERED`, com cancelamento apenas antes da coleta. A chegada é um evento durante `IN_TRANSIT` e precisa ser registrada antes da conclusão. Os comandos recebem `Instant`, rejeitam horários anteriores ao último evento e preservam os dados quando uma validação falha. Comandos repetidos e alterações em estados terminais são rejeitados.
+
+A atribuição exige um entregador ativo. Disponibilidade entre entregas, unicidade por pedido e controle de concorrência ainda precisam da persistência. Nenhum banco ou endpoint de negócio foi criado para representar garantias que ainda não existem. O [documento do domínio](delivery-domain.md) detalha as regras e os limites desta etapa.
 
 ## Pedidos
 
@@ -140,8 +148,10 @@ O contexto do catálogo usa a mesma estratégia de banco descartável. A suíte 
 
 Os comandos de configuração, execução, testes e chamadas HTTP estão no [README](../README.md).
 
+Delivery testa seu domínio sem banco: transições, chegada antes da conclusão, cancelamento, entregador inativo, coordenadas e horários. Comandos inválidos precisam preservar todos os campos. O teste de contexto Spring também permanece na suíte.
+
 ## Próximas etapas
 
-O próximo passo é modelar o domínio de entregas. Java continua responsável pelas transações; o futuro serviço Python vai prever tempos por trecho e calcular rotas. O [plano de Route Intelligence](route-intelligence.md), o [contrato HTTP](route-intelligence-contract.md), o [plano de dados](route-intelligence-data.md) e o [roadmap](roadmap.md) descrevem essa evolução.
+O próximo passo é adicionar persistência e API ao ciclo de entregas. Java continua responsável pelas transações; o futuro serviço Python vai prever tempos por trecho e calcular rotas. O [plano de Route Intelligence](route-intelligence.md), o [contrato HTTP](route-intelligence-contract.md), o [plano de dados](route-intelligence-data.md) e o [roadmap](roadmap.md) descrevem essa evolução.
 
 A demonstração com os serviços em containers usará hostnames da rede Docker e preservará os volumes existentes. Mensageria, outbox e compensações serão avaliadas quando o fluxo precisar dessas garantias. Produtos, pagamentos, autenticação, múltiplas entregas e cloud terão etapas próprias.
