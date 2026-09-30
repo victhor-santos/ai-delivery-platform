@@ -1,6 +1,6 @@
 # PostgreSQL local do catálogo
 
-O Catalog Service conecta ao PostgreSQL e usa Flyway para controlar o schema. Esta etapa prepara a persistência; o adaptador JPA dos restaurantes e os endpoints HTTP serão entregues separadamente.
+O Catalog Service cadastra e consulta restaurantes por HTTP, persiste os dados com JPA no PostgreSQL e usa Flyway para controlar o schema.
 
 Execute os comandos abaixo na raiz do repositório, com Docker e Docker Compose v2 instalados e o Docker em execução:
 
@@ -51,9 +51,41 @@ Com Docker funcionando, execute na raiz:
 .\services\catalog-service\mvnw.cmd -f .\services\catalog-service\pom.xml clean verify
 ```
 
-Os testes de integração criam um PostgreSQL 17 descartável via Testcontainers, separado do volume local. Não precisam de Compose ou `.env`. Verificam a inicialização do contexto, a migration Flyway e as restrições de nome no banco, além dos testes existentes de domínio e casos de uso. A suíte falha se Docker estiver indisponível.
+Os testes de integração criam bancos PostgreSQL 17 descartáveis via Testcontainers, separados do volume local. Não precisam de Compose ou `.env`. Verificam a inicialização do contexto, a migration Flyway, as restrições de nome, os dados gravados pelos casos de uso, as consultas e a paginação. Os testes HTTP exercitam cadastro, consultas, entradas inválidas, restaurante inexistente, ping e Actuator; um teste MVC verifica que falhas internas não expõem detalhes na resposta. Os testes de domínio e casos de uso também continuam na suíte, que falha se Docker estiver indisponível.
 
 O build gera `services/catalog-service/target/catalog-service-0.0.1-SNAPSHOT.jar`. As versões de JPA, driver PostgreSQL, Flyway e Testcontainers são geridas pelo Spring Boot 4.1.1.
+
+## Integração dos casos de uso com JPA
+
+`RestaurantService` depende da interface `RestaurantRepository`. A configuração Spring em `infrastructure` fornece o serviço com o adaptador `JpaRestaurantRepository`, que converte entre `Restaurant` e `RestaurantEntity`. O domínio e os casos de uso permanecem independentes de Spring e JPA.
+
+O adaptador abre uma transação de escrita para salvar e transações de leitura para consultar. O cadastro retorna após a confirmação da transação. Cada caso de uso atual faz uma única chamada de persistência; futuros fluxos com várias gravações precisarão de uma transação que englobe todas elas.
+
+A listagem ordena por `name ASC, id ASC`, permitindo nomes repetidos com desempate por UUID. O limite de tamanho é 100, e a resposta da camada de aplicação inclui conteúdo, página, tamanho e total de registros.
+
+## API de restaurantes
+
+| Requisição | Resposta |
+| --- | --- |
+| `POST /api/catalog/restaurants` com `{"name":"Cantina Central"}` | `201`, cabeçalho `Location` e corpo `{id, name, active}` |
+| `GET /api/catalog/restaurants/{id}` | `200` com o restaurante ou `404` |
+| `GET /api/catalog/restaurants?page=0&size=20` | `200` com `{content, page, size, totalElements, totalPages}` |
+
+O nome deve ser uma string não vazia, com até 120 caracteres após remover espaços nas extremidades. UUID e `active=true` são definidos pelo servidor; campos adicionais no JSON são ignorados. A página começa em zero, e o tamanho padrão é 20, com valores permitidos de 1 a 100. O produto `page * size` deve ser no máximo `2147483647`, limite de offset do JPA. A ordenação é fixa por nome e UUID, ambos ascendentes.
+
+Entrada inválida retorna `400`; UUID válido sem restaurante correspondente retorna `404`. Os erros usam `application/problem+json`, com `status`, `title` e `detail`. Falhas inesperadas retornam `500` com mensagem genérica, sem detalhes internos.
+
+```powershell
+$baseUrl = 'http://localhost:8082'
+$created = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$baseUrl/api/catalog/restaurants" -ContentType 'application/json' -Body '{"name":"Cantina Central"}'
+$created.StatusCode
+$created.Headers['Location']
+$restaurant = $created.Content | ConvertFrom-Json
+Invoke-RestMethod "$baseUrl/api/catalog/restaurants/$($restaurant.id)"
+Invoke-RestMethod "$baseUrl/api/catalog/restaurants?page=0&size=20"
+```
+
+Com o Gateway em execução, a rota existente `/api/catalog/**` atende essas mesmas chamadas pela porta 8080. O `Location` é relativo (`/api/catalog/restaurants/{id}`), para funcionar nas duas portas.
 
 ## Preservar os dados
 
