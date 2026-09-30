@@ -8,11 +8,13 @@ O Catalog Service cadastra e consulta restaurantes em PostgreSQL, com migrations
 
 A localização de coleta pode ser informada no cadastro ou atualizada depois. Ela contém latitude e longitude e é salva no PostgreSQL. Restaurantes sem localização continuam válidos no catálogo; esse dado será necessário para criar entregas quando o fluxo de Delivery estiver implementado.
 
-Os cinco serviços mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações expõem Actuator. Os outros serviços ainda são a base inicial, sem persistência ou regras de negócio. Produtos, cardápios, pedidos reais, pagamentos, entregas, RabbitMQ e autenticação estão fora desta etapa.
+O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Cada pedido guarda a referência ao restaurante e uma cópia do endereço de destino. Ainda não há itens, valores, validação remota do restaurante ou criação de entrega.
+
+Os cinco serviços mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações expõem Actuator. Usuários, pagamentos e entregas ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
 
 ## Evolução para AI Engineering
 
-O próximo passo é preparar pedidos e entregas para integrar um serviço Python de roteamento. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
+O próximo passo é modelar o domínio de entregas, antes de integrar um serviço Python de roteamento. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
 
 Por enquanto, essa parte está documentada e ainda não foi implementada. A primeira demonstração usará dados e grafo sintéticos. Python não é necessário para executar o backend atual.
 
@@ -25,10 +27,10 @@ Por enquanto, essa parte está documentada e ainda não foi implementada. A prim
 
 - JDK 21, com `JAVA_HOME` configurado e `java` disponível no terminal.
 - PowerShell para os exemplos abaixo.
-- Docker com suporte a containers Linux e Docker Compose v2, em execução, para o PostgreSQL local e os testes de integração do catálogo.
+- Docker com suporte a containers Linux e Docker Compose v2, em execução, para os bancos locais e os testes de integração de catálogo e pedidos.
 - Acesso à internet na primeira execução para baixar Maven, dependências e a imagem PostgreSQL.
 
-Cada aplicação inclui o Maven Wrapper; não é necessário instalar Maven separadamente. Versões da base: Spring Boot 4.1.1 e Spring Cloud 2025.1.3 no Gateway. O catálogo usa as versões de Spring Data JPA, PostgreSQL JDBC, Flyway e Testcontainers geridas pelo Spring Boot; o banco local e os testes usam PostgreSQL 17.
+Cada aplicação inclui o Maven Wrapper; não é necessário instalar Maven separadamente. Versões da base: Spring Boot 4.1.1 e Spring Cloud 2025.1.3 no Gateway. Catálogo e pedidos usam as versões de Spring Data JPA, PostgreSQL JDBC, Flyway e Testcontainers geridas pelo Spring Boot; os bancos locais e os testes usam PostgreSQL 17.
 
 ## Estrutura
 
@@ -60,7 +62,7 @@ Cada aplicação possui `pom.xml`, Maven Wrapper, código e testes próprios. N�
 | Payment Service | 8084 | `/api/payments/ping` |
 | Delivery Service | 8085 | `/api/deliveries/ping` |
 
-Todas as aplicações expõem `/actuator/health` e `/actuator/info` em sua própria porta. O endpoint `info` pode retornar `{}`. O health do Gateway informa a saúde dele, não a de todos os serviços. O health do catálogo inclui a conexão com o banco.
+Todas as aplicações expõem `/actuator/health` e `/actuator/info` em sua própria porta. O endpoint `info` pode retornar `{}`. O health do Gateway informa a saúde dele, não a de todos os serviços. Os endpoints de saúde de catálogo e pedidos incluem a conexão com seus bancos.
 
 ## PostgreSQL e configuração local
 
@@ -86,27 +88,34 @@ O `.env.example` contém somente valores de desenvolvimento. Ajuste o `.env` ant
 | `CATALOG_DB_USERNAME` | Usuário do banco; padrão `catalog` |
 | `CATALOG_DB_PASSWORD` | Senha local obrigatória, definida no `.env` ou no ambiente |
 | `CATALOG_DB_PORT` | Porta publicada pelo Compose; padrão `5432` |
+| `ORDER_DB_URL` | JDBC de pedidos; padrão `jdbc:postgresql://localhost:5434/orders` |
+| `ORDER_DB_USERNAME` | Usuário do banco de pedidos; padrão `orders` |
+| `ORDER_DB_PASSWORD` | Senha local obrigatória para iniciar o banco e o serviço de pedidos |
+| `ORDER_DB_PORT` | Porta de pedidos publicada pelo Compose; padrão `5434` |
 
-Se a porta 5432 já estiver ocupada, escolha outra porta em `CATALOG_DB_PORT` e ajuste também `CATALOG_DB_URL`. Variáveis de ambiente podem sobrescrever os valores do arquivo. O Compose sobe somente `catalog-db` (`postgres:17-alpine`), publica a porta em `127.0.0.1`, usa o volume nomeado `catalog_postgres_data` e verifica a saúde com `pg_isready`:
+Se a porta 5432 já estiver ocupada, escolha outra porta em `CATALOG_DB_PORT` e ajuste também `CATALOG_DB_URL`. A mesma regra vale para as variáveis de pedidos. Se você já possui `.env`, acrescente as quatro entradas `ORDER_DB_*` de `.env.example`, sem substituir os valores do catálogo. Variáveis de ambiente podem sobrescrever os valores do arquivo.
+
+O Compose define `catalog-db` e `order-db`, ambos com `postgres:17-alpine`, porta publicada em `127.0.0.1` e health check `pg_isready`. Os volumes são separados: `catalog_postgres_data` e `order_postgres_data`. Para iniciar os dois:
 
 ```powershell
-docker compose up -d --wait catalog-db
+docker compose up -d --wait catalog-db order-db
 docker compose ps
 ```
 
-O banco se chama `catalog`. A aplicação importa opcionalmente `.env` do diretório de execução e exige a senha para se conectar. Ao iniciar o catálogo, Flyway aplica as migrations em `src/main/resources/db/migration`; Hibernate apenas valida o schema (`ddl-auto=validate`). `open-in-view` fica desabilitado.
+Os bancos se chamam `catalog` e `orders`. Cada aplicação importa opcionalmente `.env` do diretório de execução e exige sua senha para se conectar. Ao iniciar cada serviço, Flyway aplica as migrations em seu `src/main/resources/db/migration`; Hibernate apenas valida o schema (`ddl-auto=validate`). `open-in-view` fica desabilitado.
 
 O volume preserva os dados entre reinícios. Alterar usuário ou senha no `.env` não altera as credenciais de um banco já inicializado; use os valores correspondentes ao volume existente. Para interromper o banco preservando seus dados:
 
 ```powershell
 docker compose stop catalog-db
+docker compose stop order-db
 ```
 
 Não remova o volume para executar ou testar esta etapa. Os testes usam um banco descartável separado, criado pelo Testcontainers.
 
 ## Executar localmente
 
-Para trabalhar com restaurantes, basta iniciar o PostgreSQL acima e abrir dois terminais na raiz:
+Para trabalhar apenas com restaurantes, basta iniciar `catalog-db` e abrir dois terminais na raiz:
 
 ```powershell
 # Terminal 1: o diretório explícito faz o Spring carregar o .env da raiz
@@ -119,12 +128,27 @@ Os demais serviços continuam disponíveis, um comando por terminal:
 
 ```powershell
 .\services\user-service\mvnw.cmd -f .\services\user-service\pom.xml spring-boot:run
-.\services\order-service\mvnw.cmd -f .\services\order-service\pom.xml spring-boot:run
+.\services\order-service\mvnw.cmd -f .\services\order-service\pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 .\services\payment-service\mvnw.cmd -f .\services\payment-service\pom.xml spring-boot:run
 .\services\delivery-service\mvnw.cmd -f .\services\delivery-service\pom.xml spring-boot:run
 ```
 
-Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar o catálogo pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
+O Order Service exige `order-db` em execução. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar catálogo ou pedidos pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
+
+## Criar e acompanhar pedidos
+
+Diretamente em `http://localhost:8083` ou pelo Gateway em `http://localhost:8080`:
+
+| Requisição | Resultado |
+| --- | --- |
+| `POST /api/orders` | `201`, pedido criado e cabeçalho `Location` |
+| `GET /api/orders/{id}` | `200` com o pedido ou `404` |
+| `POST /api/orders/{id}/confirm` | `200` com estado `CONFIRMED`; `409` se cancelado |
+| `POST /api/orders/{id}/cancel` | `200` com estado `CANCELLED` |
+
+O cadastro recebe `restaurantId` e `destination`, com `address`, `latitude` e `longitude`. A confirmação é manual e não representa aprovação de pagamento. Repetir uma confirmação ou cancelamento já aplicado preserva os timestamps. Conflitos de atualização retornam `409`; consulte o pedido antes de tentar novamente.
+
+Veja [o fluxo, exemplos completos e testes de pedidos](docs/orders.md).
 
 ## Cadastrar e consultar restaurantes
 
@@ -248,6 +272,8 @@ Com Docker funcionando, execute da raiz:
 .\services\catalog-service\mvnw.cmd -f .\services\catalog-service\pom.xml clean test
 # Testes e JAR executável do catálogo
 .\services\catalog-service\mvnw.cmd -f .\services\catalog-service\pom.xml clean verify
+# Testes e JAR executável de pedidos
+.\services\order-service\mvnw.cmd -f .\services\order-service\pom.xml clean verify
 ```
 
 Os testes de domínio cobrem as regras do restaurante. Os testes de integração inicializam Spring e PostgreSQL real via Testcontainers, aplicam Flyway e exercitam cadastro, dados persistidos, consulta, paginação, entrada inválida, restaurante inexistente e os endpoints preservados. O `contextLoads` também usa o banco do Testcontainers. Não é necessário subir o Compose, criar `.env` ou fornecer credenciais locais para esses testes; eles não acessam o volume de desenvolvimento. A suíte completa exige Docker e falha quando ele está indisponível, em vez de ignorar a integração.
@@ -275,6 +301,6 @@ foreach ($project in $projects) {
 }
 ```
 
-Substitua `clean test` por `clean verify` para também gerar os JARs em `target/` de cada aplicação. Os outros projetos mantêm os testes de inicialização de contexto. A integração do catálogo testa HTTP diretamente no serviço; confira também o encaminhamento real pelo Gateway usando os exemplos acima.
+Substitua `clean test` por `clean verify` para também gerar os JARs em `target/` de cada aplicação. Pedidos têm testes de domínio, HTTP, persistência e concorrência, também com PostgreSQL descartável. Gateway, usuários, pagamentos e entregas mantêm os testes de inicialização de contexto. As integrações automatizadas testam HTTP diretamente nos serviços; confira também o encaminhamento real pelo Gateway usando os exemplos documentados.
 
 Veja o fluxo e as responsabilidades em [docs/architecture.md](docs/architecture.md), os detalhes de persistência em [docs/catalog-postgresql.md](docs/catalog-postgresql.md) e o [registro de validação do catálogo](docs/catalog-validation.md).

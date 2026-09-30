@@ -20,7 +20,7 @@ docker compose up -d --wait catalog-db
 docker compose ps
 ```
 
-O Compose inicia somente PostgreSQL 17, com banco `catalog`, porta publicada em `127.0.0.1`, volume nomeado `catalog_postgres_data` e health check com `pg_isready`.
+O serviço `catalog-db` do Compose inicia PostgreSQL 17, com banco `catalog`, porta publicada em `127.0.0.1`, volume nomeado `catalog_postgres_data` e health check com `pg_isready`. O banco de pedidos usa outro serviço e volume.
 
 ## Iniciar o catálogo
 
