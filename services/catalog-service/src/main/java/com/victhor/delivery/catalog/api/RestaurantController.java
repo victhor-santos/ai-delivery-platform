@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -30,13 +31,20 @@ public class RestaurantController {
 
     @PostMapping
     public ResponseEntity<RestaurantResponse> create(@Valid @RequestBody CreateRestaurantRequest request) {
-        var response = RestaurantResponse.from(restaurants.create(request.name()));
+        var location = request.pickupLocation() == null ? null : request.pickupLocation().toDomain();
+        var response = RestaurantResponse.from(restaurants.create(request.name(), location));
         return ResponseEntity.created(URI.create("/api/catalog/restaurants/" + response.id())).body(response);
     }
 
     @GetMapping("/{id}")
     public RestaurantResponse findById(@PathVariable UUID id) {
         return RestaurantResponse.from(restaurants.findById(id));
+    }
+
+    @PutMapping("/{id}/pickup-location")
+    public RestaurantResponse updatePickupLocation(@PathVariable UUID id,
+            @Valid @RequestBody PickupLocationRequest request) {
+        return RestaurantResponse.from(restaurants.updatePickupLocation(id, request.toDomain()));
     }
 
     @GetMapping

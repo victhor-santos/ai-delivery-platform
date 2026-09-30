@@ -19,6 +19,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import com.victhor.delivery.catalog.application.RestaurantNotFoundException;
 import com.victhor.delivery.catalog.application.RestaurantService;
 import com.victhor.delivery.catalog.domain.Restaurant;
+import com.victhor.delivery.catalog.domain.PickupLocation;
 
 @SpringBootTest(properties = "CATALOG_DB_PASSWORD=testcontainers-only")
 @Testcontainers
@@ -51,6 +52,38 @@ class RestaurantPersistenceTests {
                 .containsEntry("name", "Cantina Central")
                 .containsEntry("active", true);
         assertThat(restaurants.findById(created.id())).isEqualTo(created);
+    }
+
+    @Test
+    void persistsAndRestoresThePickupLocation() {
+        var location = new PickupLocation(-23.5505, -46.6333);
+
+        Restaurant created = restaurants.create("Cantina", location);
+
+        assertThat(restaurants.findById(created.id()).pickupLocation()).isEqualTo(location);
+        assertThat(jdbc.queryForMap("SELECT pickup_latitude, pickup_longitude FROM restaurants WHERE id = ?",
+                created.id())).containsEntry("pickup_latitude", location.latitude())
+                .containsEntry("pickup_longitude", location.longitude());
+        assertThat(restaurants.findAll(0, 20).content()).containsExactly(created);
+    }
+
+    @Test
+    void updatesOnlyTheLocationOfAnExistingRestaurant() {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO restaurants (id, name, active) VALUES (?, ?, ?)", id, "Cantina", false);
+        var first = new PickupLocation(-23.5505, -46.6333);
+        var replacement = new PickupLocation(-22.9068, -43.1729);
+
+        restaurants.updatePickupLocation(id, first);
+        Restaurant updated = restaurants.updatePickupLocation(id, replacement);
+
+        assertThat(updated).isEqualTo(new Restaurant(id, "Cantina", false, replacement));
+        assertThat(restaurants.findById(id)).isEqualTo(updated);
+        assertThat(jdbc.queryForMap("SELECT pickup_latitude, pickup_longitude FROM restaurants WHERE id = ?", id))
+                .containsEntry("pickup_latitude", replacement.latitude())
+                .containsEntry("pickup_longitude", replacement.longitude());
+        assertThat(restaurants.updatePickupLocation(id, replacement)).isEqualTo(updated);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurants", Integer.class)).isEqualTo(1);
     }
 
     @Test

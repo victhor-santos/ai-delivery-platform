@@ -20,7 +20,18 @@ class RestaurantTests {
 		assertThat(restaurant.id()).isNotNull();
 		assertThat(restaurant.name()).isEqualTo("Cantina Vitória");
 		assertThat(restaurant.active()).isTrue();
+		assertThat(restaurant.pickupLocation()).isNull();
 		assertThat(Restaurant.create("Cantina Vitória").id()).isNotEqualTo(restaurant.id());
+	}
+
+	@Test
+	void createsARestaurantWithPickupLocation() {
+		var location = new PickupLocation(-23.5505, -46.6333);
+
+		Restaurant restaurant = Restaurant.create("Cantina", location);
+
+		assertThat(restaurant.pickupLocation()).isEqualTo(location);
+		assertThat(restaurant.active()).isTrue();
 	}
 
 	@Test

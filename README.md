@@ -6,6 +6,8 @@ Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projet
 
 O Catalog Service cadastra e consulta restaurantes em PostgreSQL, com migrations Flyway, validação de entrada, paginação e testes de integração com Testcontainers. Um restaurante tem UUID, nome obrigatório e indicador `active`; o cadastro gera o UUID e inicia o restaurante ativo.
 
+A localização de coleta pode ser informada no cadastro ou atualizada depois. Ela contém latitude e longitude e é salva no PostgreSQL. Restaurantes sem localização continuam válidos no catálogo; esse dado será necessário para criar entregas quando o fluxo de Delivery estiver implementado.
+
 Os cinco serviços mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações expõem Actuator. Os outros serviços ainda são a base inicial, sem persistência ou regras de negócio. Produtos, cardápios, pedidos reais, pagamentos, entregas, RabbitMQ e autenticação estão fora desta etapa.
 
 ## Evolução para AI Engineering
@@ -130,11 +132,12 @@ O mesmo contrato atende diretamente em `http://localhost:8082` e pelo Gateway em
 
 | Requisição | Resultado |
 | --- | --- |
-| `POST /api/catalog/restaurants` com `{"name":"Restaurante Central"}` | `201 Created`, corpo com `id`, `name`, `active` e cabeçalho `Location` |
+| `POST /api/catalog/restaurants` com `{"name":"Restaurante Central"}` | `201 Created`, corpo com `id`, `name`, `active`, `pickupLocation` e cabeçalho `Location` |
 | `GET /api/catalog/restaurants/{id}` | `200 OK` com o restaurante ou `404 Not Found` |
 | `GET /api/catalog/restaurants?page=0&size=20` | `200 OK` com página de restaurantes |
+| `PUT /api/catalog/restaurants/{id}/pickup-location` | `200 OK` com o restaurante e a localização atualizada |
 
-O nome é obrigatório, não pode conter apenas espaços e aceita até 120 caracteres. Espaços nas extremidades são removidos. O cliente informa apenas `name`; UUID e estado ativo são definidos no cadastro.
+O nome é obrigatório, não pode conter apenas espaços e aceita até 120 caracteres. Espaços nas extremidades são removidos. UUID e estado ativo são definidos pelo servidor. `pickupLocation` é opcional no cadastro; quando informado, exige os dois números: `latitude` entre -90 e 90 e `longitude` entre -180 e 180. Os limites são inclusivos, e strings numéricas, `NaN` e infinitos não são aceitos.
 
 Exemplo completo em PowerShell, executado primeiro diretamente e depois pelo Gateway. Cada execução cria um restaurante no banco local:
 
@@ -146,7 +149,7 @@ foreach ($baseUrl in @('http://localhost:8082', 'http://localhost:8080')) {
     $created.StatusCode # 201
     $created.Headers['Location'] # /api/catalog/restaurants/{UUID}
     $restaurant = $created.Content | ConvertFrom-Json
-    $restaurant # id, name e active=true
+    $restaurant # id, name, active=true e pickupLocation
     Invoke-RestMethod "$baseUrl/api/catalog/restaurants/$($restaurant.id)"
     Invoke-RestMethod "$baseUrl/api/catalog/restaurants?page=0&size=20"
 }
@@ -159,7 +162,7 @@ Formato da resposta paginada:
 ```json
 {
   "content": [
-    {"id":"9d6c1458-0c80-45cd-a9c0-b420f25c8246","name":"Restaurante Central","active":true}
+    {"id":"9d6c1458-0c80-45cd-a9c0-b420f25c8246","name":"Restaurante Central","active":true,"pickupLocation":null}
   ],
   "page": 0,
   "size": 20,
@@ -169,6 +172,28 @@ Formato da resposta paginada:
 ```
 
 Entrada inválida retorna `400 Bad Request`, incluindo nome ausente/em branco, JSON inválido, UUID malformado e paginação fora dos limites. Um UUID válido que não existe retorna `404 Not Found`. Os erros usam `application/problem+json` com `status`, `title` e `detail`; podem incluir os campos padrão `type` e `instance`. Falhas inesperadas retornam `500` com mensagem genérica, sem detalhes internos.
+
+### Localização de coleta
+
+Cadastre um restaurante com localização diretamente ou pelo Gateway:
+
+```powershell
+$baseUrl = 'http://localhost:8080'
+$body = '{"name":"Cantina Central","pickupLocation":{"latitude":-23.5505,"longitude":-46.6333}}'
+$restaurant = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/catalog/restaurants" -ContentType 'application/json' -Body $body
+```
+
+Para informar ou substituir a localização de um restaurante existente:
+
+```powershell
+$location = '{"latitude":-22.9068,"longitude":-43.1729}'
+Invoke-RestMethod -Method Put -Uri "$baseUrl/api/catalog/restaurants/$($restaurant.id)/pickup-location" -ContentType 'application/json' -Body $location
+Invoke-RestMethod "$baseUrl/api/catalog/restaurants/$($restaurant.id)"
+```
+
+O `PUT` recebe as duas coordenadas e devolve o restaurante atualizado. Repetir a mesma requisição mantém o resultado, sem criar outro restaurante. Nome, UUID e estado ativo são preservados. Nesta etapa não há remoção de localização. Entrada inválida retorna `400`, e restaurante inexistente retorna `404`.
+
+As consultas por UUID e por página incluem `pickupLocation`, que será `null` nos restaurantes sem esse dado. A migration `V2__add_restaurant_pickup_location.sql` preserva os registros existentes e mantém as coordenadas vazias até serem informadas. `0,0` é uma coordenada válida e não representa ausência de localização.
 
 Exemplos de erro abaixo geram exceção HTTP no PowerShell, com os status indicados:
 

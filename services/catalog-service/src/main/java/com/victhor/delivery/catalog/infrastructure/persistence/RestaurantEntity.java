@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import com.victhor.delivery.catalog.domain.Restaurant;
+import com.victhor.delivery.catalog.domain.PickupLocation;
 
 @Entity
 @Table(name = "restaurants")
@@ -22,6 +23,12 @@ public class RestaurantEntity {
     @Column(nullable = false)
     private boolean active;
 
+    @Column(name = "pickup_latitude")
+    private Double pickupLatitude;
+
+    @Column(name = "pickup_longitude")
+    private Double pickupLongitude;
+
     protected RestaurantEntity() {
     }
 
@@ -29,6 +36,9 @@ public class RestaurantEntity {
         id = restaurant.id();
         name = restaurant.name();
         active = restaurant.active();
+        if (restaurant.pickupLocation() != null) {
+            updatePickupLocation(restaurant.pickupLocation());
+        }
     }
 
     static RestaurantEntity fromDomain(Restaurant restaurant) {
@@ -36,6 +46,12 @@ public class RestaurantEntity {
     }
 
     Restaurant toDomain() {
-        return new Restaurant(id, name, active);
+        var location = pickupLatitude == null ? null : new PickupLocation(pickupLatitude, pickupLongitude);
+        return new Restaurant(id, name, active, location);
+    }
+
+    void updatePickupLocation(PickupLocation location) {
+        pickupLatitude = location.latitude();
+        pickupLongitude = location.longitude();
     }
 }

@@ -4,7 +4,7 @@
 
 Monorepo com seis aplicações Spring Boot executadas separadamente. Cada aplicação tem seu próprio build Maven, configuração e testes. Nenhum serviço depende do código Java de outro serviço.
 
-O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL. Os demais serviços mantêm a base inicial, com endpoints de demonstração e Actuator, sem persistência ou regras de negócio.
+O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. Os demais serviços mantêm a base inicial, com endpoints de demonstração e Actuator, sem persistência ou regras de negócio.
 
 ```mermaid
 flowchart TD
@@ -21,7 +21,7 @@ O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utiliz
 
 ## Responsabilidades e contratos
 
-As responsabilidades abaixo definem os limites de cada aplicação. No catálogo, somente cadastro e consultas de restaurantes estão implementados; cardápios, produtos, preços e disponibilidade continuam planejados.
+As responsabilidades abaixo definem os limites de cada aplicação. O catálogo implementa cadastro, consultas e atualização da localização de coleta de restaurantes. Cardápios, produtos, preços e disponibilidade continuam planejados.
 
 | Aplicação | Responsabilidade | Porta | Rota pelo Gateway | Pacote-base |
 | --- | --- | --- | --- | --- |
@@ -44,12 +44,12 @@ A classe `CatalogServiceApplication` permanece no pacote-base para a descoberta 
 | --- | --- |
 | `api` | Controllers, DTOs de entrada e saída, validação HTTP, paginação recebida e respostas de erro |
 | `application` | `RestaurantService` coordena os casos de uso; `RestaurantRepository` define a porta de persistência e `RestaurantPage` representa uma página, sem dependências de Spring ou JPA |
-| `domain` | `Restaurant` representa UUID, nome e estado ativo, aplicando as invariantes sem depender de HTTP, Spring ou JPA |
+| `domain` | `Restaurant` representa UUID, nome, estado ativo e localização opcional; `PickupLocation` valida latitude e longitude, sem depender de HTTP, Spring ou JPA |
 | `infrastructure.persistence` | Entidade JPA, repositório Spring Data e adaptador que implementa a porta, delimita as transações e converte entre o modelo de domínio e o de persistência |
 
 O domínio não contém anotações JPA ou de validação HTTP. A entidade JPA não é exposta na API. DTOs controlam o contrato público, e o adaptador concentra o mapeamento de persistência. Não há um framework genérico de casos de uso ou repositórios: uma porta específica do restaurante é suficiente.
 
-`RestaurantConfiguration`, em `infrastructure`, fornece o serviço de aplicação como bean Spring e injeta o adaptador. `JpaRestaurantRepository` abre uma transação de escrita no cadastro e transações de leitura nas consultas. O cadastro só retorna depois da confirmação da transação. Cada caso de uso atual faz uma chamada de persistência; um fluxo futuro com várias gravações relacionadas precisará de uma transação que englobe a operação inteira.
+`RestaurantConfiguration`, em `infrastructure`, fornece o serviço de aplicação como bean Spring e injeta o adaptador. `JpaRestaurantRepository` abre transações de escrita no cadastro e na atualização de localização, e transações de leitura nas consultas. Cada operação retorna depois da confirmação da transação. Um fluxo futuro com várias gravações relacionadas precisará de uma transação que englobe a operação inteira.
 
 Os outros serviços continuam com a classe `*Application` no pacote-base e controllers em `api`. Novas camadas serão criadas quando houver código que as justifique. O Gateway mantém organização própria para configuração e filtros.
 
@@ -76,7 +76,7 @@ sequenceDiagram
     Controller-->>Client: 201 + Location + DTO de saída
 ```
 
-O controller recebe o JSON, valida a entrada e chama o caso de uso. O serviço de aplicação cria o restaurante por meio do domínio e solicita sua persistência. O domínio remove espaços nas extremidades do nome, exige um nome não vazio de até 120 caracteres e gera o UUID com `active=true` para um cadastro. O adaptador converte o restaurante para a entidade JPA e salva no PostgreSQL. Ao retornar, o controller monta o DTO com `id`, `name` e `active`, status `201` e `Location: /api/catalog/restaurants/{id}`. O endereço relativo funciona tanto pela porta 8082 quanto pelo Gateway na porta 8080.
+O controller recebe o JSON, valida a entrada e chama o caso de uso. O serviço de aplicação cria o restaurante por meio do domínio e solicita sua persistência. O domínio remove espaços nas extremidades do nome, exige um nome não vazio de até 120 caracteres e gera o UUID com `active=true` para um cadastro. O adaptador converte o restaurante para a entidade JPA e salva no PostgreSQL. Ao retornar, o controller monta o DTO com `id`, `name`, `active` e `pickupLocation`, status `201` e `Location: /api/catalog/restaurants/{id}`. O endereço relativo funciona tanto pela porta 8082 quanto pelo Gateway na porta 8080.
 
 Na consulta por UUID, o controller converte o identificador e o caso de uso busca pela mesma porta de persistência. Um resultado vira DTO com `200`; a ausência vira erro `404`. UUID malformado é entrada inválida (`400`).
 
@@ -86,19 +86,24 @@ Na listagem, a API valida `page` e `size`, o caso de uso solicita a página, e o
 
 | Operação | Entrada | Resposta de sucesso |
 | --- | --- | --- |
-| `POST /api/catalog/restaurants` | JSON com `name` obrigatório, até 120 caracteres | `201`, `Location` e `{id, name, active}` |
-| `GET /api/catalog/restaurants/{id}` | UUID | `200` e `{id, name, active}` |
+| `POST /api/catalog/restaurants` | JSON com `name` obrigatório e `pickupLocation` opcional | `201`, `Location` e `{id, name, active, pickupLocation}` |
+| `GET /api/catalog/restaurants/{id}` | UUID | `200` e `{id, name, active, pickupLocation}` |
 | `GET /api/catalog/restaurants?page=0&size=20` | Página e tamanho opcionais | `200` e `{content, page, size, totalElements, totalPages}` |
+| `PUT /api/catalog/restaurants/{id}/pickup-location` | UUID e JSON com `latitude` e `longitude` | `200` com o restaurante atualizado |
 
 `page` começa em zero e deve ser não negativo. `size` fica entre 1 e 100, com padrão 20. O produto `page * size` deve caber no offset do JPA (máximo `2147483647`). A ordenação é fixa por nome ascendente e UUID ascendente como desempate; nomes repetidos são permitidos. Uma página sem registros possui `content` vazio. A ordenação é determinística para o mesmo conjunto de dados; alterações concorrentes podem mudar o conteúdo de páginas consultadas em momentos diferentes.
 
-Não há atualização, exclusão ou desativação nesta etapa. O cliente não escolhe o UUID nem o estado inicial do cadastro.
+A localização pode ser informada ou substituída; nome e estado ativo não têm operação de atualização nesta etapa. Também não há exclusão, desativação ou remoção da localização. O cliente não escolhe o UUID nem o estado inicial do cadastro.
+
+`PickupLocation` exige latitude e longitude finitas, nos intervalos inclusivos [-90, 90] e [-180, 180]. A API usa DTOs próprios e rejeita coordenadas ausentes ou recebidas como strings. Restaurantes antigos continuam sem localização, representada por `null`. O `PUT` altera as duas coordenadas na mesma transação, preserva os outros campos e retorna `404` quando o restaurante não existe.
 
 Os erros HTTP são padronizados como `ProblemDetail`, com tipo de mídia `application/problem+json` e campos `status`, `title` e `detail`. Podem incluir `type` e `instance`. Entrada inválida, JSON malformado, UUID inválido ou paginação inválida retornam `400`; restaurante inexistente retorna `404`. Falhas inesperadas retornam `500` com mensagem genérica, sem SQL, stack trace ou outras informações internas.
 
 ## Persistência e execução local
 
 O catálogo usa Spring Data JPA e driver PostgreSQL. Flyway controla a evolução do schema em `services/catalog-service/src/main/resources/db/migration`; a migration inicial cria a tabela de restaurantes com UUID, nome obrigatório e indicador ativo. O índice por `(name, id)` acompanha a ordem de consulta. As versões das dependências são geridas pelo Spring Boot 4.1.1 existente, incluindo o starter Flyway e o módulo PostgreSQL do Flyway.
+
+A V2 adiciona as duas coordenadas como colunas opcionais, com constraints para exigir o par completo e respeitar os limites geográficos. Ela não altera a V1 nem preenche localizações nos registros existentes. Um teste com PostgreSQL migra dados da V1 para a V2 e confere essa preservação.
 
 Na inicialização, Flyway aplica as migrations pendentes e Hibernate valida o mapeamento com `spring.jpa.hibernate.ddl-auto=validate`. Não há criação ou atualização automática do schema pelo Hibernate. `spring.jpa.open-in-view=false` mantém o acesso ao banco dentro da camada de aplicação/persistência, antes da montagem da resposta HTTP.
 
@@ -118,12 +123,8 @@ O `contextLoads` do catálogo usa a mesma estratégia de banco descartável. A s
 
 Os comandos de configuração, execução, testes e chamadas HTTP estão no [README](../README.md).
 
-## Planejado, ainda não implementado
+## Próximas etapas
 
-- Cardápios e produtos no catálogo; persistência e regras de negócio nos demais serviços.
-- RabbitMQ para comandos e eventos entre aplicações. Cada serviço acessará diretamente seu banco; o broker não ficará entre aplicação e banco.
-- Order Service coordenando o fluxo de compra e compensações. Os contratos e estados serão definidos antes de implementar a saga.
-- Transactional Outbox, consumidores idempotentes, confirmações, retentativas limitadas e DLQ para recuperação de falhas de mensageria.
-- Autenticação e autorização, com decisão sobre provedor de identidade em etapa própria.
-- Docker Compose para execução local do conjunto de aplicações. Nesse ambiente, os endereços dos serviços terão de usar os nomes da rede Docker em vez de `localhost`.
-- Testcontainers para futuras integrações com RabbitMQ e testes dos fluxos entre serviços.
+O próximo passo é criar a base de pedidos e entregas. Java continua responsável pelas transações; o futuro serviço Python vai prever tempos por trecho e calcular rotas. O [plano de Route Intelligence](route-intelligence.md), o [contrato HTTP](route-intelligence-contract.md), o [plano de dados](route-intelligence-data.md) e o [roadmap](roadmap.md) descrevem essa evolução.
+
+A demonstração com os serviços em containers usará hostnames da rede Docker e preservará os volumes existentes. Mensageria, outbox e compensações serão avaliadas quando o fluxo precisar dessas garantias. Produtos, pagamentos, autenticação, múltiplas entregas e cloud terão etapas próprias.

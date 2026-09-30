@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.victhor.delivery.catalog.application.RestaurantPage;
 import com.victhor.delivery.catalog.application.RestaurantRepository;
 import com.victhor.delivery.catalog.domain.Restaurant;
+import com.victhor.delivery.catalog.domain.PickupLocation;
 
 @Repository
 @Transactional(readOnly = true)
@@ -31,6 +32,15 @@ public class JpaRestaurantRepository implements RestaurantRepository {
     @Override
     public Optional<Restaurant> findById(UUID id) {
         return repository.findById(id).map(RestaurantEntity::toDomain);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Restaurant> updatePickupLocation(UUID id, PickupLocation pickupLocation) {
+        return repository.findById(id).map(entity -> {
+            entity.updatePickupLocation(pickupLocation);
+            return entity.toDomain();
+        });
     }
 
     @Override
