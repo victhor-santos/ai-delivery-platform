@@ -18,6 +18,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["app", "training"]
 
+[tool.hatch.build.targets.sdist]
+include = ["/app", "/training", "/tests", "/pyproject.toml", "/uv.lock", "/.python-version"]
+exclude = ["**/__pycache__/**", "**/*.py[cod]"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
