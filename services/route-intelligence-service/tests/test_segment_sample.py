@@ -1,4 +1,6 @@
+import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -80,3 +82,13 @@ def test_naive_observation_timestamp_is_rejected(sample_data):
 
     with pytest.raises(ValidationError):
         SegmentSample.model_validate(sample_data)
+
+
+def test_versioned_examples_satisfy_observation_schema():
+    fixture = Path(__file__).parent / "fixtures" / "segment-samples-v1.json"
+    records = json.loads(fixture.read_text(encoding="utf-8"))
+    samples = [SegmentSample.model_validate(record) for record in records]
+
+    assert len(samples) == 3
+    assert len({sample.scenario_id for sample in samples}) == 3
+    assert all(sample.generator_version == "synthetic-segments-v1" for sample in samples)
