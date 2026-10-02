@@ -16,11 +16,13 @@ Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Ga
 
 Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A consulta de rotas por HTTP e as chamadas do Delivery ainda serão implementadas. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
+O gerador offline já produz observações sintéticas por trecho, com seed, timestamps de disponibilidade, schema de features, partições temporais por cenário e manifesto com checksums. Os dados completos são gerados localmente e ficam fora do Git. Veja [como gerar e conferir o dataset](docs/route-segment-dataset.md).
+
 ## Evolução para AI Engineering
 
-O próximo passo é gerar um dataset sintético reproduzível de tempos por trecho. Java continuará cuidando das transações. Depois, o modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. A demonstração atual já escolhe uma rota mais longa quando ela é mais rápida pelos custos de referência.
+O próximo passo é treinar e comparar os modelos de tempo por trecho, usando as partições já geradas e uma referência física. Java continuará cuidando das transações. Depois, o modelo escolhido fornecerá os custos para Dijkstra. A demonstração atual já escolhe uma rota mais longa quando ela é mais rápida pelos custos de referência.
 
-Os dados de treinamento, o modelo e a integração de rotas ainda estão planejados. O grafo atual é fictício e não representa ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
+O treinamento, o modelo e a integração de rotas ainda estão planejados. Grafo e observações são fictícios e não representam ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
 
 - [Arquitetura de Route Intelligence e domínio de Delivery](docs/route-intelligence.md).
 - [Contrato futuro Java ↔ Python](docs/route-intelligence-contract.md).

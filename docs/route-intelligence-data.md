@@ -1,6 +1,6 @@
 # Dados e modelo de tempo por trecho
 
-O modelo ainda será desenvolvido. Este documento define os dados, os cuidados com vazamento de informação e a forma de avaliar os resultados. A primeira versão usará dados sintéticos; a integração está descrita na [arquitetura](route-intelligence.md) e no [contrato](route-intelligence-contract.md).
+O modelo ainda será desenvolvido. O [gerador de dataset sintético](route-segment-dataset.md) já implementa seed, schema compartilhado de features, observações com disponibilidade, partições por tempo/cenário e manifesto com checksums. Este documento define os cuidados com vazamento de informação e a futura avaliação. A integração está descrita na [arquitetura](route-intelligence.md) e no [contrato](route-intelligence-contract.md).
 
 ## O que o modelo prevê
 
@@ -47,7 +47,7 @@ Chuva, incidentes, região, interseções e médias históricas dependem de font
 
 ## Geração dos dados sintéticos
 
-O gerador receberá seed, parâmetros e data inicial da simulação. Com a mesma configuração e ambiente, deverá produzir as mesmas linhas e checksum. Ele não dependerá do relógio atual.
+O gerador recebe seed, parâmetros e instante inicial da simulação. Com o mesmo grafo, configuração e ambiente, produz as mesmas linhas e checksums. Não depende do relógio atual. A execução padrão gera 1008 cenários horários em 42 dias, com os 10 trechos do fixture: 10080 observações contrafactuais, sem representar uma única viagem sequencial.
 
 Uma fórmula inicial para gerar o tempo observado é:
 
@@ -60,7 +60,7 @@ O tipo de via influencia a velocidade de referência. Distâncias maiores, trân
 
 O gerador cria o target, mas o predictor recebe apenas uma lista definida de features. O tempo observado, os horários de chegada e as variáveis auxiliares da geração ficam fora dessa lista.
 
-Um arquivo de metadados acompanhará o dataset com seed, versão, quantidade de exemplos, período simulado, categorias, schema e checksum. O Git guardará o gerador e pequenos exemplos de teste; datasets completos e artefatos gerados ficarão fora por padrão.
+O manifesto acompanha o dataset com seed, versões, quantidade de exemplos, período, categorias, schemas, parâmetros, ambiente e checksums. O Git guarda o gerador e três pequenos exemplos de teste; datasets completos ficam fora do Git e do build. O [guia do dataset](route-segment-dataset.md) registra a fórmula implementada, os fatores e as limitações.
 
 ## Divisão dos dados e prevenção de leakage
 
@@ -69,6 +69,8 @@ Um arquivo de metadados acompanhará o dataset com seed, versão, quantidade de 
 3. No treino, usar somente rótulos e features disponíveis até seu corte. Uma observação antiga recebida posteriormente não poderá entrar retroativamente.
 4. Ajustar transformações, categorias e escalas apenas no treino, dentro de um pipeline.
 5. Escolher hiperparâmetros e modelo usando validação. Reservar o teste para a avaliação final.
+
+Os itens 1 a 3 já estão implementados para o dataset sintético. A divisão usa `prediction_at`, o instante de decisão simulado, com períodos consecutivos de treino, validação e teste. Cenários que cruzam períodos ou têm algum rótulo disponível depois do respectivo corte são excluídos por inteiro e registrados no manifesto. Assim, treino e validação não usam resultados que só estariam disponíveis depois das decisões do conjunto seguinte. A auditoria também informa assinaturas idênticas das seis features com o target que apareçam em mais de uma partição; repetir features em vias conhecidas é esperado e não comprova, sozinho, vazamento.
 
 Um mesmo trecho pode aparecer em períodos diferentes sem causar vazamento: prever o tempo futuro em vias conhecidas faz parte do problema. Reservar alguns trechos para outra avaliação permitirá medir também o desempenho em vias não vistas no treino.
 
@@ -116,7 +118,7 @@ dataset -> divisão dos conjuntos -> pipeline de features -> treino
         -> carregamento pela API -> inferência -> Dijkstra
 ```
 
-`python training/train.py`, executado dentro do futuro serviço, produzirá `artifacts/segment_travel_time_model.joblib` e metadados com versões do modelo, schema, dataset, dependências, seed e métricas. `evaluate.py` avaliará o artefato sem reajustar o modelo. A execução exata e seus argumentos serão documentados quando esses arquivos existirem.
+Os futuros módulos `training.train` e `training.evaluate` produzirão e avaliarão `artifacts/segment_travel_time_model.joblib`, com metadados de versões do modelo, schema, dataset, dependências, seed e métricas. A avaliação não reajustará o modelo. A execução exata e seus argumentos serão documentados quando esses módulos existirem. O gerador existente é executado por `python -m training.generate_dataset`, conforme o [guia do dataset](route-segment-dataset.md).
 
 O FastAPI carregará o pipeline uma vez por processo e não treinará no startup ou em uma requisição. O mesmo pipeline fará as transformações em treino e inferência. Artefatos serão de origem controlada e carregados em ambiente compatível: joblib usa mecanismos de persistência que não devem receber arquivos não confiáveis. [Persistência de modelos](https://scikit-learn.org/stable/model_persistence.html).
 
