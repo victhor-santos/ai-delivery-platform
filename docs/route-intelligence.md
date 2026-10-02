@@ -1,6 +1,6 @@
 # Route Intelligence
 
-Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md), a [base do serviço Python](route-intelligence-foundation.md) e o [roteamento em grafo sintético com tempos de referência](road-graph.md) estão implementados. ML e consulta HTTP de rotas ainda são etapas futuras.
+Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md), a [base Python](route-intelligence-foundation.md), o [roteamento com tempos de referência](road-graph.md) e o [gerador de dataset sintético](route-segment-dataset.md) estão implementados. Treinamento e consulta HTTP de rotas ainda são etapas futuras.
 
 ## Objetivo
 
@@ -126,6 +126,10 @@ services/route-intelligence-service/
         ml/predictor.py
     training/
         generate_dataset.py
+        schema.py
+        synthetic.py
+        splits.py
+        dataset.py
         train.py
         evaluate.py
     data/synthetic/
@@ -137,7 +141,7 @@ services/route-intelligence-service/
     Dockerfile
 ```
 
-A base usa Python 3.12+, FastAPI, Pydantic, Pydantic Settings e Uvicorn, com pytest e Ruff em desenvolvimento. A versão de referência do Python é 3.12, registrada em `.python-version`; as dependências estão travadas em `uv.lock`. NumPy, pandas, scikit-learn e joblib entram nas etapas de dados e modelo. PyTorch e TensorFlow não são necessários para os modelos previstos.
+A base usa Python 3.12+, FastAPI, Pydantic, Pydantic Settings e Uvicorn, com pytest e Ruff em desenvolvimento. A versão de referência do Python é 3.12, registrada em `.python-version`; as dependências estão travadas em `uv.lock`. O gerador usa a biblioteca padrão, Pydantic e `tzdata` fixado para derivar horário e dia no fuso do grafo. NumPy, pandas, scikit-learn e joblib entram com os modelos. PyTorch e TensorFlow não são necessários para os modelos previstos.
 
 ## Docker e execução
 

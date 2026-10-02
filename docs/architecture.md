@@ -6,6 +6,8 @@ Monorepo com seis aplicações Spring Boot executadas separadamente. Cada aplica
 
 O monorepo também contém [Route Intelligence em Python](route-intelligence-foundation.md), com FastAPI, configuração por ambiente, dependências travadas e `/health` na porta 8000. Já calcula rotas em um [grafo sintético com custos de referência](road-graph.md) por terminal. A consulta de rotas por HTTP, ML e integração com Delivery ainda não existem. Ele não acessa os bancos nem está conectado ao Gateway. Seu build e testes são independentes do Maven.
 
+O pacote `training` gera o [dataset sintético de tempo por trecho](route-segment-dataset.md) offline, com schema compartilhado de features em `app/ml/features.py`, observações, partições temporais por cenário e manifesto. Essa geração não é executada no startup ou em endpoints. O treinamento dos modelos entra na próxima etapa.
+
 O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O Order Service cria, consulta, confirma e cancela pedidos em outro PostgreSQL. Delivery cria e consulta entregas e entregadores por HTTP e executa o ciclo de entrega, com persistência em banco próprio. Usuários e pagamentos mantêm a base inicial, com endpoints de demonstração e Actuator.
 
 ```mermaid

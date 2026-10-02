@@ -31,3 +31,4 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 services/route-intelligence-service/dist/
+services/route-intelligence-service/data/synthetic/
