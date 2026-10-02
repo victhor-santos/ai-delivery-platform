@@ -1,6 +1,6 @@
 # Route Intelligence
 
-Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). O serviço Python será desenvolvido depois da integração entre pedidos e entregas.
+Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md) está implementada, assim como a [base do serviço Python](route-intelligence-foundation.md), que ainda não calcula rotas.
 
 ## Objetivo
 
@@ -106,12 +106,14 @@ A primeira versão usa o contexto da partida planejada durante todo o cálculo. 
 
 ## Serviço Python
 
-O serviço começa com `app/main.py`, dependências, testes e health check. A estrutura abaixo será criada aos poucos, conforme as funcionalidades entrarem:
+O serviço já possui `app/main.py`, execução por `python -m app`, configuração, dependências, testes e health check. `pyproject.toml` declara dependências e ferramentas; `uv.lock` fixa as versões resolvidas, incluindo as transitivas, sem manter uma segunda lista de dependências em `requirements.txt`. A estrutura abaixo será completada aos poucos, conforme as funcionalidades entrarem:
 
 ```text
 services/route-intelligence-service/
     app/
         main.py
+        __main__.py
+        config.py
         api/
         schemas/
         services/route_planner.py
@@ -126,11 +128,13 @@ services/route-intelligence-service/
     data/synthetic/
     artifacts/
     tests/
-    requirements.txt
+    pyproject.toml
+    uv.lock
+    .python-version
     Dockerfile
 ```
 
-A base será Python 3.12+, FastAPI, Pydantic e pytest. NumPy, pandas, scikit-learn e joblib entram nas etapas de dados e modelo. As versões serão fixadas durante a implementação. PyTorch e TensorFlow não são necessários para os modelos previstos.
+A base usa Python 3.12+, FastAPI, Pydantic, Pydantic Settings e Uvicorn, com pytest e Ruff em desenvolvimento. A versão de referência do Python é 3.12, registrada em `.python-version`; as dependências estão travadas em `uv.lock`. NumPy, pandas, scikit-learn e joblib entram nas etapas de dados e modelo. PyTorch e TensorFlow não são necessários para os modelos previstos.
 
 ## Docker e execução
 
