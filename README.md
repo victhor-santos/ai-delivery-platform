@@ -8,7 +8,7 @@ O Catalog Service cadastra e consulta restaurantes em PostgreSQL, com migrations
 
 A localização de coleta pode ser informada no cadastro ou atualizada depois. Ela contém latitude e longitude e é salva no PostgreSQL. Restaurantes sem localização continuam válidos no catálogo; esse dado será necessário para criar entregas automaticamente na integração com pedidos.
 
-O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Cada pedido guarda a referência ao restaurante e uma cópia do endereço de destino. Ainda não há itens, valores, validação remota do restaurante ou criação de entrega.
+O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Um pedido confirmado pode solicitar entrega, com validação do restaurante no catálogo, snapshots persistidos e criação idempotente no Delivery. Ainda não há itens, valores ou pagamento. Veja a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
 O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Veja o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
@@ -16,7 +16,7 @@ Os cinco serviços mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway
 
 ## Evolução para AI Engineering
 
-O próximo passo é criar entregas a partir de pedidos confirmados, com validação do restaurante e tratamento de novas tentativas. Depois, será integrado o serviço Python de roteamento. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
+O próximo passo é iniciar o serviço Python de roteamento, depois da integração entre pedidos e entregas. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
 
 Por enquanto, essa parte está documentada e ainda não foi implementada. A primeira demonstração usará dados e grafo sintéticos. Python não é necessário para executar o backend atual.
 
@@ -146,7 +146,7 @@ O Order Service exige `order-db` em execução, e Delivery exige `delivery-db`. 
 
 A API atende diretamente em `http://localhost:8085` ou pelo Gateway em `http://localhost:8080`, sob `/api/deliveries`. Ela inclui cadastro de entregadores em `/api/deliveries/couriers`, criação de entregas, consulta por entrega/pedido e comandos do ciclo. Os horários são gerados pelo servidor; comandos repetidos retornam `409`.
 
-Veja [o contrato, exemplos completos e validação de entregas](docs/delivery-lifecycle.md). A criação ainda é manual: confirmar um pedido não cria uma entrega automaticamente.
+Veja [o contrato, exemplos completos e validação de entregas](docs/delivery-lifecycle.md). Para criar a entrega com dados do pedido e do catálogo, use a [solicitação de entrega de um pedido confirmado](docs/order-delivery-integration.md).
 
 ## Criar e acompanhar pedidos
 
@@ -158,6 +158,7 @@ Diretamente em `http://localhost:8083` ou pelo Gateway em `http://localhost:8080
 | `GET /api/orders/{id}` | `200` com o pedido ou `404` |
 | `POST /api/orders/{id}/confirm` | `200` com estado `CONFIRMED`; `409` se cancelado |
 | `POST /api/orders/{id}/cancel` | `200` com estado `CANCELLED` |
+| `POST /api/orders/{id}/delivery` | `200` com `orderId`, `deliveryId` e estado da entrega; exige pedido confirmado |
 
 O cadastro recebe `restaurantId` e `destination`, com `address`, `latitude` e `longitude`. A confirmação é manual e não representa aprovação de pagamento. Repetir uma confirmação ou cancelamento já aplicado preserva os timestamps. Conflitos de atualização retornam `409`; consulte o pedido antes de tentar novamente.
 

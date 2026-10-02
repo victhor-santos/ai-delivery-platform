@@ -1,8 +1,8 @@
 # Pedidos
 
-O Order Service registra o primeiro ciclo de um pedido: criação, consulta, confirmação e cancelamento. Essa base fornece a referência ao restaurante e o destino para a futura integração com entregas.
+O Order Service registra criação, consulta, confirmação e cancelamento de pedidos. Um pedido confirmado pode [solicitar entrega](order-delivery-integration.md), com validação do restaurante e snapshots persistidos.
 
-Ainda não há itens, preços, cliente autenticado ou pagamento. `restaurantId` precisa ser um UUID válido, mas sua existência e situação no catálogo ainda não são consultadas. Confirmar um pedido é uma ação manual; não significa que um pagamento foi aprovado ou que uma entrega foi criada.
+Ainda não há itens, preços, cliente autenticado ou pagamento. O cadastro do pedido aceita uma referência ao restaurante; existência, estado ativo e localização são verificados ao solicitar a entrega. Confirmar um pedido é uma ação manual; depois dela, `POST /api/orders/{id}/delivery` solicita a entrega. A confirmação não indica pagamento aprovado.
 
 ## Estados e dados
 
@@ -20,7 +20,7 @@ O servidor gera o UUID e inicia o pedido como `CREATED`. O destino contém ender
 
 Confirmar um pedido já confirmado ou cancelar um pedido já cancelado retorna o estado atual, sem mudar os horários. Confirmar um pedido cancelado retorna `409`. O cadastro não é idempotente: repetir `POST /api/orders` cria outro pedido.
 
-Antes de integrar Delivery, a regra de cancelamento precisará considerar entregas já solicitadas ou em andamento. Hoje nenhum pedido cria uma entrega.
+O pedido inclui `deliveryRequestedAt`, inicialmente `null`. Depois da intenção de entrega persistida, o cancelamento é rejeitado com `409`, inclusive se Delivery estiver indisponível. Uma nova tentativa de solicitação recupera a entrega pelo mesmo pedido e snapshots, sem criar duplicatas. Veja [o contrato, falhas e exemplos da integração](order-delivery-integration.md).
 
 ## Banco e execução
 

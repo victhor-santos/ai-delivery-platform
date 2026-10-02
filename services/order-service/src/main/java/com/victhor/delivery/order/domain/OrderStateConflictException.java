@@ -3,6 +3,10 @@ package com.victhor.delivery.order.domain;
 public class OrderStateConflictException extends RuntimeException {
 
     public OrderStateConflictException() {
-        super("A cancelled order cannot be confirmed");
+        this("A cancelled order cannot be confirmed");
+    }
+
+    public OrderStateConflictException(String message) {
+        super(message);
     }
 }

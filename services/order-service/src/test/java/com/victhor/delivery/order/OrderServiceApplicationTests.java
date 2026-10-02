@@ -65,7 +65,7 @@ class OrderServiceApplicationTests {
     void loadsContextWithFlywayAndHibernateValidation() {
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class))
-                .isEqualTo(1);
+                .isEqualTo(2);
     }
 
     @Test

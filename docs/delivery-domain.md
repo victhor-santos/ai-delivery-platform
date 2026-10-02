@@ -55,7 +55,7 @@ O relógio é fornecido por quem coordena a operação; o domínio recebe o inst
 
 O objeto isolado não consegue garantir uma entrega por pedido nem impedir que o mesmo entregador seja atribuído a duas entregas. O PostgreSQL agora garante isso com unicidade por pedido e índice único por entregador nas entregas em andamento. O domínio não verifica se o pedido está confirmado ou se o restaurante está ativo: essas verificações pertencem à integração entre serviços.
 
-A persistência foi integrada pelo PR #11. `feature/delivery-lifecycle` acrescenta casos de uso e API sobre essa base. Depois, `feature/order-delivery-integration` conectará pedidos confirmados à criação de entregas, com snapshots e tratamento de repetição.
+A persistência foi integrada pelo PR #11 e a API pelo PR #12. `feature/order-delivery-integration` conecta pedidos confirmados à criação de entregas, com snapshots e tratamento de repetição. O domínio de Delivery permanece separado dos clientes HTTP de Order.
 
 O Compose possui `delivery-db`, separado de `catalog-db` e `order-db`. As transições são síncronas e precisam ser confirmadas na transação antes de retornar. Mensageria e chamadas ao serviço Python continuam no roadmap.
 

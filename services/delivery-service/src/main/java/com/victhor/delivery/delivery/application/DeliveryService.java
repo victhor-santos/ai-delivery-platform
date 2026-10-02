@@ -22,6 +22,10 @@ public class DeliveryService {
         return deliveries.create(Delivery.create(orderId, origin, destination, now()));
     }
 
+    public DeliveryCreation createForOrder(UUID orderId, DeliveryLocation origin, DeliveryLocation destination) {
+        return deliveries.createForOrder(Delivery.create(orderId, origin, destination, now()));
+    }
+
     public Delivery findById(UUID id) {
         return deliveries.findById(id).orElseThrow(DeliveryNotFoundException::new);
     }
