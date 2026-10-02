@@ -1,0 +1,27 @@
+{
+  "graph_version": "synthetic-city-v1",
+  "timezone": "America/Sao_Paulo",
+  "vehicle_profile": "motorcycle",
+  "data_origin": "synthetic",
+  "nodes": [
+    {"node_id": "A", "lat": -23.5505, "lon": -46.6333},
+    {"node_id": "B", "lat": -23.5540, "lon": -46.6400},
+    {"node_id": "C", "lat": -23.5610, "lon": -46.6560},
+    {"node_id": "D", "lat": -23.5455, "lon": -46.6333},
+    {"node_id": "E", "lat": -23.5455, "lon": -46.6560},
+    {"node_id": "F", "lat": -23.5505, "lon": -46.6263},
+    {"node_id": "G", "lat": -23.5700, "lon": -46.6600}
+  ],
+  "segments": [
+    {"segment_id": "A-B", "from_node": "A", "to_node": "B", "distance_km": 0.9, "road_type": "residential", "reference_speed_kmh": 15},
+    {"segment_id": "B-C", "from_node": "B", "to_node": "C", "distance_km": 2.0, "road_type": "residential", "reference_speed_kmh": 15},
+    {"segment_id": "A-D", "from_node": "A", "to_node": "D", "distance_km": 0.6, "road_type": "primary", "reference_speed_kmh": 30},
+    {"segment_id": "D-E", "from_node": "D", "to_node": "E", "distance_km": 2.5, "road_type": "highway", "reference_speed_kmh": 60},
+    {"segment_id": "E-C", "from_node": "E", "to_node": "C", "distance_km": 1.9, "road_type": "primary", "reference_speed_kmh": 45},
+    {"segment_id": "A-F", "from_node": "A", "to_node": "F", "distance_km": 0.8, "road_type": "residential", "reference_speed_kmh": 20},
+    {"segment_id": "F-A", "from_node": "F", "to_node": "A", "distance_km": 0.8, "road_type": "residential", "reference_speed_kmh": 20},
+    {"segment_id": "C-B", "from_node": "C", "to_node": "B", "distance_km": 2.0, "road_type": "residential", "reference_speed_kmh": 15},
+    {"segment_id": "B-A", "from_node": "B", "to_node": "A", "distance_km": 0.9, "road_type": "residential", "reference_speed_kmh": 15},
+    {"segment_id": "E-D", "from_node": "E", "to_node": "D", "distance_km": 2.5, "road_type": "highway", "reference_speed_kmh": 60}
+  ]
+}

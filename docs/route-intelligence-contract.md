@@ -1,6 +1,6 @@
 # Contrato de rotas
 
-Contrato previsto para a integração entre Delivery e Route Intelligence. Os endpoints ainda não existem. A divisão de responsabilidades está na [arquitetura](route-intelligence.md).
+Contrato previsto para a integração entre Delivery e Route Intelligence. A consulta HTTP de rotas ainda não existe; `/health` já verifica a disponibilidade da aplicação. O [roteamento com custos de referência](road-graph.md) está disponível por terminal. A divisão de responsabilidades está na [arquitetura](route-intelligence.md).
 
 ## Porta Java
 
@@ -110,7 +110,7 @@ Na primeira etapa, verifica apenas se a aplicação está funcionando. Quando a 
 
 ## Resiliência e consistência
 
-Vamos começar com timeout de conexão de 1 segundo e de resposta de 3 segundos, configuráveis e ajustados após medir o grafo de demonstração. Não haverá retentativa automática nessa versão. A branch `feature/road-graph` definirá os limites de nós e arestas junto com os testes de desempenho.
+Vamos começar com timeout de conexão de 1 segundo e de resposta de 3 segundos, configuráveis e ajustados após medir a API com inferência. Não haverá retentativa automática nessa versão. O grafo está limitado a 200 nós, 1000 trechos e arquivo de 1 MiB; o [guia de roteamento](road-graph.md) registra os testes de desempenho sem ML ou HTTP.
 
 Se o serviço estiver indisponível, o Delivery retorna `503` na operação de planejamento. O cliente pode tentar novamente. A rota anterior fica armazenada com seu instante e versão, mas não é apresentada como uma nova previsão. Também não haverá troca automática por uma rota calculada apenas pela distância.
 

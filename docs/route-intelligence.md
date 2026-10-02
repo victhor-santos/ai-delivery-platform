@@ -1,6 +1,6 @@
 # Route Intelligence
 
-Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md) está implementada, assim como a [base do serviço Python](route-intelligence-foundation.md), que ainda não calcula rotas.
+Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md), a [base do serviço Python](route-intelligence-foundation.md) e o [roteamento em grafo sintético com tempos de referência](road-graph.md) estão implementados. ML e consulta HTTP de rotas ainda são etapas futuras.
 
 ## Objetivo
 
@@ -82,17 +82,17 @@ A organização segue o catálogo: domínio e aplicação em Java puro, DTOs em 
 
 ## Grafo e escolha da rota
 
-O primeiro grafo será pequeno, sintético e armazenado em JSON. Cada nó terá um identificador e coordenadas. Cada aresta representará um trecho dirigido, com `segment_id`, `from_node`, `to_node`, `distance_km`, `road_type` e `reference_speed_kmh`.
+O primeiro grafo é pequeno, sintético e armazenado em JSON. Cada nó possui `node_id`, `lat` e `lon`. Cada aresta representa um trecho dirigido, com `segment_id`, `from_node`, `to_node`, `distance_km`, `road_type` e `reference_speed_kmh`. O [guia do grafo](road-graph.md) registra o cenário, os limites e a validação.
 
 Distância e velocidade precisam ser finitas e positivas. Uma via de mão dupla terá duas arestas. Nesta versão, haverá no máximo uma aresta por par ordenado de nós.
 
-As distâncias devem ser coerentes com as coordenadas do cenário, sem representar ruas reais. O arquivo terá `graph_version`, fuso `America/Sao_Paulo`, perfil de motocicleta e `data_origin: synthetic`. Alterar a geometria ou os atributos estáticos exige uma nova versão.
+As distâncias do fixture são coerentes com as coordenadas do cenário, sem representar ruas reais. O arquivo possui `graph_version`, `timezone: America/Sao_Paulo`, `vehicle_profile: motorcycle` e `data_origin: synthetic`. Alterar a geometria ou os atributos estáticos exige uma nova versão.
 
 O tráfego virá de cenários sintéticos reproduzíveis, com valor, fonte e horário por trecho. Cada requisição calculará seu próprio `predicted_travel_time_minutes`, mantendo o grafo compartilhado inalterado.
 
-Vamos começar com Dijkstra, usando lista de adjacência e `heapq` da biblioteca padrão. Isso atende ao grafo pequeno e aos custos positivos sem precisar de NetworkX. A* pode ser avaliado se o desempenho justificar a mudança; ele também exigiria uma heurística admissível de tempo. Usar distância diretamente não atenderia à unidade do custo. [Referência de Dijkstra](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.shortest_paths.weighted.dijkstra_path.html).
+Dijkstra já usa lista de adjacência e `heapq` da biblioteca padrão, com custos de tempo separados do grafo. A demonstração usa `60 * distance_km / reference_speed_kmh`; esse valor é uma referência física, não uma previsão de ML. Isso atende ao grafo pequeno e aos custos positivos sem precisar de NetworkX. A* pode ser avaliado se o desempenho justificar a mudança; ele também exigiria uma heurística admissível de tempo. Usar distância diretamente não atenderia à unidade do custo. [Referência de Dijkstra](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.shortest_paths.weighted.dijkstra_path.html).
 
-Fluxo de uma consulta:
+Fluxo previsto para a futura consulta HTTP:
 
 1. Validar entrada e associar as coordenadas aos nós do cenário.
 2. Obter os atributos estáticos e o snapshot de contexto por trecho.
@@ -119,6 +119,9 @@ services/route-intelligence-service/
         services/route_planner.py
         routing/graph.py
         routing/dijkstra.py
+        routing/demo.py
+        routing/__main__.py
+        routing/data/synthetic-city-v1.json
         ml/features.py
         ml/predictor.py
     training/
