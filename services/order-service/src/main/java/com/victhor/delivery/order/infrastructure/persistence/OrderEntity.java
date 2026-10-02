@@ -48,6 +48,8 @@ public class OrderEntity {
 
     private Instant cancelledAt;
 
+    private Instant deliveryRequestedAt;
+
     @Version
     @Column(nullable = false)
     private Long version;
@@ -71,7 +73,8 @@ public class OrderEntity {
 
     Order toDomain() {
         var destination = new DeliveryDestination(destinationAddress, destinationLatitude, destinationLongitude);
-        return new Order(id, restaurantId, destination, status, createdAt, updatedAt, confirmedAt, cancelledAt);
+        return new Order(id, restaurantId, destination, status, createdAt, updatedAt, confirmedAt, cancelledAt,
+                deliveryRequestedAt);
     }
 
     void applyState(Order order) {
@@ -79,5 +82,6 @@ public class OrderEntity {
         updatedAt = order.updatedAt();
         confirmedAt = order.confirmedAt();
         cancelledAt = order.cancelledAt();
+        deliveryRequestedAt = order.deliveryRequestedAt();
     }
 }
