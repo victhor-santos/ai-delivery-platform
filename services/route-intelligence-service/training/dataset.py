@@ -23,6 +23,7 @@ from training.schema import (
     TARGET_COLUMN,
     SegmentSample,
 )
+from training.serialization import json_bytes
 from training.splits import DatasetSplit, split_plan_for, split_samples
 from training.synthetic import (
     NIGHT_FACTOR,
@@ -35,15 +36,11 @@ from training.synthetic import (
 )
 
 
-def _json_bytes(value: object) -> bytes:
-    return (json.dumps(value, sort_keys=True, indent=2, allow_nan=False) + "\n").encode("utf-8")
-
-
 def graph_checksum(graph: RoadGraph) -> str:
     data = graph.model_dump(mode="json")
     data["nodes"] = sorted(data["nodes"], key=lambda node: node["node_id"])
     data["segments"] = sorted(data["segments"], key=lambda segment: segment["segment_id"])
-    return hashlib.sha256(_json_bytes(data)).hexdigest()
+    return hashlib.sha256(json_bytes(data)).hexdigest()
 
 
 def _write_csv(path: Path, samples: Sequence[SegmentSample]) -> dict[str, object]:
@@ -103,7 +100,7 @@ def export_dataset(graph: RoadGraph, config: GeneratorConfig, output: Path) -> d
         targets = [sample.actual_travel_time_minutes for sample in samples]
         manifest = {
             "manifest_version": "segment-dataset-manifest-v1",
-            "dataset_id": hashlib.sha256(_json_bytes(identity)).hexdigest(),
+            "dataset_id": hashlib.sha256(json_bytes(identity)).hexdigest(),
             "data_origin": "synthetic",
             "generator_version": GENERATOR_VERSION,
             "graph": {
@@ -174,7 +171,7 @@ def export_dataset(graph: RoadGraph, config: GeneratorConfig, output: Path) -> d
             },
             "files": files,
         }
-        manifest_bytes = _json_bytes(manifest)
+        manifest_bytes = json_bytes(manifest)
         (output / "manifest.json").write_bytes(manifest_bytes)
         return json.loads(manifest_bytes)
     except OSError as exc:
