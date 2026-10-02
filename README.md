@@ -14,13 +14,13 @@ O Delivery Service cria e consulta entregas e entregadores por HTTP, com persist
 
 Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. Usuários e pagamentos ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
 
-Route Intelligence já possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Ele executa separadamente e ainda não calcula rotas nem recebe chamadas do Delivery. Veja [como executar e validar o serviço Python](docs/route-intelligence-foundation.md).
+Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A consulta de rotas por HTTP e as chamadas do Delivery ainda serão implementadas. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
 ## Evolução para AI Engineering
 
-O próximo passo é implementar o grafo sintético e Dijkstra com tempos fixos de referência no serviço Python. Java continuará cuidando das transações. Depois, o modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
+O próximo passo é gerar um dataset sintético reproduzível de tempos por trecho. Java continuará cuidando das transações. Depois, o modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. A demonstração atual já escolhe uma rota mais longa quando ela é mais rápida pelos custos de referência.
 
-O grafo, os dados de treinamento, o modelo e a integração de rotas ainda estão planejados. A primeira demonstração usará dados e grafo sintéticos. Python não é necessário para executar os serviços Java.
+Os dados de treinamento, o modelo e a integração de rotas ainda estão planejados. O grafo atual é fictício e não representa ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
 
 - [Arquitetura de Route Intelligence e domínio de Delivery](docs/route-intelligence.md).
 - [Contrato futuro Java ↔ Python](docs/route-intelligence-contract.md).

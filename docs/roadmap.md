@@ -1,6 +1,6 @@
 # Roadmap
 
-O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12 e a integração entre pedidos e entregas pelo PR #13. `feature/route-intelligence-foundation` acrescenta a base FastAPI, configuração, dependências travadas, testes e `/health`, descritos no [guia do serviço Python](route-intelligence-foundation.md). A próxima etapa é `feature/road-graph`; previsão de tempo com ML vem depois do roteamento com custos fixos.
+O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13 e a base Python pelo PR #14. `feature/road-graph` acrescenta [grafo sintético, validação, Dijkstra e demonstração por terminal](road-graph.md). A próxima etapa é `feature/route-segment-dataset`; previsão de tempo com ML vem depois da geração e avaliação dos dados.
 
 A base necessária para ML é uma entrega com origem, destino e ciclo de vida definido. Pagamentos, cardápios completos e autenticação podem evoluir separadamente.
 
@@ -70,6 +70,7 @@ Antes de abrir o PR, conferir os critérios da etapa. Mudanças de documentaçã
 
 ## Evoluções posteriores
 
+- Interface web: painel de restaurantes, pedidos e entregas conectado ao Gateway; visualização de rotas quando a API estiver integrada. Framework, escopo das telas e branches serão definidos em uma etapa própria. A primeira visualização pode desenhar o grafo sintético; GPS e mapas reais exigem integrações posteriores.
 - Fonte real de mapas e tráfego: definir licença, cobertura, atualização e associação de posições aos trechos antes de integrar OpenStreetMap, OSRM, GraphHopper ou APIs externas.
 - VRP: múltiplas entregas e ordem de visitas, depois da rota de uma entrega funcionar.
 - Atribuição de entregadores: critérios de capacidade, carga e custo, sem confundir esse problema com previsão por trecho.
