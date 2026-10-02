@@ -1,8 +1,6 @@
 package com.victhor.delivery.delivery.domain;
 
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -14,18 +12,20 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import com.victhor.delivery.delivery.domain.DeliveryFixtures.Stage;
+
+import static com.victhor.delivery.delivery.domain.DeliveryFixtures.COURIER;
+import static com.victhor.delivery.delivery.domain.DeliveryFixtures.CREATED;
+import static com.victhor.delivery.delivery.domain.DeliveryFixtures.DESTINATION;
+import static com.victhor.delivery.delivery.domain.DeliveryFixtures.ORIGIN;
+import static com.victhor.delivery.delivery.domain.DeliveryFixtures.at;
+import static com.victhor.delivery.delivery.domain.DeliveryFixtures.newDelivery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DeliveryTests {
-
-    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-09-30T15:00:00Z"), ZoneOffset.UTC);
-    private static final Instant CREATED = CLOCK.instant();
-    private static final DeliveryLocation ORIGIN = new DeliveryLocation("Restaurante Central", new GeoPoint(-23.55, -46.63));
-    private static final DeliveryLocation DESTINATION = new DeliveryLocation("Rua das Flores, 42", new GeoPoint(-23.56, -46.64));
-    private static final Courier COURIER = new Courier(UUID.randomUUID(), true);
 
     @Test
     void createsWithGeneratedIdentityAndImmutableLocationSnapshots() {
@@ -172,52 +172,11 @@ class DeliveryTests {
         assertThatNullPointerException().isThrownBy(() -> new Courier(null, true));
     }
 
-    private static Delivery newDelivery() {
-        return Delivery.create(UUID.randomUUID(), ORIGIN, DESTINATION, CREATED);
-    }
-
-    private static Delivery at(Stage stage) {
-        Delivery delivery = newDelivery();
-        if (stage == Stage.CREATED) {
-            return delivery;
-        }
-        if (stage == Stage.CANCELLED_UNASSIGNED) {
-            delivery.cancel(CREATED.plusSeconds(1));
-            return delivery;
-        }
-        delivery.assign(COURIER, CREATED.plusSeconds(1));
-        if (stage == Stage.ASSIGNED) {
-            return delivery;
-        }
-        if (stage == Stage.CANCELLED_ASSIGNED) {
-            delivery.cancel(CREATED.plusSeconds(2));
-            return delivery;
-        }
-        delivery.pickUp(CREATED.plusSeconds(2));
-        if (stage == Stage.PICKED_UP) {
-            return delivery;
-        }
-        delivery.startTransit(CREATED.plusSeconds(3));
-        if (stage == Stage.IN_TRANSIT) {
-            return delivery;
-        }
-        delivery.arrive(CREATED.plusSeconds(4));
-        if (stage == Stage.ARRIVED) {
-            return delivery;
-        }
-        delivery.complete(CREATED.plusSeconds(5));
-        return delivery;
-    }
-
     private static List<Object> snapshot(Delivery delivery) {
         return Arrays.asList(delivery.id(), delivery.orderId(), delivery.origin(), delivery.destination(),
                 delivery.courierId(), delivery.status(), delivery.createdAt(), delivery.updatedAt(),
                 delivery.assignedAt(), delivery.pickedUpAt(), delivery.departedAt(), delivery.arrivedAt(),
                 delivery.deliveredAt(), delivery.cancelledAt());
-    }
-
-    enum Stage {
-        CREATED, ASSIGNED, PICKED_UP, IN_TRANSIT, ARRIVED, DELIVERED, CANCELLED_UNASSIGNED, CANCELLED_ASSIGNED
     }
 
     enum Command {

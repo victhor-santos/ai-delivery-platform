@@ -1,6 +1,6 @@
 # Route Intelligence
 
-Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), mas ainda não tem persistência ou API de negócio. O serviço Python será desenvolvido depois da base de entregas.
+Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md) e [persistência PostgreSQL](delivery-persistence.md), mas ainda não tem API de negócio. O serviço Python será desenvolvido depois da base de entregas.
 
 ## Objetivo
 
@@ -134,7 +134,7 @@ A base será Python 3.12+, FastAPI, Pydantic e pytest. NumPy, pandas, scikit-lea
 
 ## Docker e execução
 
-Hoje o Compose executa `catalog-db` e `order-db`, com volumes separados. A demonstração completa incluirá o Gateway e os serviços envolvidos na entrega. Os próximos bancos serão definidos nas respectivas features de persistência, preservando os volumes existentes.
+Hoje o Compose executa `catalog-db`, `order-db` e `delivery-db`, com volumes separados. A demonstração completa incluirá o Gateway e os serviços envolvidos na entrega, preservando os volumes existentes.
 
 O endereço do serviço Python será configurável: `http://route-intelligence-service:8000` na rede Docker e `http://localhost:8000` ao executar na máquina. As URLs JDBC dentro dos containers também usarão o hostname do banco.
 

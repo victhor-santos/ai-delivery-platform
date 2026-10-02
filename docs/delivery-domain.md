@@ -1,6 +1,6 @@
 # Domínio de entregas
 
-Esta etapa define as regras de uma entrega em Java puro, no pacote `com.victhor.delivery.delivery.domain`. Ainda não há cadastro de entregas por HTTP, persistência ou integração com pedidos. O serviço mantém apenas seu ping e os endpoints do Actuator.
+As regras de uma entrega ficam em Java puro, no pacote `com.victhor.delivery.delivery.domain`. O serviço já possui [persistência PostgreSQL](delivery-persistence.md), mas ainda não há cadastro de entregas por HTTP ou integração com pedidos. Os endpoints públicos continuam sendo ping e Actuator.
 
 ## Modelo
 
@@ -10,7 +10,7 @@ Origem e destino são valores imutáveis: `DeliveryLocation` contém uma descri�
 
 As localizações não podem ser substituídas na entrega. Quando houver integração, elas serão copiadas dos dados disponíveis naquele momento. Atualizações posteriores no catálogo não devem alterar a origem de uma entrega existente.
 
-`Courier` representa somente UUID e indicador ativo. Ainda não há cadastro ou consulta de entregadores. A atribuição recebe esse valor e rejeita um entregador inativo; o serviço de aplicação futuro será responsável por carregar seu estado confiável.
+`Courier` representa somente UUID e indicador ativo. O repositório permite cadastrar e consultar esses dados; ainda não há API de entregadores. A atribuição no adaptador carrega o entregador do banco antes de chamar o domínio, que rejeita um entregador inativo.
 
 ## Ciclo de vida
 
@@ -31,7 +31,9 @@ Os horários usam `Instant`: `createdAt`, `updatedAt`, `assignedAt`, `pickedUpAt
 
 Chegada e conclusão são separadas para distinguir deslocamento de atendimento. O intervalo entre partida e chegada representa o trânsito total da entrega; ele não é, por si só, um rótulo de treinamento por trecho. A coleta de travessias por trecho terá uma etapa própria.
 
-`Delivery` encapsula estado mutável, sem setters públicos. As únicas alterações possíveis passam pelos comandos acima. As localizações permanecem imutáveis. A instância não deve ser compartilhada entre requisições concorrentes; controle de versão e transações pertencem à futura persistência.
+`Delivery` encapsula estado mutável, sem setters públicos. As alterações passam pelos comandos acima. As localizações permanecem imutáveis. A instância não deve ser compartilhada entre requisições concorrentes; controle de versão e transações ficam no adaptador de persistência.
+
+`Delivery.restore` reconstrói dados persistidos usando as mesmas regras de transição e confere o estado e o último horário. Na reconstrução, o entregador representa quem estava atribuído naquele histórico; a atividade atual dele não altera uma entrega passada. A atribuição de uma nova entrega consulta o registro atual.
 
 ## Exemplo em Java
 
@@ -51,11 +53,11 @@ O relógio é fornecido por quem coordena a operação; o domínio recebe o inst
 
 ## O que exige persistência e integração
 
-O objeto isolado não consegue garantir uma entrega por pedido nem impedir que o mesmo entregador seja atribuído a duas entregas. Essas regras precisarão de consulta, transação e restrições no banco. Também não verifica se o pedido está confirmado ou se o restaurante está ativo: essas verificações pertencem à integração entre serviços.
+O objeto isolado não consegue garantir uma entrega por pedido nem impedir que o mesmo entregador seja atribuído a duas entregas. O PostgreSQL agora garante isso com unicidade por pedido e índice único por entregador nas entregas em andamento. O domínio não verifica se o pedido está confirmado ou se o restaurante está ativo: essas verificações pertencem à integração entre serviços.
 
-A próxima branch, `feature/delivery-lifecycle`, acrescentará persistência, migrations, controle de concorrência, cadastro mínimo de entregador e API. Depois, `feature/order-delivery-integration` conectará pedidos confirmados à criação de entregas, com snapshots e tratamento de repetição.
+A persistência foi separada em `feature/delivery-persistence`. A próxima branch, `feature/delivery-lifecycle`, acrescentará casos de uso e API sobre essa base. Depois, `feature/order-delivery-integration` conectará pedidos confirmados à criação de entregas, com snapshots e tratamento de repetição.
 
-Não foi adicionado banco ao Compose nesta etapa. `catalog-db` e `order-db` continuam independentes. Não há razão para introduzir `@Async` nas transições do objeto: elas precisam ser validadas e, futuramente, confirmadas na transação antes da resposta. Mensageria e chamadas ao serviço Python continuam no roadmap.
+O Compose possui `delivery-db`, separado de `catalog-db` e `order-db`. As transições são síncronas e precisam ser confirmadas na transação antes de retornar. Mensageria e chamadas ao serviço Python continuam no roadmap.
 
 ## Testes
 
@@ -67,4 +69,4 @@ Na raiz do repositório:
 
 Os testes verificam criação, coordenadas, descrições, atribuição, sequência completa, cancelamento, estados terminais, comandos repetidos e ordem temporal. A matriz de estados inclui entrega em trânsito antes e depois da chegada, além de cancelamentos com e sem atribuição. Operações rejeitadas precisam preservar todos os campos.
 
-O teste de contexto Spring continua na suíte. Nenhum desses testes precisa de Docker, PostgreSQL ou credenciais. A API de negócio e sua integração com banco serão testadas quando existirem.
+Os testes de domínio não precisam de banco. A suíte completa, incluindo contexto Spring e persistência, exige Docker e usa PostgreSQL via Testcontainers, sem acessar os volumes locais. A API de negócio será testada quando existir.
