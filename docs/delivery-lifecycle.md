@@ -11,6 +11,7 @@ Delivery oferece criação e consulta de entregas, cadastro mínimo de entregado
 | `POST /api/deliveries` | `201`, entrega `CREATED` e `Location` |
 | `GET /api/deliveries/{id}` | `200`, entrega com localizações e histórico |
 | `GET /api/deliveries/by-order/{orderId}` | `200`, entrega associada ao pedido |
+| `PUT /api/deliveries/by-order/{orderId}` com `origin` e `destination` | `201` na criação; `200` para os mesmos snapshots; `409` para dados diferentes |
 | `POST /api/deliveries/{id}/assign` com `courierId` | `200`, estado `ASSIGNED` |
 | `POST /api/deliveries/{id}/pick-up`, sem corpo | `200`, estado `PICKED_UP` |
 | `POST /api/deliveries/{id}/start-transit`, sem corpo | `200`, estado `IN_TRANSIT` |
@@ -71,7 +72,7 @@ Para cancelar outra entrega, execute `POST /api/deliveries/{id}/cancel` enquanto
 
 ## Limites desta etapa
 
-A criação é manual, sem consulta ao Order Service ou ao catálogo. O UUID usado no exemplo é uma referência de demonstração. Confirmar ou cancelar um pedido ainda não cria/cancela uma entrega automaticamente. A próxima etapa validará pedido confirmado, restaurante ativo/localização e novas tentativas de criação entre serviços.
+O cadastro manual do exemplo aceita uma referência de demonstração e não consulta Order ou Catalog. No fluxo integrado, `POST /api/orders/{id}/delivery` exige pedido confirmado e restaurante ativo com coleta, persiste snapshots e usa o `PUT` idempotente do Delivery. Consulte a [integração entre pedidos e entregas](order-delivery-integration.md). A confirmação do pedido continua separada da solicitação; o cancelamento após intenção de entrega é rejeitado.
 
 O cadastro de entregador guarda somente UUID e indicador ativo. Não há perfis, localização atual, autenticação, listagem, desativação ou reatribuição. Nenhuma migration adicional é necessária: a API usa o schema e os adaptadores integrados no PR #11.
 

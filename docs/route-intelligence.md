@@ -46,7 +46,7 @@ O catálogo já permite informar coordenadas no cadastro ou em uma atualização
 
 O pedido já possui UUID, `restaurantId`, destino, timestamps e os estados `CREATED`, `CONFIRMED` e `CANCELLED`. A confirmação é manual e não indica pagamento aprovado; produtos e cobrança ainda não foram implementados.
 
-Somente um pedido confirmado poderá solicitar entrega. Antes da criação, a integração verificará se o restaurante está ativo e tem localização. Cancelar o pedido depois de solicitar uma entrega exige coordenação entre serviços; essa operação será rejeitada na primeira versão.
+Somente um pedido confirmado pode solicitar entrega. A integração verifica restaurante ativo e localização na primeira solicitação, persiste os snapshots e cria/recupera a entrega por HTTP. Cancelar o pedido depois da intenção de entrega exige coordenação entre serviços; essa operação é rejeitada nesta versão. O [contrato de integração](order-delivery-integration.md) descreve falhas, novas tentativas e limites.
 
 ### Delivery
 

@@ -67,15 +67,15 @@ As portas de repositório ficam em `application`, e as entidades e adaptadores e
 
 ## Pedidos
 
-O pedido contém UUID, referência ao restaurante, endereço e coordenadas de destino, estado e horários do ciclo de vida. O destino é uma cópia imutável: uma mudança futura no endereço de um usuário não altera um pedido já criado. `CREATED` pode passar para `CONFIRMED` ou `CANCELLED`; `CONFIRMED` pode passar para `CANCELLED`. Um cancelamento impede nova confirmação. Confirmar ou cancelar novamente mantém o resultado anterior.
+O pedido contém UUID, referência ao restaurante, endereço e coordenadas de destino, estado e horários do ciclo de vida. O destino é uma cópia imutável: uma mudança futura no endereço de um usuário não altera um pedido já criado. `CREATED` pode passar para `CONFIRMED` ou `CANCELLED`; `CONFIRMED` pode passar para `CANCELLED` enquanto não houver intenção de entrega. Um cancelamento impede nova confirmação. Confirmar ou cancelar novamente mantém o resultado anterior.
 
 `Order` e `DeliveryDestination`, em `domain`, validam os dados e as transições sem depender de Spring, JPA ou HTTP. `OrderService`, em `application`, coordena as operações por uma porta de persistência e recebe um `Clock` para gerar horários testáveis. O controller converte DTOs em dados do domínio; o adaptador JPA lê o pedido, aplica sua transição e salva o estado na mesma transação. A resposta usa um DTO e só retorna após a confirmação da transação.
 
 `OrderEntity` usa `@Version` para impedir que uma escrita baseada em uma versão antiga sobrescreva outra alteração. A API traduz esse conflito para `409`; o cliente deve consultar o estado atual. Não há repetição automática da transação. A migration também impõe limites de coordenadas, estados permitidos e consistência dos timestamps.
 
-A API oferece cadastro, consulta por UUID, confirmação e cancelamento em `/api/orders`. O Gateway já encaminha esse prefixo. Timestamps são instantes UTC com precisão de microssegundos, compatível com PostgreSQL. Erros seguem `ProblemDetail`, como no catálogo: entrada inválida `400`, pedido inexistente `404`, conflito `409` e falha inesperada `500` sem detalhes internos.
+A API oferece cadastro, consulta por UUID, confirmação, cancelamento e solicitação de entrega em `/api/orders`. O Gateway já encaminha esse prefixo. Timestamps são instantes UTC com precisão de microssegundos, compatível com PostgreSQL. Erros seguem `ProblemDetail`, como no catálogo: entrada inválida `400`, pedido inexistente `404`, conflito `409`, dependência remota indisponível/inválida `503` e falha inesperada `500` sem detalhes internos.
 
-Nesta etapa, `restaurantId` é uma referência, sem consulta remota ou chave estrangeira no catálogo. Não há validação de restaurante ativo, itens, preços, pagamento ou criação de entrega. A confirmação é uma ação explícita da API. Ao integrar Delivery, será necessário coordenar o cancelamento com o estado da entrega. Os [exemplos de pedidos](orders.md) detalham o contrato e essas limitações.
+O cadastro aceita `restaurantId` como referência, sem chave estrangeira no catálogo. Ao solicitar entrega de um pedido confirmado, `OrderDeliveryService` consulta o catálogo por uma porta HTTP, exige restaurante ativo e coleta informada, persiste uma intenção e os snapshots e chama o contrato idempotente de Delivery. As chamadas remotas ocorrem fora da transação local. Depois da intenção, cancelamento é bloqueado e novas tentativas usam os dados persistidos. A V2 preserva pedidos antigos. Não há itens, preços ou pagamento. Os [exemplos de pedidos](orders.md) e o [contrato de integração](order-delivery-integration.md) detalham as regras e a recuperação de falhas.
 
 As operações com JPA são síncronas. Não há trabalho independente que justifique `@Async` ou mensageria neste fluxo: a resposta confirma que a transação terminou. Processamento assíncrono entre serviços será avaliado junto com idempotência e entrega durável de eventos.
 
@@ -155,6 +155,6 @@ Delivery testa seu domínio sem banco: transições, chegada antes da conclusão
 
 ## Próximas etapas
 
-O próximo passo é integrar pedidos confirmados à criação de entregas, com snapshots, validação remota e idempotência. Java continua responsável pelas transações; o futuro serviço Python vai prever tempos por trecho e calcular rotas. O [plano de Route Intelligence](route-intelligence.md), o [contrato HTTP](route-intelligence-contract.md), o [plano de dados](route-intelligence-data.md) e o [roadmap](roadmap.md) descrevem essa evolução.
+O próximo passo é iniciar a base do serviço Python de roteamento. Java continua responsável pelas transações; o futuro serviço Python vai prever tempos por trecho e calcular rotas. O [plano de Route Intelligence](route-intelligence.md), o [contrato HTTP](route-intelligence-contract.md), o [plano de dados](route-intelligence-data.md) e o [roadmap](roadmap.md) descrevem essa evolução.
 
 A demonstração com os serviços em containers usará hostnames da rede Docker e preservará os volumes existentes. Mensageria, outbox e compensações serão avaliadas quando o fluxo precisar dessas garantias. Produtos, pagamentos, autenticação, múltiplas entregas e cloud terão etapas próprias.
