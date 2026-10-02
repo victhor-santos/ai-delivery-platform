@@ -1,5 +1,5 @@
 import math
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Annotated, Literal, Self
 
 from pydantic import AfterValidator, AwareDatetime, model_validator
@@ -10,7 +10,16 @@ from app.routing.graph import Identifier, PositiveNumber
 GENERATOR_VERSION = "synthetic-segments-v1"
 SAMPLE_SCHEMA_VERSION = "segment-sample-v1"
 TARGET_COLUMN = "actual_travel_time_minutes"
-UtcTimestamp = Annotated[AwareDatetime, AfterValidator(lambda value: value.astimezone(UTC))]
+
+
+def to_utc(value: datetime) -> datetime:
+    try:
+        return value.astimezone(UTC)
+    except OverflowError as exc:
+        raise ValueError("Timestamp exceeds the supported UTC calendar.") from exc
+
+
+UtcTimestamp = Annotated[AwareDatetime, AfterValidator(to_utc)]
 
 
 class SegmentSample(SegmentFeatures):
