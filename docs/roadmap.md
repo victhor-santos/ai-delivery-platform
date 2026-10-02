@@ -1,6 +1,6 @@
 # Roadmap
 
-O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8 e o ciclo mínimo de pedidos pelo PR #9. O domínio de entregas está implementado em Java puro; a próxima etapa acrescenta persistência e API. Depois, o fluxo receberá previsão de tempo e roteamento em Python.
+O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9 e o domínio de entregas pelo PR #10. A etapa de entregas foi dividida em persistência e API para manter os PRs revisáveis. Depois, o fluxo receberá previsão de tempo e roteamento em Python.
 
 A base necessária para ML é uma entrega com origem, destino e ciclo de vida definido. Pagamentos, cardápios completos e autenticação podem evoluir separadamente.
 
@@ -26,7 +26,8 @@ A `main` não recebe desenvolvimento direto nem force push.
 | 2. `feature/restaurant-location` | Localização de coleta no catálogo: domínio, DTOs, operação explícita para informar/atualizar localização e nova migration | Coordenadas válidas/inválidas, persistência e preservação de restaurantes existentes | Restaurante pode fornecer origem; ausência de localização é explícita, sem inventar coordenadas |
 | 3. `feature/order-domain` | Primeiro fluxo mínimo de pedido, com referência ao restaurante, destino, estados, JPA, Flyway e API pequena | Invariantes, PostgreSQL com Testcontainers e contrato HTTP | Pedido criado, confirmado e consultado; sem simulação de pagamentos ou catálogo de itens |
 | 4. `feature/delivery-domain` | Entrega, snapshots de localização, atribuição, estados e timestamps em Java puro | Transições válidas/inválidas, cancelamento, coordenadas e relógio controlado | Domínio representa o fluxo mínimo sem depender de HTTP/JPA |
-| 5. `feature/delivery-lifecycle` | Adaptadores JPA, migrations, API de transições e cadastro mínimo de entregador para atribuição manual | Testcontainers, DTOs, unicidade por pedido e concorrência | Ciclo da entrega executável por API, com invariantes persistidas |
+| 5a. `feature/delivery-persistence` | PostgreSQL próprio, adaptadores JPA, migrations e persistência mínima de entregadores | Testcontainers, reconstrução do domínio, unicidade por pedido, disputa de atribuição e versão | Ciclo persistido e garantias de concorrência testados, sem nova API |
+| 5b. `feature/delivery-lifecycle` | Casos de uso, DTOs, API de transições e cadastro mínimo de entregador para atribuição manual | HTTP com PostgreSQL, erros controlados, conflitos e Gateway | Ciclo da entrega executável por API, com invariantes persistidas |
 | 6. `feature/order-delivery-integration` | Criação de entrega a partir de pedido confirmado, snapshots e contrato HTTP idempotente | Restaurante sem localização/inativo, repetição, conflito de dados e indisponibilidade | Nenhuma entrega duplicada nem confirmação falsa de criação; nova tentativa recupera o fluxo |
 | 7. `feature/route-intelligence-foundation` | FastAPI, configuração, dependências iniciais, pytest e `/health` | Inicialização e HTTP de saúde | Serviço Python executável, sem treinamento, grafo ou inferência |
 | 8. `feature/road-graph` | JSON sintético versionado, validação do grafo e Dijkstra com tempos fixos de referência | Direção, origem igual ao destino, ausência de caminho, empates, somas e caminho mais longo em km que vence em tempo | Roteamento determinístico sem ML; limites de tamanho e desempenho do fixture documentados |
@@ -51,6 +52,7 @@ Para cada branch, usar o mesmo assunto no título do PR e na mensagem final do s
 | `feature/restaurant-location` | `feat: add restaurant pickup locations` |
 | `feature/order-domain` | `feat: add minimal order lifecycle` |
 | `feature/delivery-domain` | `feat: model delivery lifecycle rules` |
+| `feature/delivery-persistence` | `feat: persist deliveries and couriers with PostgreSQL` |
 | `feature/delivery-lifecycle` | `feat: persist and expose delivery lifecycle` |
 | `feature/order-delivery-integration` | `feat: create deliveries from confirmed orders` |
 | `feature/route-intelligence-foundation` | `feat: scaffold route intelligence service` |

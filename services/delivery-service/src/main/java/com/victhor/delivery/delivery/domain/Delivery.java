@@ -21,8 +21,8 @@ public final class Delivery {
     private Instant deliveredAt;
     private Instant cancelledAt;
 
-    private Delivery(UUID orderId, DeliveryLocation origin, DeliveryLocation destination, Instant now) {
-        this.id = UUID.randomUUID();
+    private Delivery(UUID id, UUID orderId, DeliveryLocation origin, DeliveryLocation destination, Instant now) {
+        this.id = Objects.requireNonNull(id, "Delivery id is required");
         this.orderId = Objects.requireNonNull(orderId, "Order id is required");
         this.origin = Objects.requireNonNull(origin, "Origin is required");
         this.destination = Objects.requireNonNull(destination, "Destination is required");
@@ -32,7 +32,40 @@ public final class Delivery {
     }
 
     public static Delivery create(UUID orderId, DeliveryLocation origin, DeliveryLocation destination, Instant now) {
-        return new Delivery(orderId, origin, destination, now);
+        return new Delivery(UUID.randomUUID(), orderId, origin, destination, now);
+    }
+
+    public static Delivery restore(UUID id, UUID orderId, DeliveryLocation origin, DeliveryLocation destination,
+            UUID courierId, DeliveryStatus status, Instant createdAt, Instant updatedAt, Instant assignedAt,
+            Instant pickedUpAt, Instant departedAt, Instant arrivedAt, Instant deliveredAt, Instant cancelledAt) {
+        Objects.requireNonNull(status, "Delivery status is required");
+        Objects.requireNonNull(updatedAt, "Update time is required");
+        if ((courierId == null) != (assignedAt == null)) {
+            throw new IllegalArgumentException("Courier and assignment time must be present together");
+        }
+        Delivery delivery = new Delivery(id, orderId, origin, destination, createdAt);
+        if (assignedAt != null) {
+            delivery.assign(new Courier(courierId, true), assignedAt);
+        }
+        if (pickedUpAt != null) {
+            delivery.pickUp(pickedUpAt);
+        }
+        if (departedAt != null) {
+            delivery.startTransit(departedAt);
+        }
+        if (arrivedAt != null) {
+            delivery.arrive(arrivedAt);
+        }
+        if (deliveredAt != null) {
+            delivery.complete(deliveredAt);
+        }
+        if (cancelledAt != null) {
+            delivery.cancel(cancelledAt);
+        }
+        if (delivery.status != status || !delivery.updatedAt.equals(updatedAt)) {
+            throw new IllegalArgumentException("Delivery state does not match its event history");
+        }
+        return delivery;
     }
 
     public void assign(Courier courier, Instant now) {
