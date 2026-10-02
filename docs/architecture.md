@@ -4,6 +4,8 @@
 
 Monorepo com seis aplicações Spring Boot executadas separadamente. Cada aplicação tem seu próprio build Maven, configuração e testes. Nenhum serviço depende do código Java de outro serviço.
 
+O monorepo também contém a [base de Route Intelligence em Python](route-intelligence-foundation.md), com FastAPI, configuração por ambiente, dependências travadas e `/health` na porta 8000. Ele ainda não calcula rotas, não acessa os bancos e não está conectado ao Delivery ou ao Gateway. Seu build e testes são independentes do Maven.
+
 O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O Order Service cria, consulta, confirma e cancela pedidos em outro PostgreSQL. Delivery cria e consulta entregas e entregadores por HTTP e executa o ciclo de entrega, com persistência em banco próprio. Usuários e pagamentos mantêm a base inicial, com endpoints de demonstração e Actuator.
 
 ```mermaid
@@ -17,6 +19,7 @@ flowchart TD
     Catalog --> CatalogDB[(PostgreSQL do catálogo)]
     Orders --> OrderDB[(PostgreSQL de pedidos)]
     Deliveries --> DeliveryDB[(PostgreSQL de entregas)]
+    Routes[Route Intelligence :8000 - health]
 ```
 
 O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utilizam Spring MVC. As rotas são estáticas e apontam para `localhost`, pois as aplicações são executadas diretamente na máquina nesta etapa. O Compose sobe os bancos de catálogo, pedidos e entregas, com volumes separados.
@@ -33,10 +36,11 @@ As responsabilidades abaixo definem os limites de cada aplicação. O catálogo 
 | Order Service | Pedidos, itens, totais, estados e coordenação da compra | 8083 | `/api/orders/**` | `com.victhor.delivery.order` |
 | Payment Service | Tentativas de pagamento, aprovação, recusa e estorno | 8084 | `/api/payments/**` | `com.victhor.delivery.payment` |
 | Delivery Service | Atribuição de entregador, coleta e estados da entrega | 8085 | `/api/deliveries/**` | `com.victhor.delivery.delivery` |
+| Route Intelligence | Base HTTP implementada; previsão e roteamento planejados | 8000 | — | `app` |
 
-Cada serviço mantém `GET /api/{recurso}/ping`, respondendo HTTP 200 com `{"service":"<nome-do-serviço>","status":"ok"}`. O Gateway encaminha o caminho completo, sem remover prefixos. A rota `/api/catalog/**` atende também `/api/catalog/restaurants` e suas consultas, sem regras de negócio no Gateway.
+Cada serviço Java mantém `GET /api/{recurso}/ping`, respondendo HTTP 200 com `{"service":"<nome-do-serviço>","status":"ok"}`. O Gateway encaminha o caminho completo, sem remover prefixos. A rota `/api/catalog/**` atende também `/api/catalog/restaurants` e suas consultas, sem regras de negócio no Gateway.
 
-Todas as aplicações mantêm `/actuator/health` e `/actuator/info`. O health do Gateway mede sua própria saúde; a disponibilidade dos serviços precisa ser verificada separadamente. Catálogo, pedidos e entregas incluem a saúde dos respectivos bancos em seus endpoints.
+Todas as aplicações Java mantêm `/actuator/health` e `/actuator/info`. O health do Gateway mede sua própria saúde; a disponibilidade dos serviços precisa ser verificada separadamente. Catálogo, pedidos e entregas incluem a saúde dos respectivos bancos em seus endpoints.
 
 ## Organização do catálogo
 

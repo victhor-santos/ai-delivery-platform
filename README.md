@@ -1,24 +1,26 @@
 # Delivery Order System
 
-Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projeto de portfólio em AI Engineering. O repositório reúne um API Gateway e cinco serviços.
+Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projeto de portfólio em AI Engineering. O repositório reúne um API Gateway, cinco serviços Java e a base de um serviço Python de roteamento.
 
 ## Estado atual
 
 O Catalog Service cadastra e consulta restaurantes em PostgreSQL, com migrations Flyway, validação de entrada, paginação e testes de integração com Testcontainers. Um restaurante tem UUID, nome obrigatório e indicador `active`; o cadastro gera o UUID e inicia o restaurante ativo.
 
-A localização de coleta pode ser informada no cadastro ou atualizada depois. Ela contém latitude e longitude e é salva no PostgreSQL. Restaurantes sem localização continuam válidos no catálogo; esse dado será necessário para criar entregas automaticamente na integração com pedidos.
+A localização de coleta pode ser informada no cadastro ou atualizada depois. Ela contém latitude e longitude e é salva no PostgreSQL. Restaurantes sem localização continuam válidos no catálogo; esse dado é exigido na primeira solicitação de entrega de um pedido.
 
 O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Um pedido confirmado pode solicitar entrega, com validação do restaurante no catálogo, snapshots persistidos e criação idempotente no Delivery. Ainda não há itens, valores ou pagamento. Veja a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
 O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Veja o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
-Os cinco serviços mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações expõem Actuator. Usuários e pagamentos ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
+Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. Usuários e pagamentos ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
+
+Route Intelligence já possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Ele executa separadamente e ainda não calcula rotas nem recebe chamadas do Delivery. Veja [como executar e validar o serviço Python](docs/route-intelligence-foundation.md).
 
 ## Evolução para AI Engineering
 
-O próximo passo é iniciar o serviço Python de roteamento, depois da integração entre pedidos e entregas. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
+O próximo passo é implementar o grafo sintético e Dijkstra com tempos fixos de referência no serviço Python. Java continuará cuidando das transações. Depois, o modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
 
-Por enquanto, essa parte está documentada e ainda não foi implementada. A primeira demonstração usará dados e grafo sintéticos. Python não é necessário para executar o backend atual.
+O grafo, os dados de treinamento, o modelo e a integração de rotas ainda estão planejados. A primeira demonstração usará dados e grafo sintéticos. Python não é necessário para executar os serviços Java.
 
 - [Arquitetura de Route Intelligence e domínio de Delivery](docs/route-intelligence.md).
 - [Contrato futuro Java ↔ Python](docs/route-intelligence-contract.md).
@@ -31,8 +33,9 @@ Por enquanto, essa parte está documentada e ainda não foi implementada. A prim
 - PowerShell para os exemplos abaixo.
 - Docker com suporte a containers Linux e Docker Compose v2, em execução, para os bancos locais e os testes de integração de catálogo, pedidos e entregas.
 - Acesso à internet na primeira execução para baixar Maven, dependências e a imagem PostgreSQL.
+- Para Route Intelligence: Python 3.12+ e `uv`; a versão de referência é 3.12. A preparação está no [guia do serviço Python](docs/route-intelligence-foundation.md).
 
-Cada aplicação inclui o Maven Wrapper; não é necessário instalar Maven separadamente. Versões da base: Spring Boot 4.1.1 e Spring Cloud 2025.1.3 no Gateway. Catálogo, pedidos e entregas usam as versões de Spring Data JPA, PostgreSQL JDBC, Flyway e Testcontainers geridas pelo Spring Boot; os bancos locais e os testes usam PostgreSQL 17.
+Cada aplicação Java inclui o Maven Wrapper; não é necessário instalar Maven separadamente. Versões da base: Spring Boot 4.1.1 e Spring Cloud 2025.1.3 no Gateway. Catálogo, pedidos e entregas usam as versões de Spring Data JPA, PostgreSQL JDBC, Flyway e Testcontainers geridas pelo Spring Boot; os bancos locais e os testes usam PostgreSQL 17.
 
 ## Estrutura
 
@@ -44,14 +47,15 @@ deliveryOrderSystem/
 │   ├── catalog-service/
 │   ├── order-service/
 │   ├── payment-service/
-│   └── delivery-service/
+│   ├── delivery-service/
+│   └── route-intelligence-service/
 ├── compose.yaml
 ├── .env.example
 └── docs/
     └── architecture.md
 ```
 
-Cada aplicação possui `pom.xml`, Maven Wrapper, código e testes próprios. Não há um build Maven agregador na raiz.
+Cada aplicação Java possui `pom.xml`, Maven Wrapper, código e testes próprios. Não há um build Maven agregador na raiz. O serviço Python possui `pyproject.toml`, `uv.lock` e testes com pytest, sem dependência do build Maven.
 
 ## Portas e endpoints
 
@@ -63,8 +67,9 @@ Cada aplicação possui `pom.xml`, Maven Wrapper, código e testes próprios. N�
 | Order Service | 8083 | `/api/orders/ping` |
 | Payment Service | 8084 | `/api/payments/ping` |
 | Delivery Service | 8085 | `/api/deliveries/ping` |
+| Route Intelligence | 8000 | `/health`, acesso direto |
 
-Todas as aplicações expõem `/actuator/health` e `/actuator/info` em sua própria porta. O endpoint `info` pode retornar `{}`. O health do Gateway informa a saúde dele, não a de todos os serviços. Os endpoints de saúde de catálogo, pedidos e entregas incluem a conexão com seus bancos.
+Todas as aplicações Java expõem `/actuator/health` e `/actuator/info` em sua própria porta. O endpoint `info` pode retornar `{}`. O health do Gateway informa a saúde dele, não a de todos os serviços. Os endpoints de saúde de catálogo, pedidos e entregas incluem a conexão com seus bancos. O `/health` do Python verifica apenas a disponibilidade da aplicação nesta etapa e não é encaminhado pelo Gateway.
 
 ## PostgreSQL e configuração local
 

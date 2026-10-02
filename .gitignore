@@ -22,3 +22,12 @@ replay_pid*
 !.env.example
 
 .ai/
+
+.venv/
+.venv-*/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+services/route-intelligence-service/dist/
