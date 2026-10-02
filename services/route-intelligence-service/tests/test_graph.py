@@ -162,6 +162,8 @@ def test_graph_and_indexes_are_immutable(graph_data):
         graph.nodes_by_id["A"] = graph.nodes[1]
     with pytest.raises(TypeError):
         graph.outgoing["A"] = ()
+    with pytest.raises(ValidationError, match="frozen"):
+        graph.outgoing = {}
 
 
 def test_empty_graph_is_rejected_but_isolated_nodes_are_allowed(graph_data):

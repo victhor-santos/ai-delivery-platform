@@ -1,4 +1,3 @@
-from functools import cached_property
 from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, Literal, Self
@@ -68,15 +67,15 @@ class RoadGraph(GraphModel):
             connections.add(connection)
         return self
 
-    @cached_property
+    @property
     def nodes_by_id(self) -> MappingProxyType[str, GraphNode]:
         return MappingProxyType({node.node_id: node for node in self.nodes})
 
-    @cached_property
+    @property
     def segments_by_id(self) -> MappingProxyType[str, RoadSegment]:
         return MappingProxyType({segment.segment_id: segment for segment in self.segments})
 
-    @cached_property
+    @property
     def outgoing(self) -> MappingProxyType[str, tuple[RoadSegment, ...]]:
         adjacency: dict[str, list[RoadSegment]] = {node.node_id: [] for node in self.nodes}
         for segment in self.segments:
