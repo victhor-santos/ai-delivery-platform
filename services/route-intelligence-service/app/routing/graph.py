@@ -19,6 +19,7 @@ Identifier = Annotated[
     str, StringConstraints(strict=True, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 ]
 PositiveNumber = Annotated[float, Field(strict=True, gt=0, allow_inf_nan=False)]
+RoadType = Literal["residential", "primary", "highway"]
 
 
 class GraphModel(BaseModel):
@@ -36,7 +37,7 @@ class RoadSegment(GraphModel):
     from_node: Identifier
     to_node: Identifier
     distance_km: PositiveNumber
-    road_type: Literal["residential", "primary", "highway"]
+    road_type: RoadType
     reference_speed_kmh: PositiveNumber
 
 

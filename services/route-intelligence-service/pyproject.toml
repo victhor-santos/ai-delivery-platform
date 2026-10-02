@@ -7,6 +7,7 @@ dependencies = [
     "fastapi>=0.115,<1",
     "pydantic>=2,<3",
     "pydantic-settings>=2,<3",
+    "tzdata>=2025.2,<2027",
     "uvicorn>=0.30,<1",
 ]
 
@@ -15,7 +16,7 @@ requires = ["hatchling==1.27.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["app"]
+packages = ["app", "training"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
