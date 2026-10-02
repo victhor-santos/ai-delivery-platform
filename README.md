@@ -6,17 +6,17 @@ Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projet
 
 O Catalog Service cadastra e consulta restaurantes em PostgreSQL, com migrations Flyway, validação de entrada, paginação e testes de integração com Testcontainers. Um restaurante tem UUID, nome obrigatório e indicador `active`; o cadastro gera o UUID e inicia o restaurante ativo.
 
-A localização de coleta pode ser informada no cadastro ou atualizada depois. Ela contém latitude e longitude e é salva no PostgreSQL. Restaurantes sem localização continuam válidos no catálogo; esse dado será necessário para criar entregas quando o fluxo de Delivery estiver implementado.
+A localização de coleta pode ser informada no cadastro ou atualizada depois. Ela contém latitude e longitude e é salva no PostgreSQL. Restaurantes sem localização continuam válidos no catálogo; esse dado será necessário para criar entregas automaticamente na integração com pedidos.
 
 O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Cada pedido guarda a referência ao restaurante e uma cópia do endereço de destino. Ainda não há itens, valores, validação remota do restaurante ou criação de entrega.
 
-O Delivery Service persiste entregas e a identidade mínima de entregadores em PostgreSQL. As transições são testadas pelo adaptador de persistência; a API de negócio será a próxima etapa. Veja o [domínio de entregas](docs/delivery-domain.md), a [configuração do banco](docs/delivery-persistence.md) e o [registro de validação](docs/delivery-validation.md).
+O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Veja o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
 Os cinco serviços mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações expõem Actuator. Usuários e pagamentos ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
 
 ## Evolução para AI Engineering
 
-O próximo passo é expor o ciclo de entregas por HTTP, antes de integrar pedidos e o serviço Python de roteamento. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
+O próximo passo é criar entregas a partir de pedidos confirmados, com validação do restaurante e tratamento de novas tentativas. Depois, será integrado o serviço Python de roteamento. Java continuará cuidando das transações. O modelo de ML estimará o tempo de cada trecho, e Dijkstra usará esses tempos para escolher o caminho. Uma rota mais longa poderá ser escolhida se for mais rápida.
 
 Por enquanto, essa parte está documentada e ainda não foi implementada. A primeira demonstração usará dados e grafo sintéticos. Python não é necessário para executar o backend atual.
 
@@ -141,6 +141,12 @@ Os demais serviços continuam disponíveis, um comando por terminal:
 ```
 
 O Order Service exige `order-db` em execução, e Delivery exige `delivery-db`. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar catálogo, pedidos ou entregas pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
+
+## Criar e acompanhar entregas
+
+A API atende diretamente em `http://localhost:8085` ou pelo Gateway em `http://localhost:8080`, sob `/api/deliveries`. Ela inclui cadastro de entregadores em `/api/deliveries/couriers`, criação de entregas, consulta por entrega/pedido e comandos do ciclo. Os horários são gerados pelo servidor; comandos repetidos retornam `409`.
+
+Veja [o contrato, exemplos completos e validação de entregas](docs/delivery-lifecycle.md). A criação ainda é manual: confirmar um pedido não cria uma entrega automaticamente.
 
 ## Criar e acompanhar pedidos
 
@@ -308,6 +314,6 @@ foreach ($project in $projects) {
 }
 ```
 
-Substitua `clean test` por `clean verify` para também gerar os JARs em `target/` de cada aplicação. Pedidos têm testes de domínio, HTTP, persistência e concorrência, também com PostgreSQL descartável. Entregas têm testes de domínio, contexto e persistência; a suíte completa exige Docker e usa Testcontainers. Gateway, usuários e pagamentos mantêm os testes de inicialização de contexto. As integrações HTTP automatizadas de catálogo e pedidos testam diretamente os serviços; confira também o encaminhamento real pelo Gateway usando os exemplos documentados.
+Substitua `clean test` por `clean verify` para também gerar os JARs em `target/` de cada aplicação. Pedidos têm testes de domínio, HTTP, persistência e concorrência, também com PostgreSQL descartável. Entregas têm testes de domínio, casos de uso, HTTP, erros, persistência e concorrência; a suíte completa exige Docker e usa Testcontainers. Gateway, usuários e pagamentos mantêm os testes de inicialização de contexto. As integrações HTTP automatizadas de catálogo, pedidos e entregas testam diretamente os serviços; confira também o encaminhamento real pelo Gateway usando os exemplos documentados.
 
 Veja o fluxo e as responsabilidades em [docs/architecture.md](docs/architecture.md), os detalhes de persistência em [docs/catalog-postgresql.md](docs/catalog-postgresql.md) e o [registro de validação do catálogo](docs/catalog-validation.md).

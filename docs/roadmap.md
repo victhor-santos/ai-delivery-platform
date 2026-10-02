@@ -1,6 +1,6 @@
 # Roadmap
 
-O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9 e o domínio de entregas pelo PR #10. A etapa de entregas foi dividida em persistência e API para manter os PRs revisáveis. Depois, o fluxo receberá previsão de tempo e roteamento em Python.
+O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10 e a persistência de entregas pelo PR #11. A etapa de entregas foi dividida em persistência e API para manter os PRs revisáveis. Depois, o fluxo receberá previsão de tempo e roteamento em Python.
 
 A base necessária para ML é uma entrega com origem, destino e ciclo de vida definido. Pagamentos, cardápios completos e autenticação podem evoluir separadamente.
 
@@ -53,7 +53,7 @@ Para cada branch, usar o mesmo assunto no título do PR e na mensagem final do s
 | `feature/order-domain` | `feat: add minimal order lifecycle` |
 | `feature/delivery-domain` | `feat: model delivery lifecycle rules` |
 | `feature/delivery-persistence` | `feat: persist deliveries and couriers with PostgreSQL` |
-| `feature/delivery-lifecycle` | `feat: persist and expose delivery lifecycle` |
+| `feature/delivery-lifecycle` | `feat: expose delivery lifecycle API` |
 | `feature/order-delivery-integration` | `feat: create deliveries from confirmed orders` |
 | `feature/route-intelligence-foundation` | `feat: scaffold route intelligence service` |
 | `feature/road-graph` | `feat: add synthetic road graph routing` |

@@ -1,8 +1,8 @@
 # Persistência de entregas
 
-Delivery usa um PostgreSQL próprio para guardar entregas e a identidade mínima dos entregadores. Esta etapa acrescenta migrations, adaptadores JPA e testes de integração. A API de cadastro e transições fica no próximo PR; por enquanto, as operações são exercitadas pelos repositórios nos testes.
+Delivery usa um PostgreSQL próprio para guardar entregas e a identidade mínima dos entregadores. A persistência inclui migrations, adaptadores JPA e testes de integração. Os [casos de uso e a API HTTP](delivery-lifecycle.md) utilizam esses mesmos repositórios e regras.
 
-O [registro de validação](delivery-validation.md) descreve os builds, testes e o escopo do próximo commit.
+O [registro de validação](delivery-validation.md) documenta a etapa de persistência integrada pelo PR #11.
 
 ## Configuração local
 
@@ -52,11 +52,11 @@ As restrições garantem consistência dos registros, mas não substituem os com
 
 ## Camadas e transações
 
-`application` define `DeliveryRepository` e `CourierRepository`, sem Spring ou JPA. `infrastructure.persistence` implementa essas portas, mapeia entidades e abre transações. Ainda não há um serviço de aplicação para coordenar chamadas HTTP.
+`application` define `DeliveryRepository` e `CourierRepository`, sem Spring ou JPA. `infrastructure.persistence` implementa essas portas, mapeia entidades e abre transações. `DeliveryService` e `CourierService` coordenam as chamadas HTTP por essas portas, sem dependências de Spring ou JPA. A configuração Spring fornece os beans e um `Clock` UTC.
 
 Cada transição carrega a entidade, reconstrói o domínio, executa seu comando e copia o estado para a entidade gerenciada na mesma transação. `@Version` impede que uma escrita baseada em leitura antiga sobrescreva uma alteração já confirmada. Criação e atribuição também dependem das restrições únicas, porque consultar antes de gravar não bastaria em duas requisições simultâneas.
 
-Os métodos de consulta e transição retornam `Optional.empty()` quando a entrega não existe. A atribuição carrega o entregador do banco e informa `CourierNotFoundException` se ele não existir. Violações de unicidade e conflitos de versão ainda são exceções da infraestrutura; a próxima API deverá traduzi-las em respostas controladas, sem expor SQL.
+Os métodos de consulta e transição retornam `Optional.empty()` quando a entrega não existe. A atribuição carrega o entregador do banco e informa `CourierNotFoundException` se ele não existir. A API traduz violações de unicidade (SQLSTATE `23505`) e conflitos de versão em `409`, sem expor SQL. Outras violações inesperadas de integridade retornam `500` com mensagem genérica.
 
 `Delivery.restore` valida o histórico reconstruído usando as mesmas regras do domínio. O adaptador normaliza `Instant` para microssegundos antes de salvar e devolver os dados, evitando diferenças de precisão entre a resposta do repositório e uma leitura posterior.
 
@@ -88,4 +88,4 @@ Invoke-RestMethod http://localhost:8085/actuator/info
 Invoke-RestMethod http://localhost:8085/api/deliveries/ping
 ```
 
-Com o Gateway iniciado em outro terminal, `http://localhost:8080/api/deliveries/ping` continua encaminhando para Delivery. O health de Delivery inclui seu banco. A API de negócio, a integração com pedidos e o serviço Python ainda não estão expostos nesta etapa.
+Com o Gateway iniciado em outro terminal, `http://localhost:8080/api/deliveries/ping` continua encaminhando para Delivery. O health de Delivery inclui seu banco. A [API de negócio](delivery-lifecycle.md) também usa o prefixo `/api/deliveries/**`. A integração automática com pedidos e o serviço Python continuam planejados.

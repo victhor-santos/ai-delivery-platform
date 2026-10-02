@@ -1,6 +1,6 @@
 # Domínio de entregas
 
-As regras de uma entrega ficam em Java puro, no pacote `com.victhor.delivery.delivery.domain`. O serviço já possui [persistência PostgreSQL](delivery-persistence.md), mas ainda não há cadastro de entregas por HTTP ou integração com pedidos. Os endpoints públicos continuam sendo ping e Actuator.
+As regras de uma entrega ficam em Java puro, no pacote `com.victhor.delivery.delivery.domain`. O serviço possui [persistência PostgreSQL](delivery-persistence.md) e [API HTTP de entregas e entregadores](delivery-lifecycle.md). A integração automática com pedidos permanece na próxima etapa.
 
 ## Modelo
 
@@ -10,7 +10,7 @@ Origem e destino são valores imutáveis: `DeliveryLocation` contém uma descri�
 
 As localizações não podem ser substituídas na entrega. Quando houver integração, elas serão copiadas dos dados disponíveis naquele momento. Atualizações posteriores no catálogo não devem alterar a origem de uma entrega existente.
 
-`Courier` representa somente UUID e indicador ativo. O repositório permite cadastrar e consultar esses dados; ainda não há API de entregadores. A atribuição no adaptador carrega o entregador do banco antes de chamar o domínio, que rejeita um entregador inativo.
+`Courier` representa somente UUID e indicador ativo. O repositório e a API permitem cadastrar e consultar esses dados. A API gera o UUID e inicia o entregador ativo; ainda não há ativação/desativação. A atribuição no adaptador carrega o entregador do banco antes de chamar o domínio, que rejeita um entregador inativo.
 
 ## Ciclo de vida
 
@@ -25,7 +25,7 @@ As localizações não podem ser substituídas na entrega. Quando houver integra
 
 O cancelamento não é permitido depois da coleta. Se já havia atribuição, o UUID do entregador e seu horário permanecem no histórico. Estados terminais não aceitam outros comandos. Não existe reatribuição nesta etapa.
 
-Comandos repetidos são rejeitados, inclusive uma segunda chegada. Esse é o contrato do domínio atual; ainda não há política de idempotência HTTP. A futura criação de entrega por pedido terá um contrato próprio para lidar com novas tentativas da integração.
+Comandos repetidos são rejeitados, inclusive uma segunda chegada. A API preserva esse contrato e retorna `409` para comandos repetidos. A futura criação de entrega por pedido terá um contrato próprio para lidar com novas tentativas da integração.
 
 Os horários usam `Instant`: `createdAt`, `updatedAt`, `assignedAt`, `pickedUpAt`, `departedAt`, `arrivedAt`, `deliveredAt` e `cancelledAt`. Cada evento exige um instante igual ou posterior ao último evento. Horários iguais são aceitos; horários anteriores e valores ausentes são rejeitados antes de qualquer alteração.
 
@@ -55,7 +55,7 @@ O relógio é fornecido por quem coordena a operação; o domínio recebe o inst
 
 O objeto isolado não consegue garantir uma entrega por pedido nem impedir que o mesmo entregador seja atribuído a duas entregas. O PostgreSQL agora garante isso com unicidade por pedido e índice único por entregador nas entregas em andamento. O domínio não verifica se o pedido está confirmado ou se o restaurante está ativo: essas verificações pertencem à integração entre serviços.
 
-A persistência foi separada em `feature/delivery-persistence`. A próxima branch, `feature/delivery-lifecycle`, acrescentará casos de uso e API sobre essa base. Depois, `feature/order-delivery-integration` conectará pedidos confirmados à criação de entregas, com snapshots e tratamento de repetição.
+A persistência foi integrada pelo PR #11. `feature/delivery-lifecycle` acrescenta casos de uso e API sobre essa base. Depois, `feature/order-delivery-integration` conectará pedidos confirmados à criação de entregas, com snapshots e tratamento de repetição.
 
 O Compose possui `delivery-db`, separado de `catalog-db` e `order-db`. As transições são síncronas e precisam ser confirmadas na transação antes de retornar. Mensageria e chamadas ao serviço Python continuam no roadmap.
 
@@ -69,4 +69,4 @@ Na raiz do repositório:
 
 Os testes verificam criação, coordenadas, descrições, atribuição, sequência completa, cancelamento, estados terminais, comandos repetidos e ordem temporal. A matriz de estados inclui entrega em trânsito antes e depois da chegada, além de cancelamentos com e sem atribuição. Operações rejeitadas precisam preservar todos os campos.
 
-Os testes de domínio não precisam de banco. A suíte completa, incluindo contexto Spring e persistência, exige Docker e usa PostgreSQL via Testcontainers, sem acessar os volumes locais. A API de negócio será testada quando existir.
+Os testes de domínio não precisam de banco. A suíte completa, incluindo contexto Spring e persistência, exige Docker e usa PostgreSQL via Testcontainers, sem acessar os volumes locais. Os testes HTTP cobrem o ciclo, validação de entrada, erros e conflitos concorrentes; consulte o [contrato da API](delivery-lifecycle.md).

@@ -1,6 +1,6 @@
 # Route Intelligence
 
-Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md) e [persistência PostgreSQL](delivery-persistence.md), mas ainda não tem API de negócio. O serviço Python será desenvolvido depois da base de entregas.
+Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). O serviço Python será desenvolvido depois da integração entre pedidos e entregas.
 
 ## Objetivo
 
