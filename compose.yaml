@@ -1,3 +1,10 @@
+x-java-build: &java-build
+  context: .
+  dockerfile: Dockerfile.java
+
+x-java-service: &java-service
+  profiles: [demo]
+
 services:
   catalog-db:
     image: postgres:17-alpine
@@ -21,7 +28,7 @@ services:
     environment:
       POSTGRES_DB: orders
       POSTGRES_USER: ${ORDER_DB_USERNAME:-orders}
-      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:-}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
     ports:
       - "127.0.0.1:${ORDER_DB_PORT:-5434}:5432"
     volumes:
@@ -38,7 +45,7 @@ services:
     environment:
       POSTGRES_DB: deliveries
       POSTGRES_USER: ${DELIVERY_DB_USERNAME:-deliveries}
-      POSTGRES_PASSWORD: ${DELIVERY_DB_PASSWORD:-}
+      POSTGRES_PASSWORD: ${DELIVERY_DB_PASSWORD:?Set DELIVERY_DB_PASSWORD in .env}
     ports:
       - "127.0.0.1:${DELIVERY_DB_PORT:-5435}:5432"
     volumes:
@@ -49,6 +56,130 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  user-service:
+    <<: *java-service
+    image: delivery-order-system/user-service:local
+    build:
+      <<: *java-build
+      args:
+        SERVICE_PATH: services/user-service
+    environment:
+      SERVER_PORT: 8081
+
+  catalog-service:
+    <<: *java-service
+    image: delivery-order-system/catalog-service:local
+    build:
+      <<: *java-build
+      args:
+        SERVICE_PATH: services/catalog-service
+    environment:
+      SERVER_PORT: 8082
+      CATALOG_DB_URL: jdbc:postgresql://catalog-db:5432/catalog
+      CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-catalog}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD in .env}
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+
+  order-service:
+    <<: *java-service
+    image: delivery-order-system/order-service:local
+    build:
+      <<: *java-build
+      args:
+        SERVICE_PATH: services/order-service
+    environment:
+      SERVER_PORT: 8083
+      ORDER_DB_URL: jdbc:postgresql://order-db:5432/orders
+      ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:-orders}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
+      CATALOG_SERVICE_URL: http://catalog-service:8082
+      DELIVERY_SERVICE_URL: http://delivery-service:8085
+      ORDER_REMOTE_TIMEOUT_MS: ${ORDER_REMOTE_TIMEOUT_MS:-5000}
+    depends_on:
+      order-db:
+        condition: service_healthy
+      catalog-service:
+        condition: service_healthy
+      delivery-service:
+        condition: service_healthy
+
+  payment-service:
+    <<: *java-service
+    image: delivery-order-system/payment-service:local
+    build:
+      <<: *java-build
+      args:
+        SERVICE_PATH: services/payment-service
+    environment:
+      SERVER_PORT: 8084
+
+  delivery-service:
+    <<: *java-service
+    image: delivery-order-system/delivery-service:local
+    build:
+      <<: *java-build
+      args:
+        SERVICE_PATH: services/delivery-service
+    environment:
+      SERVER_PORT: 8085
+      DELIVERY_DB_URL: jdbc:postgresql://delivery-db:5432/deliveries
+      DELIVERY_DB_USERNAME: ${DELIVERY_DB_USERNAME:-deliveries}
+      DELIVERY_DB_PASSWORD: ${DELIVERY_DB_PASSWORD:?Set DELIVERY_DB_PASSWORD in .env}
+      ROUTE_INTELLIGENCE_URL: http://route-intelligence-service:8000
+      DELIVERY_ROUTE_CONNECT_TIMEOUT_MS: ${DELIVERY_ROUTE_CONNECT_TIMEOUT_MS:-1000}
+      DELIVERY_ROUTE_TIMEOUT_MS: ${DELIVERY_ROUTE_TIMEOUT_MS:-3000}
+    depends_on:
+      delivery-db:
+        condition: service_healthy
+
+  api-gateway:
+    <<: *java-service
+    image: delivery-order-system/api-gateway:local
+    build:
+      <<: *java-build
+      args:
+        SERVICE_PATH: api-gateway
+    environment:
+      SERVER_PORT: 8080
+      USER_SERVICE_URL: http://user-service:8081
+      CATALOG_SERVICE_URL: http://catalog-service:8082
+      ORDER_SERVICE_URL: http://order-service:8083
+      PAYMENT_SERVICE_URL: http://payment-service:8084
+      DELIVERY_SERVICE_URL: http://delivery-service:8085
+    ports:
+      - "127.0.0.1:${API_GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      user-service:
+        condition: service_healthy
+      catalog-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      delivery-service:
+        condition: service_healthy
+
+  route-intelligence-service:
+    profiles: [demo]
+    image: delivery-order-system/route-intelligence-service:local
+    build:
+      context: .
+      dockerfile: services/route-intelligence-service/Dockerfile
+    environment:
+      ROUTE_INTELLIGENCE_MODEL_PATH: /models
+    ports:
+      - "127.0.0.1:${ROUTE_INTELLIGENCE_PORT:-8000}:8000"
+    volumes:
+      - type: bind
+        source: ${ROUTE_INTELLIGENCE_MODEL_DIR:-./services/route-intelligence-service/artifacts/segment-model-v1}
+        target: /models
+        read_only: true
+        bind:
+          create_host_path: false
 
 volumes:
   catalog_postgres_data:
