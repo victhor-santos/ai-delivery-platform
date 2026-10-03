@@ -108,14 +108,14 @@ class OrderDeliveryIntegrationTests {
         var first = send("POST", orderPath + "/delivery", null);
         assertThat(first.statusCode()).isEqualTo(200);
         JsonNode response = JSON.readTree(first.body());
-        assertThat(response.path("status").asText()).isEqualTo("CREATED");
-        assertThat(response.path("orderId").asText()).isEqualTo(orderPath.substring(orderPath.lastIndexOf('/') + 1));
-        assertThat(receipt.path("origin").path("description").asText()).isEqualTo("Restaurant Central");
-        assertThat(receipt.path("destination").path("description").asText()).isEqualTo("Rua Central, 42");
+        assertThat(response.path("status").asString()).isEqualTo("CREATED");
+        assertThat(response.path("orderId").asString()).isEqualTo(orderPath.substring(orderPath.lastIndexOf('/') + 1));
+        assertThat(receipt.path("origin").path("description").asString()).isEqualTo("Restaurant Central");
+        assertThat(receipt.path("destination").path("description").asString()).isEqualTo("Rua Central, 42");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM order_delivery_requests", Integer.class)).isEqualTo(1);
         JsonNode order = JSON.readTree(send("GET", orderPath, null).body());
-        assertThat(Instant.parse(order.path("deliveryRequestedAt").asText()))
-                .isAfterOrEqualTo(Instant.parse(order.path("confirmedAt").asText()));
+        assertThat(Instant.parse(order.path("deliveryRequestedAt").asString()))
+                .isAfterOrEqualTo(Instant.parse(order.path("confirmedAt").asString()));
         var repeated = send("POST", orderPath + "/delivery", null);
         assertThat(repeated.statusCode()).isEqualTo(200);
         assertThat(JSON.readTree(repeated.body())).isEqualTo(response);
@@ -129,13 +129,13 @@ class OrderDeliveryIntegrationTests {
         String order = confirmedOrder();
         mode = "lost-response";
         assertProblem(send("POST", order + "/delivery", null), 503);
-        UUID originalDelivery = UUID.fromString(receipt.path("id").asText());
+        UUID originalDelivery = UUID.fromString(receipt.path("id").asString());
         assertThat(send("POST", order + "/cancel", null).statusCode()).isEqualTo(409);
         catalogStatus = 404;
         mode = "normal";
         var retried = send("POST", order + "/delivery", null);
         assertThat(retried.statusCode()).isEqualTo(200);
-        assertThat(JSON.readTree(retried.body()).path("deliveryId").asText()).isEqualTo(originalDelivery.toString());
+        assertThat(JSON.readTree(retried.body()).path("deliveryId").asString()).isEqualTo(originalDelivery.toString());
         assertThat(CATALOG_CALLS.get()).isEqualTo(1);
         assertThat(CREATED_DELIVERIES.get()).isEqualTo(1);
     }
@@ -242,7 +242,7 @@ class OrderDeliveryIntegrationTests {
                 """.formatted(RESTAURANT);
         var response = send("POST", "/api/orders", body);
         assertThat(response.statusCode()).isEqualTo(201);
-        return "/api/orders/" + JSON.readTree(response.body()).path("id").asText();
+        return "/api/orders/" + JSON.readTree(response.body()).path("id").asString();
     }
 
     private String confirmedOrder() throws Exception {
