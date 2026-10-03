@@ -17,6 +17,7 @@ import com.victhor.delivery.delivery.application.RouteContext;
 import com.victhor.delivery.delivery.application.RouteNotFoundException;
 import com.victhor.delivery.delivery.application.RouteOptimizer;
 import com.victhor.delivery.delivery.application.RouteSegment;
+import com.victhor.delivery.delivery.application.SegmentPredictionContext;
 import com.victhor.delivery.delivery.application.RouteServiceUnavailableException;
 import com.victhor.delivery.delivery.application.UnsupportedRouteLocationException;
 import com.victhor.delivery.delivery.domain.GeoPoint;
@@ -70,7 +71,8 @@ public class FastApiRouteOptimizerClient implements RouteOptimizer {
             var costs = new ArrayList<RouteSegment>();
             for (JsonNode segment : segments) {
                 costs.add(new RouteSegment(text(segment.path("segment_id")), number(segment.path("distance_km")),
-                        number(segment.path("predicted_travel_time_minutes"))));
+                        number(segment.path("predicted_travel_time_minutes")), predictionContext(segment, context,
+                                instant(json.path("predicted_at")), instant(json.path("context_as_of")))));
             }
             var route = new OptimizedRoute(coordinates, costs, number(json.path("distance_km")),
                     number(json.path("predicted_travel_time_minutes")), instant(json.path("predicted_at")),
@@ -153,6 +155,32 @@ public class FastApiRouteOptimizerClient implements RouteOptimizer {
             throw new IllegalArgumentException("Missing route text");
         }
         return value.asString();
+    }
+
+    private static SegmentPredictionContext predictionContext(JsonNode segment, RouteContext request,
+            Instant predictedAt, Instant contextAsOf) {
+        JsonNode value = segment.path("prediction_context");
+        if (value.isMissingNode()) {
+            return null;
+        }
+        if (!value.isObject() || number(value.path("distance_km")) != number(segment.path("distance_km"))) {
+            throw new IllegalArgumentException("Invalid segment feature snapshot");
+        }
+        var context = new SegmentPredictionContext(text(value.path("feature_schema_version")),
+                text(value.path("from_node")), text(value.path("to_node")), text(value.path("road_type")),
+                number(value.path("reference_speed_kmh")), text(value.path("traffic_level")),
+                integer(value.path("hour")), integer(value.path("day_of_week")), text(value.path("timezone")),
+                text(value.path("traffic_source")), instant(value.path("traffic_observed_at")),
+                instant(value.path("traffic_available_at")), instant(value.path("features_available_at")));
+        context.validateFor(request.departureAt(), predictedAt, contextAsOf);
+        return context;
+    }
+
+    private static int integer(JsonNode value) {
+        if (!value.isIntegralNumber() || !value.canConvertToInt()) {
+            throw new IllegalArgumentException("Missing integer feature");
+        }
+        return value.asInt();
     }
 
     private static double number(JsonNode value) {

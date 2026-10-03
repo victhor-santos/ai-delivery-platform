@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.ml.features import departure_context
+from app.ml.features import SegmentFeatures, departure_context
 from app.ml.predictor import SegmentTravelTimePredictor
 from app.routing.demo import load_demo_graph
 from app.routing.dijkstra import RouteNotFoundError
@@ -63,9 +63,34 @@ def test_predicts_every_segment_once_with_shared_departure_context():
         departure_context(body.departure_at)
     }
     assert route.context_as_of == NOW < route.predicted_at
+    features_by_id = dict(zip(sorted(graph.segments_by_id), predictor.calls[0], strict=True))
+    for segment in route.segments:
+        context = segment.prediction_context
+        matching = features_by_id[segment.segment_id]
+        assert (
+            context.model_dump(include=set(SegmentFeatures.model_fields)) == matching.model_dump()
+        )
+        edge = graph.segments_by_id[segment.segment_id]
+        assert (context.from_node, context.to_node) == (edge.from_node, edge.to_node)
+        assert context.traffic_source == traffic.source
+        assert context.traffic_observed_at == context.traffic_available_at == NOW
+        assert context.features_available_at <= route.context_as_of <= route.predicted_at
     assert route.predicted_travel_time_minutes == sum(
         s.predicted_travel_time_minutes for s in route.segments
     )
+
+
+def test_prediction_snapshot_retains_original_features_after_later_planning():
+    graph = load_demo_graph()
+    traffic = load_demo_traffic(graph, NOW)
+    planner = RoutePlanner(graph, ReferencePredictor(graph), traffic)
+    first = planner.plan(request(graph), NOW)
+    original = first.model_dump(mode="json")
+    later_request = request(graph).model_copy(update={"departure_at": NOW + timedelta(hours=1)})
+    later = planner.plan(later_request, NOW + timedelta(minutes=1))
+    assert first.model_dump(mode="json") == original
+    assert first.segments[0].prediction_context.hour != later.segments[0].prediction_context.hour
+    assert first.segments[0].prediction_context.feature_schema_version == "segment-features-v1"
 
 
 def test_low_traffic_selects_longer_route_that_is_faster_in_time():

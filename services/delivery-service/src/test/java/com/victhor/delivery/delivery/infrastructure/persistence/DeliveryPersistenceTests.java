@@ -85,7 +85,7 @@ class DeliveryPersistenceTests {
         assertThat(couriers.findById(courier.id())).contains(courier);
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                .containsExactly("1", "2");
+                .containsExactly("1", "2", "3");
         assertThat(jdbc.queryForObject("SELECT destination_description FROM deliveries WHERE id = ?", String.class, saved.id()))
                 .isEqualTo(DESTINATION.description());
     }

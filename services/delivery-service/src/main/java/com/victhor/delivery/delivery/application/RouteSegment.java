@@ -1,6 +1,11 @@
 package com.victhor.delivery.delivery.application;
 
-public record RouteSegment(String segmentId, double distanceKm, double predictedTravelTimeMinutes) {
+public record RouteSegment(String segmentId, double distanceKm, double predictedTravelTimeMinutes,
+        SegmentPredictionContext predictionContext) {
+
+    public RouteSegment(String segmentId, double distanceKm, double predictedTravelTimeMinutes) {
+        this(segmentId, distanceKm, predictedTravelTimeMinutes, null);
+    }
 
     public RouteSegment {
         if (segmentId == null || !segmentId.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,63}")) {

@@ -43,6 +43,54 @@ class FastApiRouteOptimizerClientTests {
             """;
     private final ObjectMapper mapper = new ObjectMapper();
 
+    private static final String FEATURE_CONTEXT = """
+            {"feature_schema_version":"segment-features-v1","from_node":"A","to_node":"C",
+             "distance_km":2.9,"road_type":"residential","reference_speed_kmh":15.0,
+             "traffic_level":"low","hour":9,"day_of_week":5,"timezone":"America/Sao_Paulo",
+             "traffic_source":"synthetic-traffic-v1","traffic_observed_at":"2026-10-03T11:00:00Z",
+             "traffic_available_at":"2026-10-03T11:00:00Z","features_available_at":"2026-10-03T11:00:00Z"}
+            """;
+
+    @Test
+    void preservesFeaturesAndTheirAvailabilityWhileAcceptingLegacyRoutes() throws Exception {
+        var body = (ObjectNode) mapper.readTree(VALID_RESPONSE);
+        ((ObjectNode) body.path("segments").get(0)).set("prediction_context", mapper.readTree(FEATURE_CONTEXT));
+        try (var server = new Remote(200, "application/json", body.toString(), 0, null)) {
+            var context = optimize(server).segments().getFirst().predictionContext();
+            assertThat(context.fromNode()).isEqualTo("A");
+            assertThat(context.toNode()).isEqualTo("C");
+            assertThat(context.roadType()).isEqualTo("residential");
+            assertThat(context.referenceSpeedKmh()).isEqualTo(15);
+            assertThat(context.hour()).isEqualTo(9);
+            assertThat(context.featuresAvailableAt()).isEqualTo(Instant.parse("2026-10-03T11:00:00Z"));
+        }
+        try (var server = new Remote(200, "application/json", VALID_RESPONSE, 0, null)) {
+            assertThat(optimize(server).segments().getFirst().predictionContext()).isNull();
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidFeatureSnapshots")
+    void rejectsInconsistentOrCoercedFeatureSnapshots(String field, String value) throws Exception {
+        var body = (ObjectNode) mapper.readTree(VALID_RESPONSE);
+        var context = (ObjectNode) mapper.readTree(FEATURE_CONTEXT);
+        context.set(field, mapper.readTree(value));
+        ((ObjectNode) body.path("segments").get(0)).set("prediction_context", context);
+        try (var server = new Remote(200, "application/json", body.toString(), 0, null)) {
+            assertThatThrownBy(() -> optimize(server)).isInstanceOf(RouteServiceUnavailableException.class);
+        }
+    }
+
+    static Stream<Arguments> invalidFeatureSnapshots() {
+        return Stream.of(Arguments.of("distance_km", "3.0"), Arguments.of("hour", "\"9\""),
+                Arguments.of("hour", "9.0"), Arguments.of("hour", "10"), Arguments.of("day_of_week", "6"),
+                Arguments.of("reference_speed_kmh", "0"), Arguments.of("road_type", "\"unknown\""),
+                Arguments.of("traffic_level", "null"), Arguments.of("from_node", "\"C\""),
+                Arguments.of("feature_schema_version", "\"unknown-v2\""), Arguments.of("timezone", "\"UTC\""),
+                Arguments.of("features_available_at", "\"2026-10-03T11:00:01Z\""),
+                Arguments.of("traffic_observed_at", "\"2026-10-03T11:00:01Z\""));
+    }
+
     @Test
     void sendsPythonFieldNamesAndReadsValidatedRouteWithoutLeakingJavaFields() throws Exception {
         var captured = new AtomicReference<String>();

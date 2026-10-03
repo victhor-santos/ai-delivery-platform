@@ -26,7 +26,7 @@ function Assert-Condition([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
 
-function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [int]$Status = 200) {
+function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [int]$Status = 200, [switch]$Raw) {
     $request = [System.Net.Http.HttpRequestMessage]::new(
         [System.Net.Http.HttpMethod]::new($Method), "$baseUrl$Path")
     $response = $null
@@ -38,7 +38,9 @@ function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [int]$Status 
         $response = $http.SendAsync($request).GetAwaiter().GetResult()
         $content = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
         Assert-Condition ([int]$response.StatusCode -eq $Status) "$Method $Path returned $([int]$response.StatusCode): $content"
-        return $content | ConvertFrom-Json
+        if ($Raw) { return $content }
+        $parsed = $content | ConvertFrom-Json
+        return $parsed
     } finally {
         if ($response) { $response.Dispose() }
         $request.Dispose()
@@ -78,7 +80,7 @@ try {
 
     $deliveryPath = "/api/deliveries/$($receipt.deliveryId)"
     $delivery = Invoke-Api 'GET' $deliveryPath
-    $departure = @{ departureAt = '2026-09-29T19:00:00-03:00' }
+    $departure = @{ departureAt = [DateTimeOffset]::UtcNow.ToString('o') }
     $plan = Invoke-Api 'POST' "$deliveryPath/route" $departure
     Assert-Condition ($plan.deliveryId -eq $receipt.deliveryId) 'Route belongs to another delivery.'
     Assert-Condition ($plan.dataOrigin -eq 'synthetic') 'Route must identify synthetic data.'
@@ -106,6 +108,40 @@ try {
         Write-Output 'Python downtime and recovery passed; the previous plan and delivery were preserved.'
     }
 
+    $courier = Invoke-Api 'POST' '/api/deliveries/couriers' -Status 201
+    Invoke-Api 'POST' "$deliveryPath/assign" @{ courierId = $courier.id } | Out-Null
+    Invoke-Api 'POST' "$deliveryPath/pick-up" | Out-Null
+    $transit = Invoke-Api 'POST' "$deliveryPath/start-transit"
+    $enteredAt = $transit.departedAt
+    for ($sequence = 0; $sequence -lt $plan.segments.Count; $sequence++) {
+        $segmentPath = "$deliveryPath/segments/$sequence"
+        $entryEvent = @{ routePlanId = $plan.id; occurredAt = $enteredAt; dataOrigin = 'simulated' }
+        $entry = Invoke-Api 'PUT' "$segmentPath/entry" $entryEvent
+        Assert-Condition ($null -eq $entry.actualTravelTimeMinutes) 'An incomplete traversal has a label.'
+        $duplicate = Invoke-Api 'PUT' "$segmentPath/entry" $entryEvent
+        Assert-Condition (($duplicate | ConvertTo-Json -Depth 10 -Compress) -eq ($entry | ConvertTo-Json -Depth 10 -Compress)) 'Entry retry changed the observation.'
+        # Use the server recording time to simulate a completed segment without client clock skew.
+        $exitEvent = @{ routePlanId = $plan.id; occurredAt = $entry.entryRecordedAt; dataOrigin = 'simulated' }
+        $exit = Invoke-Api 'PUT' "$segmentPath/exit" $exitEvent
+        Assert-Condition ($exit.actualTravelTimeMinutes -gt 0) 'A completed traversal has no positive duration.'
+        Assert-Condition ($exit.prediction.segment.segmentId -eq $plan.segments[$sequence].segmentId) 'Observation refers to another segment.'
+        Assert-Condition ($exit.prediction.modelVersion -eq $plan.modelVersion) 'Prediction model snapshot changed.'
+        Assert-Condition ($exit.prediction.segment.predictionContext.featureSchemaVersion -eq 'segment-features-v1') 'Feature snapshot is missing.'
+        $enteredAt = $exit.exitedAt
+    }
+    $observations = @(Invoke-Api 'GET' "$deliveryPath/segments")
+    Assert-Condition ($observations.Count -eq $plan.segments.Count) 'Observation count does not match the route.'
+    $cutoff = [uri]::EscapeDataString($exit.labelAvailableAt)
+    $exportPath = "$deliveryPath/segments/export?availableAtCutoff=$cutoff"
+    $csv = Invoke-Api 'GET' $exportPath -Raw
+    $samples = @($csv | ConvertFrom-Csv)
+    Assert-Condition ($samples.Count -eq $plan.segments.Count) 'CSV export lost completed observations.'
+    Assert-Condition (@($samples | Where-Object { $_.data_origin -ne 'simulated' }).Count -eq 0) 'CSV must identify simulated events.'
+    Invoke-Api 'POST' "$deliveryPath/arrive" | Out-Null
+    $delivery = Invoke-Api 'POST' "$deliveryPath/complete"
+    Assert-Condition ($delivery.status -eq 'DELIVERED') 'Delivery lifecycle was not completed.'
+    Write-Output "Segment observations passed: $($samples.Count) simulated traversals, prediction snapshots and CSV export."
+
     if ($CheckPersistence) {
         Invoke-Compose -CommandArguments @('up', '-d', '--no-build', '--force-recreate',
             '--wait', '--wait-timeout', '240')
@@ -117,6 +153,9 @@ try {
         Assert-Condition ($persistedOrder.status -eq 'CONFIRMED') 'Order was lost after restart.'
         Assert-Condition (($persistedDelivery | ConvertTo-Json -Depth 10 -Compress) -eq ($delivery | ConvertTo-Json -Depth 10 -Compress)) 'Delivery changed after restart.'
         Assert-Condition (($persistedPlan | ConvertTo-Json -Depth 10 -Compress) -eq ($plan | ConvertTo-Json -Depth 10 -Compress)) 'Saved route changed after restart.'
+        $persistedObservations = @(Invoke-Api 'GET' "$deliveryPath/segments")
+        Assert-Condition (($persistedObservations | ConvertTo-Json -Depth 10 -Compress) -eq ($observations | ConvertTo-Json -Depth 10 -Compress)) 'Observation snapshots changed after restart.'
+        Assert-Condition ((Invoke-Api 'GET' $exportPath -Raw) -eq $csv) 'CSV changed after restart for the same cutoff.'
         $recoveredReceipt = Invoke-Api 'POST' "$orderPath/delivery"
         Assert-Condition ($recoveredReceipt.deliveryId -eq $receipt.deliveryId) 'Restart caused a duplicate delivery.'
         Write-Output 'Persistence passed after recreating containers; no volumes were removed.'

@@ -25,6 +25,15 @@ public record OptimizedRoute(List<GeoPoint> route, List<RouteSegment> segments, 
                 throw new IllegalArgumentException("Repeated route segment");
             }
         }
+        if (segments.stream().anyMatch(segment -> segment.predictionContext() != null)) {
+            for (int index = 0; index < segments.size(); index++) {
+                var snapshot = segments.get(index).predictionContext();
+                if (snapshot == null || snapshot.featuresAvailableAt().isAfter(contextAsOf)
+                        || (index > 0 && !segments.get(index - 1).predictionContext().toNode().equals(snapshot.fromNode()))) {
+                    throw new IllegalArgumentException("Incomplete or inconsistent segment feature snapshots");
+                }
+            }
+        }
         if (!Double.isFinite(distanceKm) || distanceKm < 0
                 || !Double.isFinite(predictedTravelTimeMinutes) || predictedTravelTimeMinutes < 0
                 || (segments.isEmpty() && (distanceKm != 0 || predictedTravelTimeMinutes != 0))
