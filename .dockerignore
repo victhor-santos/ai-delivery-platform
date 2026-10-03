@@ -1,0 +1,15 @@
+.git
+.ai
+.idea
+.env
+.env.*
+**/target
+**/.venv*
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.egg-info
+**/dist
+**/*.log
+services/route-intelligence-service/artifacts
+services/route-intelligence-service/data/synthetic
