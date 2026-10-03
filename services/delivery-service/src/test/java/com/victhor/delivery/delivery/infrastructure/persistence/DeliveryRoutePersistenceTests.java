@@ -8,6 +8,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.OptimisticLockException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,6 +56,8 @@ class DeliveryRoutePersistenceTests {
     private DeliveryRepository deliveries;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private EntityManagerFactory entityManagers;
 
     private Delivery delivery;
 
@@ -124,6 +129,28 @@ class DeliveryRoutePersistenceTests {
         assertThat(routes.findSnapshot(second.id()).orElseThrow().version()).isZero();
         assertThat(routes.findPlan(second.id())).isEmpty();
         assertThat(routes.findPlan(delivery.id())).contains(previous);
+    }
+
+    @Test
+    void rejectsLifecycleWriteLoadedBeforeAPlanWasCommitted() {
+        try (var manager = entityManagers.createEntityManager()) {
+            manager.getTransaction().begin();
+            var staleEntity = manager.find(DeliveryEntity.class, delivery.id());
+            var snapshot = routes.findSnapshot(delivery.id()).orElseThrow();
+            var stored = routes.save(snapshot, plan(snapshot));
+            var cancelled = staleEntity.toDomain();
+            cancelled.cancel(NOW.plusSeconds(1));
+            staleEntity.applyState(cancelled);
+            try {
+                assertThatThrownBy(manager::flush).isInstanceOf(OptimisticLockException.class);
+            } finally {
+                if (manager.getTransaction().isActive()) {
+                    manager.getTransaction().rollback();
+                }
+            }
+            assertThat(routes.findPlan(delivery.id())).contains(stored);
+            assertThat(deliveries.findById(delivery.id()).orElseThrow()).usingRecursiveComparison().isEqualTo(delivery);
+        }
     }
 
     @Test
