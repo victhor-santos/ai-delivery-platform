@@ -1,0 +1,17 @@
+{
+  "scenario_version": "synthetic-traffic-v1",
+  "graph_version": "synthetic-city-v1",
+  "data_origin": "synthetic",
+  "levels": {
+    "A-B": "low",
+    "A-D": "high",
+    "A-F": "low",
+    "B-A": "low",
+    "B-C": "low",
+    "C-B": "low",
+    "D-E": "high",
+    "E-C": "high",
+    "E-D": "low",
+    "F-A": "low"
+  }
+}

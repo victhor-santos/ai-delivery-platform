@@ -1,6 +1,6 @@
 # Modelo de tempo por trecho
 
-O treinamento offline compara os quatro candidatos previstos no [plano de dados](route-intelligence-data.md), seleciona pela validação e salva um pipeline. A avaliação independente carrega esse artefato e usa o teste reservado. `app/ml/predictor.py` já prevê em lote, mas a API continua expondo apenas `/health`; nenhum modelo é treinado ou carregado no startup nesta etapa.
+O treinamento offline compara os quatro candidatos previstos no [plano de dados](route-intelligence-data.md), seleciona pela validação e salva um pipeline. A avaliação independente carrega esse artefato e usa o teste reservado. `app/ml/predictor.py` prevê em lote. A etapa seguinte acrescentou a [API de rotas](intelligent-routing-api.md), que carrega o bundle configurado uma vez no startup; treinamento continua exclusivamente offline. Os registros de validação abaixo correspondem à etapa do modelo.
 
 ## Executar
 
@@ -54,7 +54,7 @@ MAE e RMSE são registrados em minutos, além de R² e erros por via, tráfego e
 
 `model_version` é `segment-model-v1-` seguido dos primeiros 16 caracteres do SHA-256 do pipeline. O hash completo fica nos metadados. Versões exatas de Python, sistema, arquitetura, serviço e dependências são conferidas antes da desserialização. Metadados, relatório de validação e pipeline precisam concordar; alterações nos bytes são rejeitadas. Use apenas artefatos produzidos por uma fonte controlada: joblib pode executar código ao carregar; checksum verifica integridade, não confiança. Veja [persistência no scikit-learn](https://scikit-learn.org/stable/model_persistence.html).
 
-O predictor aceita entre 1 e 1000 trechos, valida novamente as seis features e exige exatamente um tempo positivo e finito para cada entrada. Campos extras, inclusive o target, são rejeitados. O carregamento pode ser feito uma vez e o objeto reutilizado; essa conexão com o ciclo de vida do FastAPI fica para a próxima feature.
+O predictor aceita entre 1 e 1000 trechos, valida novamente as seis features e exige exatamente um tempo positivo e finito para cada entrada. Campos extras, inclusive o target, são rejeitados. Na API, o carregamento é feito uma vez por processo e o objeto é reutilizado no ciclo de vida do FastAPI.
 
 Execuções independentes do comando de treinamento, com dataset, seed e ambiente iguais, produziram os mesmos bytes do pipeline e previsões. A conferência de bytes usa processos novos; a identidade de bytes não é garantida para processos já utilizados. Relatórios incluem medições de tempo que variam entre execuções; por isso, não se promete identidade de todos os metadados/relatórios, nem de artefatos entre plataformas distintas. Dados e artefatos completos ficam fora do Git, do wheel e da distribuição de fontes.
 
@@ -112,6 +112,6 @@ uv build --project .\services\route-intelligence-service
 
 Na primeira execução nesta máquina, o Controle de Aplicativos bloqueou módulos nativos do scikit-learn (`_cyutility` e `_datasets_pair`) ao importar ML. Executar por `python -m` evita os launchers de console, mas não resolve um bloqueio de DLLs. A validação inicial e o treinamento foram feitos em container Linux temporário, usando o mesmo lock e Python de referência.
 
-A verificação posterior confirmou importações, testes completos, treinamento, avaliação e predictor no Windows. Para execução nativa, use `artifacts/segment-model-v1-windows`; o bundle original em `artifacts/segment-model-v1` permanece identificado como Linux. O carregador continua recusando um bundle de plataforma ou dependências incompatíveis. FastAPI `/health`, grafo e gerador continuam independentes do carregamento dos modelos. Dockerfile e Compose da aplicação ainda pertencem a uma etapa própria.
+A verificação posterior confirmou importações, testes completos, treinamento, avaliação e predictor no Windows. Para execução nativa, use `artifacts/segment-model-v1-windows`; o bundle original em `artifacts/segment-model-v1` permanece identificado como Linux. O carregador continua recusando um bundle de plataforma ou dependências incompatíveis. Grafo e gerador continuam independentes do carregamento dos modelos. FastAPI continua respondendo `/health` mesmo se o modelo falhar, agora com `503 DOWN`. Dockerfile e Compose da aplicação ainda pertencem a uma etapa própria.
 
-A próxima feature conectará o predictor ao Dijkstra em `POST /api/routes/fastest`, carregará o bundle uma vez por processo e acrescentará prontidão de grafo/modelo. Integração com Delivery e interface web vêm depois.
+A [API de rotas](intelligent-routing-api.md) já conecta o predictor ao Dijkstra em `POST /api/routes/fastest`, carrega o bundle uma vez por processo e verifica prontidão de grafo/modelo/tráfego. Integração com Delivery e interface web vêm depois.

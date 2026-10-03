@@ -1,8 +1,8 @@
 # Contrato de rotas
 
-Contrato previsto para a integração entre Delivery e Route Intelligence. A consulta HTTP de rotas ainda não existe; `/health` já verifica a disponibilidade da aplicação. O [roteamento com custos de referência](road-graph.md) está disponível por terminal. A divisão de responsabilidades está na [arquitetura](route-intelligence.md).
+Contrato implementado no serviço Python. A integração Java ainda será implementada. `/health` verifica a prontidão dos recursos de roteamento. Veja a [execução da API](intelligent-routing-api.md), o [roteamento de referência](road-graph.md) e a [arquitetura](route-intelligence.md).
 
-## Porta Java
+## Porta Java planejada
 
 A aplicação Java acessará o cálculo de rotas pela interface `application/RouteOptimizer`:
 
@@ -12,7 +12,7 @@ OptimizedRoute optimizeRoute(GeoPoint origin, GeoPoint destination, RouteContext
 
 `RouteContext` leva a partida planejada. `OptimizedRoute` devolve o caminho, os custos e as versões usadas. Esses tipos pertencem à aplicação Java e não dependem de HTTP, JPA ou bibliotecas Python. A interface distingue três falhas: entrada não suportada, ausência de caminho e serviço indisponível.
 
-`infrastructure/FastApiRouteOptimizerClient` implementa a interface e converte os tipos Java para os DTOs HTTP. A URL é configurável: `http://localhost:8000` na máquina e `http://route-intelligence-service:8000` na rede Docker.
+`infrastructure/FastApiRouteOptimizerClient` implementará a interface e converterá os tipos Java para os DTOs HTTP. A URL será configurável: `http://localhost:8000` na máquina e `http://route-intelligence-service:8000` na rede Docker.
 
 Antes de salvar o plano, o cliente confere os campos obrigatórios, a ordem dos trechos, os custos e os totais. Uma resposta inválida é tratada como falha de integração.
 
@@ -30,16 +30,16 @@ O corpo usa `application/json` e aceita apenas os campos abaixo. Tráfego, pesos
 
 Regras da entrada:
 
-- Latitude e longitude serão números finitos nos limites geográficos válidos.
-- `departure_at` será um instante RFC 3339 com offset obrigatório; data sem fuso será inválida.
-- Horário e dia da semana serão derivados no fuso do grafo, inicialmente `America/Sao_Paulo`, com segunda-feira igual a zero. Não haverá campos independentes `hour` e `day_of_week` na requisição.
-- A primeira versão associará cada ponto ao nó mais próximo dentro de uma tolerância de 1 metro, apenas para acomodar precisão numérica. Empates serão resolvidos por identificador de nó. A resposta usará as coordenadas dos nós.
-- Pontos fora dessa tolerância serão rejeitados como fora da cobertura. Não haverá geocodificação, conexão automática com ruas ou cálculo de acesso entre um endereço arbitrário e o grafo. A distância retornada corresponderá somente às arestas do cenário.
-- O contexto de tráfego será obtido pelo serviço a partir do cenário sintético configurado, por trecho. Partidas futuras não representarão uma previsão real de trânsito: a demonstração usará as hipóteses documentadas do gerador.
+- Latitude e longitude são números finitos nos limites geográficos válidos.
+- `departure_at` é um instante RFC 3339 com offset obrigatório; data sem fuso é inválida.
+- Horário e dia da semana são derivados no fuso do grafo, inicialmente `America/Sao_Paulo`, com segunda-feira igual a zero. Não há campos independentes `hour` e `day_of_week` na requisição.
+- A primeira versão associa cada ponto ao nó mais próximo dentro de uma tolerância de 1 metro, apenas para acomodar precisão numérica. Empates são resolvidos por identificador de nó. A resposta usa as coordenadas dos nós.
+- Pontos fora dessa tolerância são rejeitados como fora da cobertura. Não há geocodificação, conexão automática com ruas ou cálculo de acesso entre um endereço arbitrário e o grafo. A distância retornada corresponde somente às arestas do cenário.
+- O contexto de tráfego é obtido de um JSON sintético configurado por trecho e carregado no startup. Datas passadas ou futuras são aceitas, mas não representam trânsito real. O gerador offline não é executado na API.
 
 ### Resposta de sucesso: 200
 
-Exemplo com dados sintéticos:
+Exemplo obtido com o bundle Windows e o cenário padrão. Os timestamps variam a cada execução:
 
 ```json
 {
@@ -52,19 +52,19 @@ Exemplo com dados sintéticos:
     {
       "segment_id": "A-B",
       "distance_km": 0.9,
-      "predicted_travel_time_minutes": 3.2
+      "predicted_travel_time_minutes": 4.936828730402905
     },
     {
       "segment_id": "B-C",
       "distance_km": 2.0,
-      "predicted_travel_time_minutes": 4.5
+      "predicted_travel_time_minutes": 11.131625751806984
     }
   ],
   "distance_km": 2.9,
-  "predicted_travel_time_minutes": 7.7,
-  "predicted_at": "2026-09-29T22:00:00Z",
-  "context_as_of": "2026-09-29T21:59:00Z",
-  "model_version": "synthetic-segment-v1",
+  "predicted_travel_time_minutes": 16.068454482209887,
+  "predicted_at": "2026-10-03T02:18:50.234998Z",
+  "context_as_of": "2026-10-03T02:18:50.071349Z",
+  "model_version": "segment-model-v1-47ad884548f0f255",
   "graph_version": "synthetic-city-v1",
   "data_origin": "synthetic"
 }
@@ -72,15 +72,15 @@ Exemplo com dados sintéticos:
 
 Os trechos seguem a ordem do percurso. Uma rota com N trechos tem N+1 coordenadas, e os totais são a soma dos valores por trecho. Os testes devem usar uma tolerância numérica para essas somas, por causa da representação de ponto flutuante.
 
-Cada trecho terá distância e tempo estritamente positivos. Origem e destino associados ao mesmo nó retornarão uma única coordenada, lista de trechos vazia e totais zero. Na primeira versão, empates de custo terão desempate estável por identificadores, sem depender da ordem de carregamento do JSON.
+Cada trecho tem distância e tempo estritamente positivos. Origem e destino associados ao mesmo nó retornam uma única coordenada, lista de trechos vazia e totais zero. Na primeira versão, empates de custo têm desempate estável por identificadores, sem depender da ordem de carregamento do JSON.
 
 `model_version` e `graph_version` identificam versões imutáveis. Modelo, schema de features e grafo precisam permanecer compatíveis durante a requisição. O campo `segments` permite registrar o plano e associar as travessias observadas aos trechos. Hiperparâmetros, arquivos internos e dados de treinamento ficam fora da resposta.
 
-`context_as_of` indica o instante do snapshot usado na previsão e deve ser menor ou igual a `predicted_at`. O serviço guarda também a fonte e os horários de cada observação de tráfego. Medições recebidas depois da previsão não podem entrar nesse snapshot.
+`context_as_of` indica o instante do snapshot usado na previsão e deve ser menor ou igual a `predicted_at`. Na demonstração, `observed_at` e `available_at` do snapshot são o instante do carregamento do cenário, cuja fonte fica no runtime; não são medições reais. Um contexto disponível depois do instante da requisição é rejeitado.
 
 ### Respostas de erro
 
-Erros usarão `application/problem+json`, com campos `type`, `title`, `status`, `detail` e `code`. Exemplo:
+Erros usam `application/problem+json`, com campos `type`, `title`, `status`, `detail` e `code`. Exemplo:
 
 ```json
 {
@@ -99,6 +99,7 @@ Erros usarão `application/problem+json`, com campos `type`, `title`, `status`, 
 | Nós válidos, mas nenhum caminho dirigido | 404 | `ROUTE_NOT_FOUND` | Ausência de rota, distinta de entrega inexistente |
 | Modelo ausente, ilegível ou incompatível | 503 | `MODEL_UNAVAILABLE` | Indisponibilidade controlada |
 | Grafo ausente ou inválido | 503 | `GRAPH_UNAVAILABLE` | Indisponibilidade controlada |
+| Tráfego ausente, inválido ou disponível depois da previsão | 503 | `TRAFFIC_UNAVAILABLE` | Indisponibilidade controlada |
 | Previsão não finita ou não positiva | 503 | `INVALID_PREDICTION` | Indisponibilidade controlada; não corrigir silenciosamente o custo |
 | Falha inesperada | 500 | `INTERNAL_ERROR` | Falha de integração, sem repassar detalhes internos |
 
@@ -106,9 +107,9 @@ Falha de conexão, timeout e resposta inválida também viram indisponibilidade 
 
 ## GET /health
 
-Na primeira etapa, verifica apenas se a aplicação está funcionando. Quando a inferência estiver implementada, retorna `200` com `{"status":"UP"}` se modelo, schema de features e grafo estiverem carregados e compatíveis. Caso contrário, retorna `503` com `{"status":"DOWN"}`. A API deve continuar respondendo ao health mesmo sem o modelo; ela não executa treinamento para se recuperar.
+Retorna `200` com `{"status":"UP"}` se grafo, modelo, schema e tráfego estiverem carregados e compatíveis e o teste inicial de inferência produzir custos válidos. Caso contrário, retorna `503` com `{"status":"DOWN"}`. A API continua respondendo sem modelo; não executa treinamento para se recuperar. Os recursos são carregados uma vez por processo, sem recarga automática.
 
-## Resiliência e consistência
+## Resiliência e consistência planejadas no Java
 
 Vamos começar com timeout de conexão de 1 segundo e de resposta de 3 segundos, configuráveis e ajustados após medir a API com inferência. Não haverá retentativa automática nessa versão. O grafo está limitado a 200 nós, 1000 trechos e arquivo de 1 MiB; o [guia de roteamento](road-graph.md) registra os testes de desempenho sem ML ou HTTP.
 

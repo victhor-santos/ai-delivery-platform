@@ -16,6 +16,7 @@ from app.ml.features import (
     SegmentFeatures,
 )
 from app.routing.graph import RoadGraph
+from app.routing.provenance import graph_checksum
 from training.schema import (
     GENERATOR_VERSION,
     SAMPLE_COLUMNS,
@@ -34,13 +35,6 @@ from training.synthetic import (
     GeneratorConfig,
     generate_samples,
 )
-
-
-def graph_checksum(graph: RoadGraph) -> str:
-    data = graph.model_dump(mode="json")
-    data["nodes"] = sorted(data["nodes"], key=lambda node: node["node_id"])
-    data["segments"] = sorted(data["segments"], key=lambda segment: segment["segment_id"])
-    return hashlib.sha256(json_bytes(data)).hexdigest()
 
 
 def _write_csv(path: Path, samples: Sequence[SegmentSample]) -> dict[str, object]:

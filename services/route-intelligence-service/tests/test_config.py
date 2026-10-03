@@ -6,7 +6,7 @@ from app.config import Settings
 
 @pytest.fixture(autouse=True)
 def clear_service_environment(monkeypatch):
-    for name in ("HOST", "PORT", "LOG_LEVEL"):
+    for name in ("HOST", "PORT", "LOG_LEVEL", "MODEL_PATH", "GRAPH_PATH", "TRAFFIC_PATH"):
         monkeypatch.delenv(f"ROUTE_INTELLIGENCE_{name}", raising=False)
 
 
@@ -16,6 +16,7 @@ def test_defaults_bind_to_localhost():
     assert settings.host == "127.0.0.1"
     assert settings.port == 8000
     assert settings.log_level == "info"
+    assert settings.model_path is settings.graph_path is settings.traffic_path is None
 
 
 def test_environment_overrides_defaults(monkeypatch):

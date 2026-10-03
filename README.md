@@ -14,20 +14,20 @@ O Delivery Service cria e consulta entregas e entregadores por HTTP, com persist
 
 Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. Usuários e pagamentos ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
 
-Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A consulta de rotas por HTTP e as chamadas do Delivery ainda serão implementadas. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
+Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A [API de rotas previstas](docs/intelligent-routing-api.md) combina o modelo em lote com Dijkstra. As chamadas do Delivery ainda serão implementadas. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
 O gerador offline já produz observações sintéticas por trecho, com seed, timestamps de disponibilidade, schema de features, partições temporais por cenário e manifesto com checksums. Os dados completos são gerados localmente e ficam fora do Git. Veja [como gerar e conferir o dataset](docs/route-segment-dataset.md).
 
-O treinamento offline compara Dummy, regressão linear, Random Forest e referência física, seleciona pela validação e avalia o modelo salvo no teste reservado. O predictor em lote valida entradas e tempos; ainda não está conectado à API. Veja [treinamento, resultados e artefatos](docs/route-segment-model.md), incluindo a validação nativa no Windows e a compatibilidade por plataforma.
+O treinamento offline compara Dummy, regressão linear, Random Forest e referência física, seleciona pela validação e avalia o modelo salvo no teste reservado. O predictor em lote valida entradas e tempos e é carregado uma vez por processo na API. Veja [treinamento, resultados e artefatos](docs/route-segment-model.md), incluindo a validação nativa no Windows e a compatibilidade por plataforma.
 
 ## Evolução para AI Engineering
 
-O próximo passo é conectar o predictor ao Dijkstra e expor a consulta de rota mais rápida por HTTP, com prontidão do modelo e falhas controladas. Java continuará cuidando das transações. A avaliação offline já compara os caminhos previstos com os melhores caminhos pelos tempos observados no teste sintético.
+A consulta `POST /api/routes/fastest` retorna o caminho de menor tempo previsto, com prontidão dos recursos e falhas controladas. O próximo passo é integrar e persistir o plano no Delivery. Java continuará cuidando das transações. A avaliação offline já compara os caminhos previstos com os melhores caminhos pelos tempos observados no teste sintético.
 
 A integração de rotas com Delivery ainda está planejada. Grafo e observações são fictícios e não representam ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
 
 - [Arquitetura de Route Intelligence e domínio de Delivery](docs/route-intelligence.md).
-- [Contrato futuro Java ↔ Python](docs/route-intelligence-contract.md).
+- [Contrato HTTP e integração futura Java ↔ Python](docs/route-intelligence-contract.md).
 - [Dados, prevenção de leakage e avaliação dos modelos](docs/route-intelligence-data.md).
 - [Roadmap por feature branch](docs/roadmap.md).
 
@@ -71,9 +71,9 @@ Cada aplicação Java possui `pom.xml`, Maven Wrapper, código e testes próprio
 | Order Service | 8083 | `/api/orders/ping` |
 | Payment Service | 8084 | `/api/payments/ping` |
 | Delivery Service | 8085 | `/api/deliveries/ping` |
-| Route Intelligence | 8000 | `/health`, acesso direto |
+| Route Intelligence | 8000 | `/health` e `POST /api/routes/fastest`, acesso direto |
 
-Todas as aplicações Java expõem `/actuator/health` e `/actuator/info` em sua própria porta. O endpoint `info` pode retornar `{}`. O health do Gateway informa a saúde dele, não a de todos os serviços. Os endpoints de saúde de catálogo, pedidos e entregas incluem a conexão com seus bancos. O `/health` do Python verifica apenas a disponibilidade da aplicação nesta etapa e não é encaminhado pelo Gateway.
+Todas as aplicações Java expõem `/actuator/health` e `/actuator/info` em sua própria porta. O endpoint `info` pode retornar `{}`. O health do Gateway informa a saúde dele, não a de todos os serviços. Os endpoints de saúde de catálogo, pedidos e entregas incluem a conexão com seus bancos. O `/health` do Python retorna `200 UP` somente com grafo, modelo e tráfego compatíveis; sem esses recursos retorna `503 DOWN`. Python não é encaminhado pelo Gateway.
 
 ## PostgreSQL e configuração local
 
