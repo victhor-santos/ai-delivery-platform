@@ -5,8 +5,11 @@ description = "Travel time prediction and routing service for Delivery Order Sys
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115,<1",
+    "joblib>=1.5,<2",
+    "numpy>=2,<3",
     "pydantic>=2,<3",
     "pydantic-settings>=2,<3",
+    "scikit-learn>=1.7,<2",
     "tzdata>=2025.2,<2027",
     "uvicorn>=0.30,<1",
 ]
