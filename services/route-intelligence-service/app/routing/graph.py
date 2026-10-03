@@ -20,6 +20,8 @@ Identifier = Annotated[
 ]
 PositiveNumber = Annotated[float, Field(strict=True, gt=0, allow_inf_nan=False)]
 RoadType = Literal["residential", "primary", "highway"]
+Latitude = Annotated[float, Field(strict=True, ge=-90, le=90, allow_inf_nan=False)]
+Longitude = Annotated[float, Field(strict=True, ge=-180, le=180, allow_inf_nan=False)]
 
 
 class GraphModel(BaseModel):
@@ -28,8 +30,8 @@ class GraphModel(BaseModel):
 
 class GraphNode(GraphModel):
     node_id: Identifier
-    lat: Annotated[float, Field(strict=True, ge=-90, le=90, allow_inf_nan=False)]
-    lon: Annotated[float, Field(strict=True, ge=-180, le=180, allow_inf_nan=False)]
+    lat: Latitude
+    lon: Longitude
 
 
 class RoadSegment(GraphModel):
