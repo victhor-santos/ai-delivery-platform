@@ -1,6 +1,6 @@
 # Delivery Order System
 
-Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projeto de portfólio em AI Engineering. O repositório reúne um API Gateway, cinco serviços Java e a base de um serviço Python de roteamento.
+Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projeto de portfólio em AI Engineering. O repositório reúne um API Gateway, cinco serviços Java e um serviço Python de roteamento.
 
 ## Estado atual
 
@@ -22,7 +22,7 @@ O treinamento offline compara Dummy, regressão linear, Random Forest e referên
 
 ## Evolução para AI Engineering
 
-A consulta `POST /api/routes/fastest` retorna o caminho de menor tempo previsto, com prontidão dos recursos e falhas controladas. Delivery já integra e persiste o plano. O próximo passo é preparar as imagens e a execução em rede pelo Compose. Java continuará cuidando das transações. A avaliação offline já compara os caminhos previstos com os melhores caminhos pelos tempos observados no teste sintético.
+A consulta `POST /api/routes/fastest` retorna o caminho de menor tempo previsto, com prontidão dos recursos e falhas controladas. Delivery integra e persiste o plano. O perfil `demo` do Compose executa o fluxo completo em containers, com modelo Linux montado somente para leitura e treinamento offline. Java continua cuidando das transações. O próximo passo é registrar observações por trecho para associar previsões aos tempos observados.
 
 A [integração de rotas com Delivery](docs/delivery-route-integration.md) está implementada. Grafo e observações são fictícios e não representam ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
 
@@ -31,7 +31,22 @@ A [integração de rotas com Delivery](docs/delivery-route-integration.md) está
 - [Dados, prevenção de leakage e avaliação dos modelos](docs/route-intelligence-data.md).
 - [Roadmap por feature branch](docs/roadmap.md).
 
-## Requisitos
+## Demonstração em containers
+
+Com Docker usando containers Linux, execute na raiz:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-route-model.ps1
+docker compose --profile demo up -d --build --wait --wait-timeout 240
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
+```
+
+Gateway atende em `http://localhost:8080`; Python em `http://localhost:8000`. As portas Java 8081–8085 são internas neste perfil. Sem `demo`, o Compose continua iniciando somente bancos. Não é necessário instalar Java ou Python na máquina para esta demonstração. O script verifica um modelo existente e só treina se não houver bundle; a API nunca treina ao iniciar.
+
+Veja o [guia do Compose](docs/route-intelligence-compose.md) para configuração, compatibilidade do modelo, testes de queda/recuperação e preservação dos volumes. O smoke cria registros de demonstração no banco. Os comandos de execução nativa abaixo continuam disponíveis.
+
+## Requisitos para desenvolvimento e execução nativa
 
 - JDK 21, com `JAVA_HOME` configurado e `java` disponível no terminal.
 - PowerShell para os exemplos abaixo.
@@ -54,7 +69,9 @@ deliveryOrderSystem/
 │   ├── delivery-service/
 │   └── route-intelligence-service/
 ├── compose.yaml
+├── Dockerfile.java
 ├── .env.example
+├── scripts/
 └── docs/
     └── architecture.md
 ```
@@ -73,7 +90,7 @@ Cada aplicação Java possui `pom.xml`, Maven Wrapper, código e testes próprio
 | Delivery Service | 8085 | `/api/deliveries/ping` |
 | Route Intelligence | 8000 | `/health` e `POST /api/routes/fastest`, acesso direto |
 
-Todas as aplicações Java expõem `/actuator/health` e `/actuator/info` em sua própria porta. O endpoint `info` pode retornar `{}`. O health do Gateway informa a saúde dele, não a de todos os serviços. Os endpoints de saúde de catálogo, pedidos e entregas incluem a conexão com seus bancos. O `/health` do Python retorna `200 UP` somente com grafo, modelo e tráfego compatíveis; sem esses recursos retorna `503 DOWN`. Python não é encaminhado pelo Gateway.
+As portas da tabela são as portas de execução nativa e as portas internas dos containers. Todas as aplicações Java expõem `/actuator/health` e `/actuator/info` em sua própria porta. O endpoint `info` pode retornar `{}`. O health do Gateway informa a saúde dele, não a de todos os serviços. Os endpoints de saúde de catálogo, pedidos e entregas incluem a conexão com seus bancos. O `/health` do Python retorna `200 UP` somente com grafo, modelo e tráfego compatíveis; sem esses recursos retorna `503 DOWN`. Python não é encaminhado pelo Gateway.
 
 ## PostgreSQL e configuração local
 
