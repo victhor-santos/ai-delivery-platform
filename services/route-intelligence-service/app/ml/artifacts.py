@@ -109,8 +109,21 @@ def load_model(directory: Path) -> tuple[Pipeline, ModelMetadata]:
                 "Artifact must contain a fitted pipeline with the expected feature count."
             )
         validation = json.loads(report)
-        if validation["selection"]["selected"] != metadata.selected_candidate:
-            raise ValueError("Selected candidate differs from the validation report.")
+        selection = validation["selection"]
+        candidate = validation["candidates"][metadata.selected_candidate]
+        estimator = model.named_steps["regressor"]
+        if (
+            selection["selected"] != metadata.selected_candidate
+            or selection["partition"] != metadata.selection_partition
+            or selection["refit_on_validation"] is not False
+            or selection["test_used_for_selection"] is not False
+            or validation["dataset_id"] != metadata.dataset_id
+            or validation["dataset_manifest_sha256"] != metadata.dataset_manifest_sha256
+            or validation["seed"] != metadata.seed
+            or candidate["estimator"] != type(estimator).__name__
+            or candidate["parameters"] != estimator.get_params(deep=False)
+        ):
+            raise ValueError("Model provenance differs from the validation report.")
         return model, metadata
     except (
         OSError,

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 from unittest.mock import patch
@@ -70,6 +71,21 @@ def test_corrupt_artifact_is_rejected_before_deserialization(model_bundle, tmp_p
         with pytest.raises(ValueError, match="checksum"):
             load_model(output)
         deserialize.assert_not_called()
+
+
+def test_report_from_another_dataset_is_rejected_even_after_checksum_update(model_bundle, tmp_path):
+    artifact, _ = model_bundle
+    output = tmp_path / "mixed"
+    shutil.copytree(artifact, output)
+    report = json.loads((output / "validation-report.json").read_bytes())
+    report["dataset_id"] = "a" * 64
+    content = json_bytes(report)
+    (output / "validation-report.json").write_bytes(content)
+    metadata = json.loads((output / "metadata.json").read_bytes())
+    metadata["validation_report_sha256"] = hashlib.sha256(content).hexdigest()
+    (output / "metadata.json").write_bytes(json_bytes(metadata))
+    with pytest.raises(ValueError, match="provenance"):
+        load_model(output)
 
 
 def test_missing_artifact_and_existing_output_have_controlled_errors(model_bundle, tmp_path):
