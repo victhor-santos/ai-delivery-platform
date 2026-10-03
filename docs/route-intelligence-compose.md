@@ -42,6 +42,8 @@ O carregador exige plataforma, arquitetura, Python e bibliotecas iguais aos meta
 
 O build Java compila e empacota com `-DskipTests`. Ele não tenta iniciar Testcontainers durante a construção da imagem. Execute os testes separadamente, conforme o README. Treinamento não acontece durante o build, startup ou chamadas HTTP.
 
+No build Python, as dependências usam cache, mas o wheel do próprio projeto é instalado com `--no-cache` após copiar `app` e `training`. Isso impede que uma alteração de código com a mesma versão no `pyproject.toml` reutilize um pacote antigo.
+
 Gateway recebe `USER_SERVICE_URL`, `CATALOG_SERVICE_URL`, `ORDER_SERVICE_URL`, `PAYMENT_SERVICE_URL` e `DELIVERY_SERVICE_URL`. Os padrões continuam `localhost` para execução nativa; no Compose são hostnames dos containers. Order consulta `catalog-service` e `delivery-service`; Delivery consulta `route-intelligence-service`. As URLs JDBC apontam para o banco próprio na porta interna 5432, independentemente das portas publicadas na máquina.
 
 O perfil publica somente Gateway, Python e bancos em `127.0.0.1`. As portas 8081–8085 das aplicações Java são internas à rede Docker. Gateway atende em `API_GATEWAY_PORT` (8080 por padrão); Python em `ROUTE_INTELLIGENCE_PORT` (8000). As variáveis de portas dos bancos continuam as mesmas do README. O Compose fornece as URLs internas explicitamente, sem reutilizar URLs `localhost` do `.env`.
@@ -58,7 +60,7 @@ Com todos os serviços saudáveis:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 ```
 
-O script cria um restaurante, confirma um pedido, solicita entrega duas vezes e verifica a idempotência. Planeja a rota e compara a consulta persistida com a resposta original, incluindo a identificação dos dados sintéticos. Ele usa apenas HTTP pelo Gateway e deixa os registros de demonstração no banco. Cada execução cria novos registros identificados pelo nome `Compose Demo`.
+O script cria um restaurante, confirma um pedido, solicita entrega duas vezes e verifica a idempotência. Planeja a rota e compara a consulta persistida com a resposta original, incluindo a identificação dos dados sintéticos. Depois atribui entregador, registra partida, entrada/saída em cada trecho e conclusão da entrega, conferindo snapshots, idempotência e exportação CSV. As travessias são explicitamente simuladas; seus tempos curtos não representam medições reais. Ele usa apenas HTTP pelo Gateway e deixa os registros de demonstração no banco. Cada execução cria novos registros identificados pelo nome `Compose Demo`.
 
 Para verificar indisponibilidade e persistência:
 
@@ -67,7 +69,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
     -CheckRecovery -CheckPersistence
 ```
 
-`-CheckRecovery` interrompe Python, espera `503 ROUTE_SERVICE_UNAVAILABLE` e confirma que entrega e plano anterior não mudaram. Restaura Python em `finally`, aguarda sua prontidão e verifica um novo planejamento. `-CheckPersistence` recria os containers com `--force-recreate`, reutilizando os volumes; depois consulta restaurante, pedido, entrega e plano e repete a solicitação idempotente. Essas opções interrompem temporariamente os serviços da demonstração; use-as quando não houver outras operações em andamento.
+`-CheckRecovery` interrompe Python antes da partida, espera `503 ROUTE_SERVICE_UNAVAILABLE` e confirma que entrega e plano anterior não mudaram. Restaura Python em `finally`, aguarda sua prontidão e verifica um novo planejamento. `-CheckPersistence` recria os containers com `--force-recreate`, reutilizando os volumes; depois consulta restaurante, pedido, entrega, plano, observações e CSV, e repete a solicitação idempotente. Essas opções interrompem temporariamente os serviços da demonstração; use-as quando não houver outras operações em andamento.
 
 Se alterar a porta do Gateway, informe `-GatewayUrl http://localhost:NOVA_PORTA`. Para um projeto Compose isolado, informe também `-ComposeProject` e `-EnvFile` com os mesmos valores usados ao iniciar o ambiente. Antes de criar dados ou interromper serviços, as verificações de recuperação/persistência exigem um Gateway local cuja porta corresponda à publicada pelo projeto selecionado. Só mudar o endereço HTTP não muda o projeto que os testes de recuperação operam.
 
@@ -99,6 +101,6 @@ Os containers e a rede do projeto isolado foram encerrados ao final, preservando
 
 O Gateway ainda registra `HV000271` para anotações de validação em classes do Spring Cloud. A JVM registra o aviso de compartilhamento de classes quando o agente de testes está ativo. São avisos de dependências/instrumentação; não foram ocultados nem houve atualização de frameworks nesta etapa.
 
-A próxima etapa do roadmap é [registrar observações por trecho](roadmap.md), associando previsão e travessia observada. Interface web continua em uma etapa posterior.
+O smoke também cobre as [observações por trecho](delivery-segment-observations.md), que associam previsão e travessia simulada. Interface web continua em uma etapa posterior.
 
 Referências: [profiles do Compose](https://docs.docker.com/compose/how-tos/profiles/), [ordem e saúde das dependências](https://docs.docker.com/compose/how-tos/startup-order/), [montagens do Compose](https://docs.docker.com/reference/compose-file/services/) e [instalação com uv em Docker](https://docs.astral.sh/uv/guides/integration/docker/).

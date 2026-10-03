@@ -98,7 +98,15 @@ public class JpaDeliveryRepository implements DeliveryRepository {
     @Override
     @Transactional
     public Optional<Delivery> arrive(UUID id, Instant now) {
-        return update(id, delivery -> delivery.arrive(now));
+        return update(id, delivery -> {
+            Timestamp latestTraversal = jdbc.queryForObject("""
+                    SELECT max(COALESCE(exited_at, entered_at)) FROM delivery_segment_observations WHERE delivery_id = ?
+                    """, Timestamp.class, id);
+            if (latestTraversal != null && latestTraversal.toInstant().isAfter(now)) {
+                throw new DeliveryStateConflictException("Arrival cannot precede an observed traversal");
+            }
+            delivery.arrive(now);
+        });
     }
 
     @Override

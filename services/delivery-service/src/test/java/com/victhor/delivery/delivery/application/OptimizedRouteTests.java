@@ -83,4 +83,23 @@ class OptimizedRouteTests {
         return new OptimizedRoute(points, segments, distance, time, NOW, context, "segment-model-v1-0123456789abcdef",
                 "synthetic-city-v1", "synthetic");
     }
+
+    @Test
+    void requiresAllSnapshotsToDescribeAConnectedPathAvailableAtPredictionTime() {
+        var points = List.of(ORIGIN, new GeoPoint(-23.554, -46.64), DESTINATION);
+        var first = snapshotSegment("A", "B", NOW);
+        var second = snapshotSegment("B", "C", NOW);
+        assertThat(route(points, List.of(first, second), 2, 4, NOW).segments()).hasSize(2);
+        assertThatThrownBy(() -> route(points, List.of(first, new RouteSegment("B-C", 1, 2)), 2, 4, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> route(points, List.of(first, snapshotSegment("C", "D", NOW)), 2, 4, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> route(points, List.of(first, snapshotSegment("B", "C", NOW.plusSeconds(1))), 2, 4, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private RouteSegment snapshotSegment(String from, String to, Instant availableAt) {
+        return new RouteSegment(from + "-" + to, 1, 2, new SegmentPredictionContext("segment-features-v1", from, to,
+                "primary", 30, "low", 9, 5, "America/Sao_Paulo", "synthetic-traffic-v1", NOW, NOW, availableAt));
+    }
 }

@@ -8,7 +8,8 @@ COPY services/route-intelligence-service/pyproject.toml services/route-intellige
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --no-install-project
 COPY services/route-intelligence-service/app ./app
 COPY services/route-intelligence-service/training ./training
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --no-editable
+# Build the local wheel from the copied sources, even when its version is unchanged.
+RUN uv sync --locked --no-dev --no-editable --no-cache
 
 FROM python:3.12.14-slim AS runtime
 ENV PATH="/opt/venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \

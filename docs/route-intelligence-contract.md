@@ -52,12 +52,32 @@ Exemplo obtido com o bundle Windows e o cenário padrão. Os timestamps variam a
     {
       "segment_id": "A-B",
       "distance_km": 0.9,
-      "predicted_travel_time_minutes": 4.936828730402905
+      "predicted_travel_time_minutes": 4.936828730402905,
+      "prediction_context": {
+        "feature_schema_version": "segment-features-v1",
+        "distance_km": 0.9, "road_type": "residential", "reference_speed_kmh": 15,
+        "traffic_level": "low", "hour": 19, "day_of_week": 1,
+        "from_node": "A", "to_node": "B", "timezone": "America/Sao_Paulo",
+        "traffic_source": "synthetic-traffic-v1",
+        "traffic_observed_at": "2026-10-03T02:18:50.071349Z",
+        "traffic_available_at": "2026-10-03T02:18:50.071349Z",
+        "features_available_at": "2026-10-03T02:18:50.071349Z"
+      }
     },
     {
       "segment_id": "B-C",
       "distance_km": 2.0,
-      "predicted_travel_time_minutes": 11.131625751806984
+      "predicted_travel_time_minutes": 11.131625751806984,
+      "prediction_context": {
+        "feature_schema_version": "segment-features-v1",
+        "distance_km": 2.0, "road_type": "residential", "reference_speed_kmh": 15,
+        "traffic_level": "low", "hour": 19, "day_of_week": 1,
+        "from_node": "B", "to_node": "C", "timezone": "America/Sao_Paulo",
+        "traffic_source": "synthetic-traffic-v1",
+        "traffic_observed_at": "2026-10-03T02:18:50.071349Z",
+        "traffic_available_at": "2026-10-03T02:18:50.071349Z",
+        "features_available_at": "2026-10-03T02:18:50.071349Z"
+      }
     }
   ],
   "distance_km": 2.9,
@@ -71,6 +91,8 @@ Exemplo obtido com o bundle Windows e o cenário padrão. Os timestamps variam a
 ```
 
 Os trechos seguem a ordem do percurso. Uma rota com N trechos tem N+1 coordenadas, e os totais são a soma dos valores por trecho. Os testes devem usar uma tolerância numérica para essas somas, por causa da representação de ponto flutuante.
+
+`prediction_context` preserva as seis features usadas pelo predictor e sua proveniência. Java valida schema, direção entre trechos, distância, horário da partida planejada e ordem de disponibilidade. Respostas antigas sem snapshots continuam aceitas para planejamento e consulta, mas não podem gerar [observações de travessia](delivery-segment-observations.md). Misturar trechos com e sem snapshot no mesmo plano é rejeitado.
 
 Cada trecho tem distância e tempo estritamente positivos. Origem e destino associados ao mesmo nó retornam uma única coordenada, lista de trechos vazia e totais zero. Na primeira versão, empates de custo têm desempate estável por identificadores, sem depender da ordem de carregamento do JSON.
 
@@ -119,7 +141,7 @@ O caso de uso lê a entrega, encerra a leitura, chama Python e salva a resposta 
 
 ## Testes
 
-Python e Java possuem as suítes abaixo; execução integrada em containers pertence à próxima etapa.
+Python e Java possuem as suítes abaixo; a execução integrada em containers está disponível no [guia do Compose](route-intelligence-compose.md).
 
 - FastAPI: entrada válida, inválida, fora da cobertura, ausência de caminho e modelo indisponível, com status e schemas acima.
 - Predictor: mesma transformação no treinamento e inferência, artefato incompatível e previsões inválidas.

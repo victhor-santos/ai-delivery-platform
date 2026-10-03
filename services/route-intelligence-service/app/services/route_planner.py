@@ -11,7 +11,12 @@ from app.routing.dijkstra import InvalidRouteCostsError, find_fastest_route
 from app.routing.graph import RoadGraph
 from app.routing.provenance import graph_checksum
 from app.routing.traffic import SyntheticTrafficSnapshot
-from app.schemas.routes import RouteRequest, RouteResponse, SegmentResponse
+from app.schemas.routes import (
+    RouteRequest,
+    RouteResponse,
+    SegmentPredictionContext,
+    SegmentResponse,
+)
 
 if TYPE_CHECKING:
     from app.ml.predictor import SegmentTravelTimePredictor
@@ -100,8 +105,22 @@ class RoutePlanner:
                     segment_id=segment.segment_id,
                     distance_km=segment.distance_km,
                     predicted_travel_time_minutes=segment.travel_time_minutes,
+                    prediction_context=SegmentPredictionContext(
+                        **features_for_segment(
+                            self.graph.segments_by_id[segment.segment_id],
+                            self.traffic.levels[segment.segment_id],
+                            request.departure_at,
+                        ).model_dump(),
+                        from_node=route.node_ids[index],
+                        to_node=route.node_ids[index + 1],
+                        timezone=self.graph.timezone,
+                        traffic_source=self.traffic.source,
+                        traffic_observed_at=self.traffic.observed_at,
+                        traffic_available_at=self.traffic.available_at,
+                        features_available_at=self.traffic.available_at,
+                    ),
                 )
-                for segment in route.segments
+                for index, segment in enumerate(route.segments)
             ),
             distance_km=route.distance_km,
             predicted_travel_time_minutes=route.travel_time_minutes,

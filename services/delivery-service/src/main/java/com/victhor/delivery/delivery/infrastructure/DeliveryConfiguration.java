@@ -9,6 +9,8 @@ import com.victhor.delivery.delivery.application.CourierRepository;
 import com.victhor.delivery.delivery.application.CourierService;
 import com.victhor.delivery.delivery.application.DeliveryRepository;
 import com.victhor.delivery.delivery.application.DeliveryService;
+import com.victhor.delivery.delivery.application.SegmentObservationRepository;
+import com.victhor.delivery.delivery.application.SegmentObservationService;
 
 @Configuration(proxyBeanMethods = false)
 class DeliveryConfiguration {
@@ -16,6 +18,11 @@ class DeliveryConfiguration {
     @Bean
     Clock clock() {
         return Clock.systemUTC();
+    }
+
+    @Bean
+    SegmentObservationService segmentObservationService(SegmentObservationRepository observations, Clock clock) {
+        return new SegmentObservationService(observations, clock);
     }
 
     @Bean

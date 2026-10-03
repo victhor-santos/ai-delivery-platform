@@ -132,4 +132,4 @@ Verificado em 2026-10-03, no Windows AMD64 com Java 21.0.12.1, Docker Desktop e 
 
 ## Próxima etapa
 
-A [demonstração com Compose](route-intelligence-compose.md) acrescenta imagens, rede por hostnames, bundle compatível com Linux montado somente para leitura, health checks e verificação de recuperação. O treinamento continua fora do startup. A próxima branch é `feature/delivery-segment-observations`; frontend segue como evolução posterior do [roadmap](roadmap.md).
+A [demonstração com Compose](route-intelligence-compose.md) acrescenta imagens, rede por hostnames, bundle compatível com Linux montado somente para leitura, health checks e verificação de recuperação. O treinamento continua fora do startup. As [observações por trecho](delivery-segment-observations.md) preservam as features do plano e associam previsões a travessias simuladas. Frontend segue como evolução posterior do [roadmap](roadmap.md).

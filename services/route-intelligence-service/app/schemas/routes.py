@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field
 
-from app.ml.features import departure_context
+from app.ml.features import SegmentFeatures, departure_context
 from app.routing.coordinates import GeoPoint
 from app.routing.graph import MAX_NODES, Identifier, PositiveNumber
 
@@ -43,10 +43,22 @@ class RouteRequest(RouteModel):
     ]
 
 
+class SegmentPredictionContext(SegmentFeatures):
+    feature_schema_version: Literal["segment-features-v1"] = "segment-features-v1"
+    from_node: Identifier
+    to_node: Identifier
+    timezone: Literal["America/Sao_Paulo"]
+    traffic_source: Identifier
+    traffic_observed_at: AwareDatetime
+    traffic_available_at: AwareDatetime
+    features_available_at: AwareDatetime
+
+
 class SegmentResponse(RouteModel):
     segment_id: Identifier
     distance_km: PositiveNumber
     predicted_travel_time_minutes: PositiveNumber
+    prediction_context: SegmentPredictionContext
 
 
 class RouteResponse(RouteModel):
