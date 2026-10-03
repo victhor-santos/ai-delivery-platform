@@ -61,9 +61,9 @@ class RestaurantApiIntegrationTests {
 		Response response = post("{\"name\":\"  Cantina Vitória  \"}");
 
 		assertThat(response.status()).isEqualTo(201);
-		UUID id = UUID.fromString(response.body().path("id").asText());
+		UUID id = UUID.fromString(response.body().path("id").asString());
 		assertThat(response.headers().firstValue("Location")).contains(RESTAURANTS + "/" + id);
-		assertThat(response.body().path("name").asText()).isEqualTo("Cantina Vitória");
+		assertThat(response.body().path("name").asString()).isEqualTo("Cantina Vitória");
 		assertThat(response.body().path("active").asBoolean()).isTrue();
 		assertThat(response.body().size()).isEqualTo(4);
 		assertThat(response.body().path("pickupLocation").isNull()).isTrue();
@@ -81,7 +81,7 @@ class RestaurantApiIntegrationTests {
 				""");
 
 		assertThat(created.status()).isEqualTo(201);
-		String id = created.body().path("id").asText();
+		String id = created.body().path("id").asString();
 		assertThat(created.headers().firstValue("Location")).contains(RESTAURANTS + "/" + id);
 		assertThat(created.body().path("pickupLocation").path("latitude").asDouble()).isEqualTo(-23.5505);
 		assertThat(created.body().path("pickupLocation").path("longitude").asDouble()).isEqualTo(-46.6333);
@@ -104,7 +104,7 @@ class RestaurantApiIntegrationTests {
 	void assignsAndReplacesPickupLocationWithoutChangingRestaurantIdentity() throws Exception {
 		Response created = post("{\"name\":\"Cantina\"}");
 		assertThat(created.status()).isEqualTo(201);
-		String id = created.body().path("id").asText();
+		String id = created.body().path("id").asString();
 		jdbc.update("UPDATE restaurants SET active = false WHERE id = ?", UUID.fromString(id));
 		String path = RESTAURANTS + "/" + id + "/pickup-location";
 		assertThat(put(path, "{\"latitude\":-23.5505,\"longitude\":-46.6333}").status()).isEqualTo(200);
@@ -112,8 +112,8 @@ class RestaurantApiIntegrationTests {
 		Response updated = put(path, "{\"latitude\":0,\"longitude\":180}");
 
 		assertThat(updated.status()).isEqualTo(200);
-		assertThat(updated.body().path("id").asText()).isEqualTo(id);
-		assertThat(updated.body().path("name").asText()).isEqualTo("Cantina");
+		assertThat(updated.body().path("id").asString()).isEqualTo(id);
+		assertThat(updated.body().path("name").asString()).isEqualTo("Cantina");
 		assertThat(updated.body().path("active").asBoolean()).isFalse();
 		assertThat(updated.body().path("pickupLocation").path("latitude").asDouble()).isZero();
 		assertThat(updated.body().path("pickupLocation").path("longitude").asDouble()).isEqualTo(180);
@@ -133,7 +133,7 @@ class RestaurantApiIntegrationTests {
 				{"name":"Cantina","pickupLocation":{"latitude":-23.5505,"longitude":-46.6333}}
 				""");
 		assertThat(created.status()).isEqualTo(201);
-		String path = RESTAURANTS + "/" + created.body().path("id").asText();
+		String path = RESTAURANTS + "/" + created.body().path("id").asString();
 
 		assertProblem(put(path + "/pickup-location", location), 400);
 
@@ -156,7 +156,7 @@ class RestaurantApiIntegrationTests {
 	void rejectsAnEmptyOrMalformedLocationUpdate(String body) throws Exception {
 		Response created = post("{\"name\":\"Cantina\"}");
 		assertThat(created.status()).isEqualTo(201);
-		String path = RESTAURANTS + "/" + created.body().path("id").asText();
+		String path = RESTAURANTS + "/" + created.body().path("id").asString();
 
 		assertProblem(put(path + "/pickup-location", body), 400);
 		assertThat(get(path).body()).isEqualTo(created.body());
@@ -177,7 +177,7 @@ class RestaurantApiIntegrationTests {
 		Response response = post("{\"name\":\"Cantina\",\"id\":\"" + suppliedId + "\",\"active\":false}");
 
 		assertThat(response.status()).isEqualTo(201);
-		assertThat(UUID.fromString(response.body().path("id").asText())).isNotEqualTo(suppliedId);
+		assertThat(UUID.fromString(response.body().path("id").asString())).isNotEqualTo(suppliedId);
 		assertThat(response.body().path("active").asBoolean()).isTrue();
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurants WHERE id = ?", Integer.class, suppliedId))
 				.isZero();
@@ -188,7 +188,7 @@ class RestaurantApiIntegrationTests {
 		Response response = post(objectMapper.writeValueAsString(Map.of("name", "  " + "a".repeat(120) + "  ")));
 
 		assertThat(response.status()).isEqualTo(201);
-		assertThat(response.body().path("name").asText()).hasSize(120);
+		assertThat(response.body().path("name").asString()).hasSize(120);
 	}
 
 	@Test
@@ -196,7 +196,7 @@ class RestaurantApiIntegrationTests {
 		Response created = post("{\"name\":\"Pizzaria Central\"}");
 		assertThat(created.status()).isEqualTo(201);
 
-		Response response = get(RESTAURANTS + "/" + created.body().path("id").asText());
+		Response response = get(RESTAURANTS + "/" + created.body().path("id").asString());
 
 		assertThat(response.status()).isEqualTo(200);
 		assertThat(response.body()).isEqualTo(created.body());
@@ -280,12 +280,12 @@ class RestaurantApiIntegrationTests {
 	void preservesPingAndActuatorEndpoints() throws Exception {
 		Response ping = get("/api/catalog/ping");
 		assertThat(ping.status()).isEqualTo(200);
-		assertThat(ping.body().path("service").asText()).isEqualTo("catalog-service");
-		assertThat(ping.body().path("status").asText()).isEqualTo("ok");
+		assertThat(ping.body().path("service").asString()).isEqualTo("catalog-service");
+		assertThat(ping.body().path("status").asString()).isEqualTo("ok");
 
 		Response health = get("/actuator/health");
 		assertThat(health.status()).isEqualTo(200);
-		assertThat(health.body().path("status").asText()).isEqualTo("UP");
+		assertThat(health.body().path("status").asString()).isEqualTo("UP");
 		assertThat(get("/actuator/info").status()).isEqualTo(200);
 	}
 
@@ -304,7 +304,7 @@ class RestaurantApiIntegrationTests {
 	}
 
 	private List<String> ids(JsonNode page) {
-		return page.path("content").valueStream().map(restaurant -> restaurant.path("id").asText()).toList();
+		return page.path("content").valueStream().map(restaurant -> restaurant.path("id").asString()).toList();
 	}
 
 	private void assertProblem(Response response, int expectedStatus) {
@@ -312,8 +312,8 @@ class RestaurantApiIntegrationTests {
 		assertThat(response.headers().firstValue("Content-Type")).hasValueSatisfying(
 				contentType -> assertThat(contentType).startsWith("application/problem+json"));
 		assertThat(response.body().path("status").asInt()).isEqualTo(expectedStatus);
-		assertThat(response.body().path("title").asText()).isNotBlank();
-		assertThat(response.body().path("detail").asText()).isNotBlank();
+		assertThat(response.body().path("title").asString()).isNotBlank();
+		assertThat(response.body().path("detail").asString()).isNotBlank();
 		assertThat(response.body().has("exception")).isFalse();
 		assertThat(response.body().has("trace")).isFalse();
 		assertThat(response.body().toString()).doesNotContain("java.lang.", "org.springframework.",

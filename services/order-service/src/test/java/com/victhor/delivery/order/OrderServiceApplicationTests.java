@@ -73,15 +73,15 @@ class OrderServiceApplicationTests {
         var response = send("POST", "/api/orders", VALID_REQUEST);
         assertThat(response.statusCode()).isEqualTo(201);
         var order = json(response);
-        var id = UUID.fromString(order.path("id").asText());
+        var id = UUID.fromString(order.path("id").asString());
         String location = "/api/orders/" + id;
         assertThat(response.headers().firstValue("Location")).contains(location);
-        assertThat(order.path("restaurantId").asText()).isEqualTo(RESTAURANT_ID.toString());
-        assertThat(order.path("destination").path("address").asText()).isEqualTo("Rua das Flores, 42");
+        assertThat(order.path("restaurantId").asString()).isEqualTo(RESTAURANT_ID.toString());
+        assertThat(order.path("destination").path("address").asString()).isEqualTo("Rua das Flores, 42");
         assertThat(order.path("destination").path("latitude").asDouble()).isEqualTo(-23.55);
-        assertThat(order.path("status").asText()).isEqualTo("CREATED");
+        assertThat(order.path("status").asString()).isEqualTo("CREATED");
         assertThat(order.path("updatedAt")).isEqualTo(order.path("createdAt"));
-        assertThat(Instant.parse(order.path("createdAt").asText())).isNotNull();
+        assertThat(Instant.parse(order.path("createdAt").asString())).isNotNull();
         assertThat(order.path("confirmedAt").isNull()).isTrue();
         assertThat(order.path("cancelledAt").isNull()).isTrue();
         var retrieved = send("GET", location, null);
@@ -101,9 +101,9 @@ class OrderServiceApplicationTests {
                 """.formatted(suppliedId));
         var response = send("POST", "/api/orders", request);
         assertThat(response.statusCode()).isEqualTo(201);
-        assertThat(json(response).path("id").asText()).isNotEqualTo(suppliedId.toString());
-        assertThat(json(response).path("status").asText()).isEqualTo("CREATED");
-        assertThat(json(response).path("createdAt").asText()).doesNotStartWith("2000-");
+        assertThat(json(response).path("id").asString()).isNotEqualTo(suppliedId.toString());
+        assertThat(json(response).path("status").asString()).isEqualTo("CREATED");
+        assertThat(json(response).path("createdAt").asString()).doesNotStartWith("2000-");
     }
 
     @Test
@@ -112,16 +112,16 @@ class OrderServiceApplicationTests {
         var confirmation = send("POST", location + "/confirm", null);
         assertThat(confirmation.statusCode()).isEqualTo(200);
         var confirmed = json(confirmation);
-        assertThat(confirmed.path("status").asText()).isEqualTo("CONFIRMED");
-        assertThat(confirmed.path("confirmedAt").isTextual()).isTrue();
+        assertThat(confirmed.path("status").asString()).isEqualTo("CONFIRMED");
+        assertThat(confirmed.path("confirmedAt").isString()).isTrue();
         assertThat(json(send("POST", location + "/confirm", null))).isEqualTo(confirmed);
         assertThat(json(send("GET", location, null))).isEqualTo(confirmed);
         var cancellation = send("POST", location + "/cancel", null);
         assertThat(cancellation.statusCode()).isEqualTo(200);
         var cancelled = json(cancellation);
-        assertThat(cancelled.path("status").asText()).isEqualTo("CANCELLED");
+        assertThat(cancelled.path("status").asString()).isEqualTo("CANCELLED");
         assertThat(cancelled.path("confirmedAt")).isEqualTo(confirmed.path("confirmedAt"));
-        assertThat(cancelled.path("cancelledAt").isTextual()).isTrue();
+        assertThat(cancelled.path("cancelledAt").isString()).isTrue();
         assertThat(json(send("POST", location + "/cancel", null))).isEqualTo(cancelled);
         assertProblem(send("POST", location + "/confirm", null), 409);
         assertThat(json(send("GET", location, null))).isEqualTo(cancelled);
@@ -133,7 +133,7 @@ class OrderServiceApplicationTests {
         String location = send("POST", "/api/orders", VALID_REQUEST).headers().firstValue("Location").orElseThrow();
         var response = send("POST", location + "/cancel", null);
         assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(json(response).path("status").asText()).isEqualTo("CANCELLED");
+        assertThat(json(response).path("status").asString()).isEqualTo("CANCELLED");
         assertThat(json(response).path("confirmedAt").isNull()).isTrue();
     }
 
@@ -172,7 +172,7 @@ class OrderServiceApplicationTests {
         assertThat(send("GET", "/api/orders/ping", null).statusCode()).isEqualTo(200);
         var health = send("GET", "/actuator/health", null);
         assertThat(health.statusCode()).isEqualTo(200);
-        assertThat(json(health).path("status").asText()).isEqualTo("UP");
+        assertThat(json(health).path("status").asString()).isEqualTo("UP");
     }
 
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
@@ -191,7 +191,7 @@ class OrderServiceApplicationTests {
         assertThat(response.statusCode()).isEqualTo(status);
         assertThat(response.headers().firstValue("Content-Type").orElseThrow()).contains("application/problem+json");
         assertThat(json(response).path("status").asInt()).isEqualTo(status);
-        assertThat(json(response).path("detail").asText()).isNotBlank();
+        assertThat(json(response).path("detail").asString()).isNotBlank();
         assertThat(response.body()).doesNotContain("org.hibernate", "SQLException", "stackTrace", "com.victhor");
     }
 }

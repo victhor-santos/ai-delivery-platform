@@ -159,11 +159,11 @@ A base usa Python 3.12+, FastAPI, Pydantic, Pydantic Settings e Uvicorn, com pyt
 
 ## Docker e execução
 
-Hoje o Compose executa `catalog-db`, `order-db` e `delivery-db`, com volumes separados. A demonstração completa incluirá o Gateway e os serviços envolvidos na entrega, preservando os volumes existentes.
+Sem perfil, o Compose executa `catalog-db`, `order-db` e `delivery-db`, com volumes separados. O [perfil `demo`](route-intelligence-compose.md) acrescenta Gateway, cinco serviços Java e Route Intelligence, preservando os volumes existentes.
 
-O endereço do serviço Python será configurável: `http://route-intelligence-service:8000` na rede Docker e `http://localhost:8000` ao executar na máquina. As URLs JDBC dentro dos containers também usarão o hostname do banco.
+O endereço do serviço Python é configurável: `http://route-intelligence-service:8000` na rede Docker e `http://localhost:8000` ao executar na máquina. As URLs JDBC dentro dos containers também usam o hostname do banco.
 
-O serviço Python terá Dockerfile, dependências fixadas e health check. O treinamento será executado à parte, e a API receberá o artefato e seus metadados pela imagem ou por uma montagem somente de leitura. Credenciais reais e `.env` ficam fora do Git. Nenhuma dessas etapas exige apagar volumes.
+O serviço Python possui Dockerfile, dependências travadas e health check. O treinamento é executado à parte, e a API recebe o artefato e seus metadados por uma montagem somente para leitura. Credenciais reais e `.env` ficam fora do Git e do contexto de build. Nenhuma dessas etapas exige apagar volumes.
 
 ## Comunicação e concorrência
 

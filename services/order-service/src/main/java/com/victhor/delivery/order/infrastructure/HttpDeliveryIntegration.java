@@ -50,7 +50,7 @@ public class HttpDeliveryIntegration implements RestaurantLookup, DeliveryGatewa
         }
         try {
             JsonNode json = mapper.readTree(response.body());
-            if (!restaurantId.equals(UUID.fromString(json.path("id").asText())) || !json.path("active").isBoolean()) {
+            if (!restaurantId.equals(UUID.fromString(json.path("id").asString())) || !json.path("active").isBoolean()) {
                 throw new IllegalArgumentException("Invalid restaurant response");
             }
             JsonNode pickup = json.path("pickupLocation");
@@ -79,8 +79,8 @@ public class HttpDeliveryIntegration implements RestaurantLookup, DeliveryGatewa
         }
         try {
             JsonNode json = mapper.readTree(response.body());
-            UUID orderId = UUID.fromString(json.path("orderId").asText());
-            UUID deliveryId = UUID.fromString(json.path("id").asText());
+            UUID orderId = UUID.fromString(json.path("orderId").asString());
+            UUID deliveryId = UUID.fromString(json.path("id").asString());
             String status = requiredText(json.path("status"));
             if (!orderId.equals(request.orderId()) || !DELIVERY_STATUSES.contains(status)
                     || !request.origin().equals(readLocation(json.path("origin")))
@@ -104,10 +104,10 @@ public class HttpDeliveryIntegration implements RestaurantLookup, DeliveryGatewa
     }
 
     private String requiredText(JsonNode node) {
-        if (!node.isTextual() || node.asText().isBlank()) {
+        if (!node.isString() || node.asString().isBlank()) {
             throw new IllegalArgumentException("Missing textual field");
         }
-        return node.asText();
+        return node.asString();
     }
 
     private double coordinate(JsonNode node) {

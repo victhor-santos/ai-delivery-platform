@@ -24,7 +24,7 @@ flowchart TD
     Deliveries -->|HTTP: planejar rota| Routes[Route Intelligence :8000 - rotas e health]
 ```
 
-O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utilizam Spring MVC. As rotas são estáticas e apontam para `localhost`, pois as aplicações são executadas diretamente na máquina nesta etapa. O Compose sobe os bancos de catálogo, pedidos e entregas, com volumes separados.
+O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utilizam Spring MVC. As rotas são estáticas, com endereços configuráveis por ambiente e padrões `localhost` para execução nativa. O Compose mantém os três bancos com volumes separados e oferece o [perfil `demo`](route-intelligence-compose.md) para as sete aplicações. Na rede Docker, HTTP e JDBC usam hostnames dos serviços; somente Gateway, Python e bancos publicam portas na máquina. O modelo é montado somente para leitura, e o treinamento permanece offline.
 
 ## Responsabilidades e contratos
 
