@@ -1,12 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import Settings
 from app.main import create_app
 
 
 @pytest.fixture
-def client():
-    with TestClient(create_app()) as client:
+def client(model_bundle):
+    with TestClient(
+        create_app(Settings(model_path=model_bundle[0], graph_path=None, traffic_path=None))
+    ) as client:
         yield client
 
 
@@ -38,4 +41,5 @@ def test_openapi_publishes_the_health_contract(client):
     response_schema = health["responses"]["200"]["content"]["application/json"]["schema"]
     assert response_schema["$ref"] == "#/components/schemas/HealthResponse"
     status_schema = schema["components"]["schemas"]["HealthResponse"]["properties"]["status"]
-    assert status_schema["const"] == "UP"
+    assert status_schema["enum"] == ["UP", "DOWN"]
+    assert "503" in health["responses"]

@@ -6,7 +6,9 @@ from app.main import create_app
 
 def main() -> None:
     settings = Settings()
-    uvicorn.run(create_app(), host=settings.host, port=settings.port, log_level=settings.log_level)
+    uvicorn.run(
+        create_app(settings), host=settings.host, port=settings.port, log_level=settings.log_level
+    )
 
 
 if __name__ == "__main__":
