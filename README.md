@@ -18,7 +18,7 @@ Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/he
 
 O gerador offline já produz observações sintéticas por trecho, com seed, timestamps de disponibilidade, schema de features, partições temporais por cenário e manifesto com checksums. Os dados completos são gerados localmente e ficam fora do Git. Veja [como gerar e conferir o dataset](docs/route-segment-dataset.md).
 
-O treinamento offline compara Dummy, regressão linear, Random Forest e referência física, seleciona pela validação e avalia o modelo salvo no teste reservado. O predictor em lote valida entradas e tempos; ainda não está conectado à API. Veja [treinamento, resultados e artefatos](docs/route-segment-model.md), incluindo a limitação de execução de ML observada no Windows.
+O treinamento offline compara Dummy, regressão linear, Random Forest e referência física, seleciona pela validação e avalia o modelo salvo no teste reservado. O predictor em lote valida entradas e tempos; ainda não está conectado à API. Veja [treinamento, resultados e artefatos](docs/route-segment-model.md), incluindo a validação nativa no Windows e a compatibilidade por plataforma.
 
 ## Evolução para AI Engineering
 

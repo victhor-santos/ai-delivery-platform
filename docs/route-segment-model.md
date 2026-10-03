@@ -8,8 +8,8 @@ Prepare o [ambiente Python](route-intelligence-foundation.md) e gere o [dataset]
 
 ```powershell
 uv sync --project .\services\route-intelligence-service --locked
-uv run --project .\services\route-intelligence-service --locked python -m training.train --dataset .\services\route-intelligence-service\data\synthetic\segment-dataset-v1 --output .\services\route-intelligence-service\artifacts\segment-model-v1 --seed 42
-uv run --project .\services\route-intelligence-service --locked python -m training.evaluate --dataset .\services\route-intelligence-service\data\synthetic\segment-dataset-v1 --artifact .\services\route-intelligence-service\artifacts\segment-model-v1 --output .\services\route-intelligence-service\artifacts\segment-model-v1\test-report.json
+uv run --project .\services\route-intelligence-service --locked python -m training.train --dataset .\services\route-intelligence-service\data\synthetic\segment-dataset-v1 --output .\services\route-intelligence-service\artifacts\segment-model-v1-windows --seed 42
+uv run --project .\services\route-intelligence-service --locked python -m training.evaluate --dataset .\services\route-intelligence-service\data\synthetic\segment-dataset-v1 --artifact .\services\route-intelligence-service\artifacts\segment-model-v1-windows --output .\services\route-intelligence-service\artifacts\segment-model-v1-windows\test-report.json
 ```
 
 O diretório do artefato e o arquivo do relatório precisam ser novos. Se a validação já os produziu, escolha outro nome; saídas existentes são preservadas. O treinamento aceita `--seed` inteiro de 0 a 4294967295. A avaliação aceita `--graph caminho.json`, `--origin` e `--destination`; os padrões são o fixture empacotado e A → C. O grafo precisa coincidir com o checksum original do dataset. Origem igual ao destino, nós ausentes, caminho inexistente e cenários sem todas as arestas são rejeitados.
@@ -56,7 +56,7 @@ MAE e RMSE são registrados em minutos, além de R² e erros por via, tráfego e
 
 O predictor aceita entre 1 e 1000 trechos, valida novamente as seis features e exige exatamente um tempo positivo e finito para cada entrada. Campos extras, inclusive o target, são rejeitados. O carregamento pode ser feito uma vez e o objeto reutilizado; essa conexão com o ciclo de vida do FastAPI fica para a próxima feature.
 
-Com dataset, seed e ambiente iguais, os testes verificam identidade dos bytes do pipeline e das previsões. Relatórios incluem medições de tempo que variam entre execuções; por isso, não se promete identidade de todos os metadados/relatórios, nem de artefatos entre plataformas distintas. Dados e artefatos completos ficam fora do Git, do wheel e da distribuição de fontes.
+Execuções independentes do comando de treinamento, com dataset, seed e ambiente iguais, produziram os mesmos bytes do pipeline e previsões. A conferência de bytes usa processos novos; a identidade de bytes não é garantida para processos já utilizados. Relatórios incluem medições de tempo que variam entre execuções; por isso, não se promete identidade de todos os metadados/relatórios, nem de artefatos entre plataformas distintas. Dados e artefatos completos ficam fora do Git, do wheel e da distribuição de fontes.
 
 ## Avaliação de rotas
 
@@ -83,10 +83,14 @@ Nas 168 decisões A → C de teste, a floresta escolheu caminhos com tempo obser
 
 O artefato validado tem SHA-256 `5e298b8ffbad39e84e92055d8e5c7ec672e24e3d47f76af35895fcf992274cc9`, versão `segment-model-v1-5e298b8ffbad39e8` e aproximadamente 3,9 MB. As métricas medem somente o domínio sintético e as vias conhecidas deste gerador; não há avaliação em ruas não vistas, mapas reais ou GPS.
 
+Após liberar o carregamento das bibliotecas no ambiente Windows, o mesmo dataset, seed 42 e versões travadas foram usados para gerar `artifacts/segment-model-v1-windows`, sem substituir o bundle Linux em `artifacts/segment-model-v1`. A Random Forest também foi escolhida na validação. No teste nativo, teve MAE **0,4711 min**, RMSE **0,6942 min**, R² **0,9765** e zero previsões inválidas; escolheu caminhos com tempo observado ótimo em 167 dos 168 cenários. A mediana medida para 256 entradas foi aproximadamente 11,4 ms.
+
+O bundle Windows AMD64 tem versão `segment-model-v1-47ad884548f0f255`, SHA-256 `47ad884548f0f25554b8bf38787b0e278e44a2aa65999a48cf7952daf510212c` e aproximadamente 3,9 MB. Uma segunda execução independente do comando de treinamento produziu o mesmo checksum. O predictor carregou o bundle nativamente e suas previsões coincidiram com o pipeline salvo. O hash diferente do bundle Linux não representa incompatibilidade nos dados; a compatibilidade do artefato continua sendo conferida pela plataforma e dependências registradas.
+
 Validações concluídas:
 
 - 264 testes passaram em Linux, com warnings tratados como erros, incluindo as suítes anteriores, integridade, pipelines, seleção, métricas, serialização, predictor e avaliação de rotas.
-- 218 testes sem importação de ML também passaram no Windows; a suíte completa nativa encontrou o bloqueio descrito abaixo.
+- 264 testes também passaram no Windows, incluindo ML, após a liberação do carregamento das bibliotecas. A primeira validação nativa tinha passado em 218 testes sem ML e encontrado o bloqueio descrito abaixo.
 - Ruff, formatação, lock e build passaram. Wheel e distribuição de fontes contêm código/fixture e excluem CSVs e modelos gerados.
 - O wheel foi instalado em ambiente separado, apenas com dependências de produção, e executou predictor, treinamento e avaliação fora do repositório.
 - Dois treinamentos completos produziram os mesmos bytes do pipeline e métricas de teste. O servidor instalado respondeu por HTTP real ao health e OpenAPI, preservando apenas `/health` como operação disponível.
@@ -104,10 +108,10 @@ uv lock --project .\services\route-intelligence-service --check
 uv build --project .\services\route-intelligence-service
 ```
 
-## Limitação do ambiente Windows
+## Compatibilidade do ambiente Windows
 
-Nesta máquina, o Controle de Aplicativos bloqueou módulos nativos do scikit-learn (`_cyutility` e `_datasets_pair`) ao importar ML. Executar por `python -m` evita os launchers de console, mas não resolve esse bloqueio de DLLs. A validação e o treinamento foram feitos em container Linux temporário, usando o mesmo lock e Python de referência, sem alterar a política do Windows.
+Na primeira execução nesta máquina, o Controle de Aplicativos bloqueou módulos nativos do scikit-learn (`_cyutility` e `_datasets_pair`) ao importar ML. Executar por `python -m` evita os launchers de console, mas não resolve um bloqueio de DLLs. A validação inicial e o treinamento foram feitos em container Linux temporário, usando o mesmo lock e Python de referência.
 
-O artefato gerado é de Linux e deve ser consumido no ambiente compatível indicado nos metadados. Os comandos locais acima exigem um ambiente capaz de carregar essas bibliotecas; a execução nativa de ML permanece limitada nesta máquina. FastAPI `/health`, grafo e gerador continuam independentes do carregamento dos modelos. Dockerfile e Compose da aplicação ainda pertencem a uma etapa própria.
+A verificação posterior confirmou importações, testes completos, treinamento, avaliação e predictor no Windows. Para execução nativa, use `artifacts/segment-model-v1-windows`; o bundle original em `artifacts/segment-model-v1` permanece identificado como Linux. O carregador continua recusando um bundle de plataforma ou dependências incompatíveis. FastAPI `/health`, grafo e gerador continuam independentes do carregamento dos modelos. Dockerfile e Compose da aplicação ainda pertencem a uma etapa própria.
 
 A próxima feature conectará o predictor ao Dijkstra em `POST /api/routes/fastest`, carregará o bundle uma vez por processo e acrescentará prontidão de grafo/modelo. Integração com Delivery e interface web vêm depois.
