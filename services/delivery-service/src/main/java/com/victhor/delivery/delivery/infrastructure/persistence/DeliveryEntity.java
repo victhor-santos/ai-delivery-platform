@@ -94,6 +94,10 @@ public class DeliveryEntity {
                 assignedAt, pickedUpAt, departedAt, arrivedAt, deliveredAt, cancelledAt);
     }
 
+    long version() {
+        return version;
+    }
+
     void applyState(Delivery delivery) {
         courierId = delivery.courierId();
         status = delivery.status();
