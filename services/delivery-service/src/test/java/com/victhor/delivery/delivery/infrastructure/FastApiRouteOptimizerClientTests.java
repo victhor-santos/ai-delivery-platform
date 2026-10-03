@@ -19,6 +19,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 import com.victhor.delivery.delivery.application.RouteContext;
+import com.victhor.delivery.delivery.application.OptimizedRoute;
 import com.victhor.delivery.delivery.application.RouteNotFoundException;
 import com.victhor.delivery.delivery.application.RouteServiceUnavailableException;
 import com.victhor.delivery.delivery.application.UnsupportedRouteLocationException;
@@ -167,7 +168,7 @@ class FastApiRouteOptimizerClientTests {
         }
     }
 
-    private com.victhor.delivery.delivery.application.OptimizedRoute optimize(Remote server) {
+    private OptimizedRoute optimize(Remote server) {
         try (var client = HttpClient.newHttpClient()) {
             return new FastApiRouteOptimizerClient(client, mapper, server.url(), Duration.ofSeconds(2))
                     .optimizeRoute(ORIGIN, DESTINATION, CONTEXT);

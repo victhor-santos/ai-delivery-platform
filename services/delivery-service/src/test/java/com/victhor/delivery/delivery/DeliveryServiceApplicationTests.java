@@ -71,9 +71,9 @@ class DeliveryServiceApplicationTests {
     @Test
     void servesPingAndActuatorWithPostgresqlConfigured() throws Exception {
         JsonNode ping = get(DELIVERIES + "/ping");
-        assertThat(ping.path("service").asText()).isEqualTo("delivery-service");
-        assertThat(ping.path("status").asText()).isEqualTo("ok");
-        assertThat(get("/actuator/health").path("status").asText()).isEqualTo("UP");
+        assertThat(ping.path("service").asString()).isEqualTo("delivery-service");
+        assertThat(ping.path("status").asString()).isEqualTo("ok");
+        assertThat(get("/actuator/health").path("status").asString()).isEqualTo("UP");
         assertThat(get("/actuator/info").isObject()).isTrue();
     }
 
@@ -85,15 +85,15 @@ class DeliveryServiceApplicationTests {
         var response = send("POST", DELIVERIES, request.toString());
         assertThat(response.statusCode()).isEqualTo(201);
         JsonNode delivery = json(response);
-        UUID id = UUID.fromString(delivery.path("id").asText());
-        assertThat(id.toString()).isNotEqualTo(request.path("id").asText());
+        UUID id = UUID.fromString(delivery.path("id").asString());
+        assertThat(id.toString()).isNotEqualTo(request.path("id").asString());
         assertThat(response.headers().firstValue("Location")).contains(DELIVERIES + "/" + id);
-        assertThat(delivery.path("orderId").asText()).isEqualTo(ORDER_ID.toString());
-        assertThat(delivery.path("origin").path("description").asText()).isEqualTo("Restaurante Central");
-        assertThat(delivery.path("status").asText()).isEqualTo("CREATED");
+        assertThat(delivery.path("orderId").asString()).isEqualTo(ORDER_ID.toString());
+        assertThat(delivery.path("origin").path("description").asString()).isEqualTo("Restaurante Central");
+        assertThat(delivery.path("status").asString()).isEqualTo("CREATED");
         assertThat(delivery.path("courierId").isNull()).isTrue();
         assertThat(delivery.path("updatedAt")).isEqualTo(delivery.path("createdAt"));
-        assertThat(Instant.parse(delivery.path("createdAt").asText()).getNano() % 1000).isZero();
+        assertThat(Instant.parse(delivery.path("createdAt").asString()).getNano() % 1000).isZero();
         assertThat(get(DELIVERIES + "/" + id)).isEqualTo(delivery);
         assertThat(get(DELIVERIES + "/by-order/" + ORDER_ID)).isEqualTo(delivery);
         assertThat(jdbc.queryForObject("SELECT origin_description FROM deliveries WHERE id = ?", String.class, id))
@@ -104,66 +104,66 @@ class DeliveryServiceApplicationTests {
     @Test
     void completesLifecycleWithControlledConflictsAndPreservedHistory() throws Exception {
         JsonNode courier = createCourier();
-        String path = DELIVERIES + "/" + createDelivery(ORDER_ID).path("id").asText();
-        JsonNode assigned = assign(path, courier.path("id").asText());
-        assertThat(assigned.path("status").asText()).isEqualTo("ASSIGNED");
-        assertProblem(send("POST", path + "/assign", assignment(courier.path("id").asText())), 409);
+        String path = DELIVERIES + "/" + createDelivery(ORDER_ID).path("id").asString();
+        JsonNode assigned = assign(path, courier.path("id").asString());
+        assertThat(assigned.path("status").asString()).isEqualTo("ASSIGNED");
+        assertProblem(send("POST", path + "/assign", assignment(courier.path("id").asString())), 409);
         assertThat(get(path)).isEqualTo(assigned);
-        assertThat(command(path, "pick-up").path("status").asText()).isEqualTo("PICKED_UP");
+        assertThat(command(path, "pick-up").path("status").asString()).isEqualTo("PICKED_UP");
         assertProblem(send("POST", path + "/cancel", null), 409);
         JsonNode inTransit = command(path, "start-transit");
-        assertThat(inTransit.path("status").asText()).isEqualTo("IN_TRANSIT");
+        assertThat(inTransit.path("status").asString()).isEqualTo("IN_TRANSIT");
         assertProblem(send("POST", path + "/complete", null), 409);
         assertThat(get(path)).isEqualTo(inTransit);
         JsonNode arrived = command(path, "arrive");
-        assertThat(arrived.path("status").asText()).isEqualTo("IN_TRANSIT");
+        assertThat(arrived.path("status").asString()).isEqualTo("IN_TRANSIT");
         assertProblem(send("POST", path + "/arrive", null), 409);
         JsonNode completed = command(path, "complete");
-        assertThat(completed.path("status").asText()).isEqualTo("DELIVERED");
+        assertThat(completed.path("status").asString()).isEqualTo("DELIVERED");
         assertThat(completed.path("courierId")).isEqualTo(courier.path("id"));
-        Instant previous = Instant.parse(completed.path("createdAt").asText());
+        Instant previous = Instant.parse(completed.path("createdAt").asString());
         for (String event : new String[]{"assignedAt", "pickedUpAt", "departedAt", "arrivedAt", "deliveredAt"}) {
-            Instant time = Instant.parse(completed.path(event).asText());
+            Instant time = Instant.parse(completed.path(event).asString());
             assertThat(time).isAfterOrEqualTo(previous);
             previous = time;
         }
         assertThat(completed.path("updatedAt")).isEqualTo(completed.path("deliveredAt"));
         assertThat(get(path)).isEqualTo(completed);
         assertProblem(send("POST", path + "/complete", null), 409);
-        String next = DELIVERIES + "/" + createDelivery(UUID.randomUUID()).path("id").asText();
-        assertThat(assign(next, courier.path("id").asText()).path("status").asText()).isEqualTo("ASSIGNED");
+        String next = DELIVERIES + "/" + createDelivery(UUID.randomUUID()).path("id").asString();
+        assertThat(assign(next, courier.path("id").asString()).path("status").asString()).isEqualTo("ASSIGNED");
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void cancelsBeforePickupPreservingHistoryAndReleasingCourier(boolean assigned) throws Exception {
-        String courierId = createCourier().path("id").asText();
-        String path = DELIVERIES + "/" + createDelivery(ORDER_ID).path("id").asText();
+        String courierId = createCourier().path("id").asString();
+        String path = DELIVERIES + "/" + createDelivery(ORDER_ID).path("id").asString();
         if (assigned) {
             assign(path, courierId);
         }
         JsonNode cancelled = command(path, "cancel");
-        assertThat(cancelled.path("status").asText()).isEqualTo("CANCELLED");
+        assertThat(cancelled.path("status").asString()).isEqualTo("CANCELLED");
         assertThat(cancelled.path("courierId").isNull()).isEqualTo(!assigned);
         assertThat(cancelled.path("assignedAt").isNull()).isEqualTo(!assigned);
         assertThat(get(path)).isEqualTo(cancelled);
         assertProblem(send("POST", path + "/cancel", null), 409);
         assertProblem(send("POST", DELIVERIES, VALID_REQUEST), 409);
-        String next = DELIVERIES + "/" + createDelivery(UUID.randomUUID()).path("id").asText();
-        assertThat(assign(next, courierId).path("status").asText()).isEqualTo("ASSIGNED");
+        String next = DELIVERIES + "/" + createDelivery(UUID.randomUUID()).path("id").asString();
+        assertThat(assign(next, courierId).path("status").asString()).isEqualTo("ASSIGNED");
     }
 
     @Test
     void rejectsMissingInactiveAndBusyCouriersWithoutChangingDelivery() throws Exception {
-        String path = DELIVERIES + "/" + createDelivery(ORDER_ID).path("id").asText();
+        String path = DELIVERIES + "/" + createDelivery(ORDER_ID).path("id").asString();
         JsonNode original = get(path);
         assertProblem(send("POST", path + "/assign", assignment(UUID.randomUUID().toString())), 404);
         Courier inactive = couriers.create(new Courier(UUID.randomUUID(), false));
         assertProblem(send("POST", path + "/assign", assignment(inactive.id().toString())), 409);
         assertThat(get(path)).isEqualTo(original);
-        String courierId = createCourier().path("id").asText();
+        String courierId = createCourier().path("id").asString();
         assign(path, courierId);
-        String otherPath = DELIVERIES + "/" + createDelivery(UUID.randomUUID()).path("id").asText();
+        String otherPath = DELIVERIES + "/" + createDelivery(UUID.randomUUID()).path("id").asString();
         JsonNode other = get(otherPath);
         assertProblem(send("POST", otherPath + "/assign", assignment(courierId)), 409);
         assertThat(get(otherPath)).isEqualTo(other);
@@ -197,9 +197,9 @@ class DeliveryServiceApplicationTests {
     @ParameterizedTest
     @ValueSource(strings = {"{}", "null", "{\"courierId\":null}", "{\"courierId\":\"invalid\"}"})
     void rejectsInvalidAssignmentInput(String body) throws Exception {
-        String path = DELIVERIES + "/" + createDelivery(ORDER_ID).path("id").asText();
+        String path = DELIVERIES + "/" + createDelivery(ORDER_ID).path("id").asString();
         assertProblem(send("POST", path + "/assign", body), 400);
-        assertThat(get(path).path("status").asText()).isEqualTo("CREATED");
+        assertThat(get(path).path("status").asString()).isEqualTo("CREATED");
     }
 
     @Test
@@ -224,9 +224,9 @@ class DeliveryServiceApplicationTests {
         String secondPath = DELIVERIES;
         String body = VALID_REQUEST;
         if (assigning) {
-            String courierId = createCourier().path("id").asText();
-            firstPath += "/" + createDelivery(ORDER_ID).path("id").asText() + "/assign";
-            secondPath += "/" + createDelivery(UUID.randomUUID()).path("id").asText() + "/assign";
+            String courierId = createCourier().path("id").asString();
+            firstPath += "/" + createDelivery(ORDER_ID).path("id").asString() + "/assign";
+            secondPath += "/" + createDelivery(UUID.randomUUID()).path("id").asString() + "/assign";
             body = assignment(courierId);
         }
 
@@ -252,7 +252,7 @@ class DeliveryServiceApplicationTests {
         var repeated = send("PUT", path, request.toString());
         assertThat(repeated.statusCode()).isEqualTo(200);
         assertThat(json(repeated)).isEqualTo(json(first));
-        String deliveryPath = DELIVERIES + "/" + json(first).path("id").asText();
+        String deliveryPath = DELIVERIES + "/" + json(first).path("id").asString();
         JsonNode cancelled = command(deliveryPath, "cancel");
         assertThat(json(send("PUT", path, request.toString()))).isEqualTo(cancelled);
         ((tools.jackson.databind.node.ObjectNode) request.path("origin")).put("latitude", 0);
@@ -278,7 +278,7 @@ class DeliveryServiceApplicationTests {
         var response = send("POST", COURIERS, null);
         assertThat(response.statusCode()).isEqualTo(201);
         JsonNode courier = json(response);
-        UUID id = UUID.fromString(courier.path("id").asText());
+        UUID id = UUID.fromString(courier.path("id").asString());
         assertThat(response.headers().firstValue("Location")).contains(COURIERS + "/" + id);
         assertThat(courier.path("active").asBoolean()).isTrue();
         assertThat(courier.size()).isEqualTo(2);
