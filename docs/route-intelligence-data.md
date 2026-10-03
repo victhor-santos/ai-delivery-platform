@@ -1,6 +1,6 @@
 # Dados e modelo de tempo por trecho
 
-O modelo ainda será desenvolvido. O [gerador de dataset sintético](route-segment-dataset.md) já implementa seed, schema compartilhado de features, observações com disponibilidade, partições por tempo/cenário e manifesto com checksums. Este documento define os cuidados com vazamento de informação e a futura avaliação. A integração está descrita na [arquitetura](route-intelligence.md) e no [contrato](route-intelligence-contract.md).
+O [gerador de dataset sintético](route-segment-dataset.md) implementa seed, schema compartilhado de features, observações com disponibilidade, partições por tempo/cenário e manifesto. O [treinamento e a avaliação offline](route-segment-model.md) já comparam modelos, selecionam na validação e produzem artefato e relatórios. Este documento mantém as regras de dados e avaliação; a integração futura está descrita na [arquitetura](route-intelligence.md) e no [contrato](route-intelligence-contract.md).
 
 ## O que o modelo prevê
 
@@ -89,14 +89,14 @@ Essas escolhas seguem os cuidados de [prevenção de leakage](https://scikit-lea
 
 ## Modelos e avaliação
 
-Vamos comparar:
+A primeira implementação compara:
 
 - `DummyRegressor`, com estratégia registrada, como mediana para referência de MAE.
 - `LinearRegression`, com tratamento explícito de categorias e variáveis numéricas.
 - `RandomForestRegressor`, com seed e complexidade limitadas.
 - Referência determinística `60 * distance_km / reference_speed_kmh`, para avaliar se ML acrescenta valor à estimativa física inicial.
 
-Pré-processamento e estimador ficarão no mesmo pipeline, incluindo o tratamento de categorias desconhecidas e valores faltantes. Todos os candidatos usarão as mesmas partições. Gradient Boosting pode ser avaliado depois, se houver motivo para ampliar a comparação.
+Pré-processamento e estimador ficam no mesmo pipeline. Escalas e categorias são aprendidas apenas no treino. O encoder ignora categorias válidas que não apareceram no treino; categorias fora do vocabulário, campos ausentes e valores não finitos são rejeitados pelo schema, sem imputação silenciosa. Todos os candidatos usam as mesmas partições. Gradient Boosting pode ser avaliado depois, se houver motivo para ampliar a comparação.
 
 O relatório terá MAE e RMSE em minutos, R², erros por tipo de via, tráfego e distância, além da latência de inferência em lote. R² negativo também será registrado. A escolha levará em conta as métricas, a simplicidade, a facilidade de explicar o modelo e seu tempo de execução.
 
@@ -104,13 +104,13 @@ Previsões inválidas contam na avaliação. Transformar um tempo negativo em po
 
 Os testes usarão dados fixos e tolerâncias justificadas para as métricas. A relação entre distância e tempo será verificada por tendências em grupos de exemplos, já que o ruído pode alterar casos individuais.
 
-Também vamos comparar a rota escolhida com a melhor rota pelos tempos observados nos cenários de teste. Esses tempos ficam disponíveis apenas para a avaliação, nunca para a escolha da rota em produção. Assim podemos detectar decisões ruins que um bom MAE global esconderia.
+A avaliação offline também compara a rota escolhida com a melhor rota pelos tempos observados nos cenários de teste. Esses tempos ficam disponíveis apenas para a avaliação, nunca para escolher a rota prevista. O relatório registra excesso de tempo e fração de escolhas com tempo observado ótimo, além de cenários inválidos.
 
 As métricas sintéticas medem o comportamento dentro das hipóteses do gerador. O relatório deve deixar claro que elas ainda não comprovam economia de tempo em entregas reais.
 
 ## Treinamento, artefatos e inferência
 
-Fluxo planejado:
+Fluxo implementado offline, seguido da integração planejada:
 
 ```text
 dataset -> divisão dos conjuntos -> pipeline de features -> treino
@@ -118,7 +118,7 @@ dataset -> divisão dos conjuntos -> pipeline de features -> treino
         -> carregamento pela API -> inferência -> Dijkstra
 ```
 
-Os futuros módulos `training.train` e `training.evaluate` produzirão e avaliarão `artifacts/segment_travel_time_model.joblib`, com metadados de versões do modelo, schema, dataset, dependências, seed e métricas. A avaliação não reajustará o modelo. A execução exata e seus argumentos serão documentados quando esses módulos existirem. O gerador existente é executado por `python -m training.generate_dataset`, conforme o [guia do dataset](route-segment-dataset.md).
+`training.train` produz um diretório novo com `segment_travel_time_model.joblib`, `metadata.json` e `validation-report.json`. `training.evaluate` avalia o artefato no teste original sem reajustar ou selecionar modelos. Checksums, versões do runtime/dependências/plataforma, dataset e grafo são conferidos antes de carregar. O [guia do modelo](route-segment-model.md) documenta comandos, seleção, resultados e limitações. O gerador é executado por `python -m training.generate_dataset`, conforme o [guia do dataset](route-segment-dataset.md).
 
 O FastAPI carregará o pipeline uma vez por processo e não treinará no startup ou em uma requisição. O mesmo pipeline fará as transformações em treino e inferência. Artefatos serão de origem controlada e carregados em ambiente compatível: joblib usa mecanismos de persistência que não devem receber arquivos não confiáveis. [Persistência de modelos](https://scikit-learn.org/stable/model_persistence.html).
 

@@ -1,6 +1,6 @@
 # Base do serviço Route Intelligence
 
-`services/route-intelligence-service` executa uma API FastAPI independente. Esta etapa acrescentou configuração, dependências reproduzíveis, health check e testes. Grafo e Dijkstra foram acrescentados depois, com [demonstração por terminal](road-graph.md), assim como o [gerador offline de dataset](route-segment-dataset.md). Modelo e consulta HTTP de rotas seguem o [roadmap](roadmap.md).
+`services/route-intelligence-service` executa uma API FastAPI independente. Esta etapa acrescentou configuração, dependências reproduzíveis, health check e testes. Grafo e Dijkstra foram acrescentados depois, com [demonstração por terminal](road-graph.md), assim como o [gerador offline de dataset](route-segment-dataset.md) e o [treinamento e predictor](route-segment-model.md). A consulta HTTP de rotas segue o [roadmap](roadmap.md).
 
 ## Organização
 
