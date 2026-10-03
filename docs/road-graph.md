@@ -1,6 +1,6 @@
 # Grafo sintético e roteamento por tempo
 
-Route Intelligence já calcula caminhos dirigidos com Dijkstra. O grafo é imutável, e cada cálculo recebe seu próprio mapa de tempos por trecho. Esta etapa usa velocidades fixas de referência; não há modelo, trânsito real, GPS ou consulta de rotas por HTTP.
+Route Intelligence já calcula caminhos dirigidos com Dijkstra. O grafo é imutável, e cada cálculo recebe seu próprio mapa de tempos por trecho. O comando de demonstração usa velocidades fixas de referência. As etapas seguintes acrescentaram [modelo e consulta HTTP](intelligent-routing-api.md) e [integração com Delivery](delivery-route-integration.md). Trânsito real e GPS continuam fora do cenário.
 
 ## Cenário de demonstração
 
@@ -62,15 +62,15 @@ A primeira chamada devolve JSON com `node_ids: ["A", "D", "E", "C"]`, `distance_
 
 Nós isolados, ciclos e laços dirigidos positivos são permitidos. Listas tornam-se tuplas; nós, trechos e metadados são congelados, e os índices expõem somente leitura. Uma alteração nos atributos do cenário exige um novo arquivo e `graph_version`; a carga não consulta um registro externo de versões.
 
-## Algoritmo e integração futura
+## Algoritmo e integração
 
-`app/routing/graph.py` valida e carrega o grafo. `app/routing/dijkstra.py` recebe o grafo, os IDs de origem/destino e um mapa `segment_id → minutos`. A aplicação futura fornecerá esse mapa a partir da previsão em lote; Dijkstra não depende de ML, HTTP ou banco. O mapa precisa cobrir exatamente todos os trechos, mesmo os que não forem visitados. Valores não numéricos, zero, negativos, NaN e infinitos são rejeitados antes da busca.
+`app/routing/graph.py` valida e carrega o grafo. `app/routing/dijkstra.py` recebe o grafo, os IDs de origem/destino e um mapa `segment_id → minutos`. A API fornece esse mapa a partir da previsão em lote; Dijkstra não depende de ML, HTTP ou banco. O mapa precisa cobrir exatamente todos os trechos, mesmo os que não forem visitados. Valores não numéricos, zero, negativos, NaN e infinitos são rejeitados antes da busca.
 
 O algoritmo usa lista de adjacência e heap de pares `(tempo acumulado, node_id)`. Em igualdade exata de tempo, o heap prioriza o menor identificador de nó. Os trechos são percorridos em ordem de `segment_id`, e uma rota com custo igual não substitui o predecessor encontrado primeiro. Isso mantém o resultado estável quando a ordem do JSON muda; não promete escolher a sequência inteira lexicograficamente mínima. Tempos diferentes, mesmo próximos, não são tratados como empate.
 
 O resultado contém versão do grafo, nós e trechos ordenados, distância total e tempo total. Origem igual ao destino retorna um nó e totais zero. Nó desconhecido é distinto de ausência de caminho dirigido. Somas que excedem a representação finita de ponto flutuante geram falha controlada. O cálculo copia os custos e não grava tempos no grafo compartilhado.
 
-A busca e a preparação das adjacências usam memória O(V + E), com custo de tempo O((V + E) log V) para os grafos simples suportados. O [contrato HTTP futuro](route-intelligence-contract.md) definirá associação de coordenadas aos nós, contexto, previsões, status HTTP e prontidão. O `/health` atual continua medindo apenas disponibilidade; a demonstração não carrega grafo no startup do servidor.
+A busca e a preparação das adjacências usam memória O(V + E), com custo de tempo O((V + E) log V) para os grafos simples suportados. O [contrato HTTP](route-intelligence-contract.md) define associação de coordenadas aos nós, contexto, previsões, status HTTP e prontidão. A API carrega os recursos no startup e retorna `200 UP` somente quando grafo, modelo e tráfego estiverem prontos; a CLI de referência continua independente desse carregamento.
 
 ## Testes, build e medição
 
@@ -83,7 +83,7 @@ uv build --project .\services\route-intelligence-service
 uv run --project .\services\route-intelligence-service --locked python -m pytest .\services\route-intelligence-service\tests\test_routing_performance.py -s
 ```
 
-Verificado em 2026-10-02 com Python 3.12.14 e uv 0.12.11:
+Registro da etapa do grafo, verificado em 2026-10-02 com Python 3.12.14 e uv 0.12.11:
 
 - 116 testes passaram, incluindo os 14 da base FastAPI, validação do grafo, direção, desconexão, ciclos, soma, empates, overflow, imutabilidade e comandos de demonstração.
 - Os custos foram comparados com enumeração independente de caminhos simples em 20 grafos pequenos gerados com seed fixa, para todos os pares de nós.

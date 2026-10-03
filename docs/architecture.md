@@ -4,7 +4,7 @@
 
 Monorepo com seis aplicações Spring Boot executadas separadamente. Cada aplicação tem seu próprio build Maven, configuração e testes. Nenhum serviço depende do código Java de outro serviço.
 
-O monorepo também contém [Route Intelligence em Python](route-intelligence-foundation.md), com FastAPI, configuração por ambiente, dependências travadas e `/health` na porta 8000. Já calcula rotas em um [grafo sintético com custos de referência](road-graph.md) por terminal e possui [treinamento e avaliação offline de ML](route-segment-model.md). A [consulta HTTP de rotas previstas](intelligent-routing-api.md) está implementada; a integração com Delivery ainda não existe. Ele não acessa os bancos nem está conectado ao Gateway. Seu build e testes são independentes do Maven.
+O monorepo também contém [Route Intelligence em Python](route-intelligence-foundation.md), com FastAPI, configuração por ambiente, dependências travadas e `/health` na porta 8000. Já calcula rotas em um [grafo sintético com custos de referência](road-graph.md) por terminal e possui [treinamento e avaliação offline de ML](route-segment-model.md). A [consulta HTTP de rotas previstas](intelligent-routing-api.md) está implementada; a [integração com Delivery](delivery-route-integration.md) também está implementada. Ele não acessa os bancos nem está conectado ao Gateway. Seu build e testes são independentes do Maven.
 
 O pacote `training` gera e valida o [dataset sintético de tempo por trecho](route-segment-dataset.md), compara modelos, seleciona na validação e avalia o artefato no teste reservado. `app/ml` contém features compartilhadas, pipelines, carregamento validado e predictor em lote. Geração e treinamento não são executados no startup ou em endpoints.
 
@@ -21,7 +21,7 @@ flowchart TD
     Catalog --> CatalogDB[(PostgreSQL do catálogo)]
     Orders --> OrderDB[(PostgreSQL de pedidos)]
     Deliveries --> DeliveryDB[(PostgreSQL de entregas)]
-    Routes[Route Intelligence :8000 - rotas e health]
+    Deliveries -->|HTTP: planejar rota| Routes[Route Intelligence :8000 - rotas e health]
 ```
 
 O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utilizam Spring MVC. As rotas são estáticas e apontam para `localhost`, pois as aplicações são executadas diretamente na máquina nesta etapa. O Compose sobe os bancos de catálogo, pedidos e entregas, com volumes separados.
@@ -70,6 +70,8 @@ O ciclo é `CREATED → ASSIGNED → PICKED_UP → IN_TRANSIT → DELIVERED`, co
 A atribuição exige um entregador ativo, carregado do banco pelo adaptador. Um índice único parcial impede duas entregas em andamento para o mesmo entregador, e outra restrição garante uma entrega por pedido. `@Version` protege atualizações da mesma entrega. O [documento do domínio](delivery-domain.md) detalha as regras; a [documentação de persistência](delivery-persistence.md) explica schema, transações e testes.
 
 As portas de repositório ficam em `application`, e as entidades e adaptadores em `infrastructure.persistence`. Cada transição lê a entidade, reconstrói o domínio com `Delivery.restore`, aplica o comando e grava o estado na mesma transação. O domínio permanece independente de JPA. Os serviços de aplicação coordenam os comandos e recebem um `Clock` UTC para horários com precisão de microssegundos. Controllers e DTOs em `api` expõem os comandos, sem expor entidades JPA. A API traduz recurso ausente para `404`, entrada inválida para `400`, conflitos de estado/unicidade/versão para `409` e erros inesperados para `500` com mensagem genérica. O [contrato de entregas](delivery-lifecycle.md) detalha os endpoints e as limitações.
+
+O [planejamento de rotas](delivery-route-integration.md) usa `DeliveryRouteService` e a porta `RouteOptimizer`, com tipos Java puros. A chamada HTTP ocorre entre a leitura do snapshot e uma transação curta de gravação. O plano em JSONB é salvo junto ao incremento condicional da versão da entrega; concorrência rejeita resultados obsoletos. O ciclo e seus timestamps permanecem intactos.
 
 ## Pedidos
 
@@ -161,6 +163,6 @@ Delivery testa seu domínio sem banco: transições, chegada antes da conclusão
 
 ## Próximas etapas
 
-O próximo passo é integrar o plano de rota ao Delivery. Java continua responsável pelas transações; Python já prevê tempos por trecho e calcula rotas por HTTP. O [plano de Route Intelligence](route-intelligence.md), o [contrato HTTP](route-intelligence-contract.md), o [plano de dados](route-intelligence-data.md) e o [roadmap](roadmap.md) descrevem essa evolução.
+O próximo passo é preparar as imagens e a rede do Compose para a demonstração integrada. Java continua responsável pelas transações; Python já prevê tempos por trecho e calcula rotas por HTTP. O [plano de Route Intelligence](route-intelligence.md), o [contrato HTTP](route-intelligence-contract.md), o [plano de dados](route-intelligence-data.md) e o [roadmap](roadmap.md) descrevem essa evolução.
 
 A demonstração com os serviços em containers usará hostnames da rede Docker e preservará os volumes existentes. Mensageria, outbox e compensações serão avaliadas quando o fluxo precisar dessas garantias. Produtos, pagamentos, autenticação, múltiplas entregas e cloud terão etapas próprias.

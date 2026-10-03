@@ -1,6 +1,6 @@
 # Route Intelligence
 
-Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md), a [base Python](route-intelligence-foundation.md), o [roteamento com tempos de referência](road-graph.md), o [dataset sintético](route-segment-dataset.md) e o [modelo com avaliação offline](route-segment-model.md) estão implementados. A [consulta HTTP de rotas previstas](intelligent-routing-api.md) também está implementada. A integração com Delivery ainda é uma etapa futura.
+Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md), a [base Python](route-intelligence-foundation.md), o [roteamento com tempos de referência](road-graph.md), o [dataset sintético](route-segment-dataset.md) e o [modelo com avaliação offline](route-segment-model.md) estão implementados. A [consulta HTTP de rotas previstas](intelligent-routing-api.md) também está implementada. A [integração com Delivery](delivery-route-integration.md) também está implementada.
 
 ## Objetivo
 
@@ -38,7 +38,7 @@ flowchart TD
     Routing --> Result[Rota com menor tempo previsto]
 ```
 
-O cliente acessa o sistema pelo Gateway. O Delivery chama o serviço Python internamente, sem expor uma nova rota pública no Gateway. Order e Delivery também começarão se comunicando por HTTP, com criação idempotente de entregas. Mensageria pode entrar quando precisarmos processar eventos de forma independente e garantir sua entrega.
+O cliente acessa o sistema pelo Gateway. O Delivery chama o serviço Python internamente, sem expor uma nova rota pública no Gateway. Order e Delivery já se comunicam por HTTP, com criação idempotente de entregas. Mensageria pode entrar quando precisarmos processar eventos de forma independente e garantir sua entrega.
 
 ## O que falta no backend
 
@@ -56,7 +56,7 @@ Somente um pedido confirmado pode solicitar entrega. A integração verifica res
 | `DeliveryLocation` | Descrição do local e `GeoPoint`, copiados para a entrega; não presume geocodificação |
 | `GeoPoint` | Latitude finita entre -90 e 90 e longitude finita entre -180 e 180, em WGS84 |
 | `Courier` | Identidade local mínima e indicador ativo; atribuição manual |
-| `RoutePlan` | Origem/destino usados, partida planejada, instante da previsão, trechos ordenados, distância, tempo previsto e versões do modelo/grafo |
+| `DeliveryRoutePlan` | Referência à entrega com snapshots imutáveis, partida planejada, horário local, resposta prevista e versão usada no commit |
 | `SegmentTraversal` | Passagem observada por um trecho; será adicionada na etapa de coleta de observações |
 
 Cada serviço acessa apenas o próprio banco, sem chaves estrangeiras entre bancos. A entrega guarda uma cópia da origem e do destino. Assim, mudar o endereço de um restaurante ou pedido não altera uma entrega já criada.

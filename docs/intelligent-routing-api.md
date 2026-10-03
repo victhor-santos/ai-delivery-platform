@@ -71,4 +71,4 @@ Os arquivos gerados não entram nos pacotes nem no Git. As suítes Maven não fo
 
 ## Próxima etapa
 
-Após integrar esta branch, seguir com `feature/delivery-route-integration`: porta Java `RouteOptimizer`, cliente HTTP, validação da resposta e persistência do plano por entrega. Os testes devem cobrir timeout, indisponibilidade, resposta inválida e resultado obsoleto por concorrência, preservando o estado e o plano anterior. A aplicação Java ainda não chama Python; Docker e frontend pertencem a etapas posteriores do [roadmap](roadmap.md).
+A etapa seguinte acrescentou a [integração com Delivery](delivery-route-integration.md): porta Java `RouteOptimizer`, cliente HTTP, validação da resposta e persistência do plano, com timeout e controle de concorrência. A próxima branch é `feature/route-intelligence-compose`. Frontend segue como evolução posterior do [roadmap](roadmap.md).

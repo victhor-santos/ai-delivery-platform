@@ -10,11 +10,11 @@ A localização de coleta pode ser informada no cadastro ou atualizada depois. E
 
 O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Um pedido confirmado pode solicitar entrega, com validação do restaurante no catálogo, snapshots persistidos e criação idempotente no Delivery. Ainda não há itens, valores ou pagamento. Veja a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
-O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Veja o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
+O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Já consulta Python e salva o último plano de rota por entrega. Veja o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
 Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. Usuários e pagamentos ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
 
-Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A [API de rotas previstas](docs/intelligent-routing-api.md) combina o modelo em lote com Dijkstra. As chamadas do Delivery ainda serão implementadas. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
+Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A [API de rotas previstas](docs/intelligent-routing-api.md) combina o modelo em lote com Dijkstra. Delivery já consulta essa API e persiste o plano por entrega. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
 O gerador offline já produz observações sintéticas por trecho, com seed, timestamps de disponibilidade, schema de features, partições temporais por cenário e manifesto com checksums. Os dados completos são gerados localmente e ficam fora do Git. Veja [como gerar e conferir o dataset](docs/route-segment-dataset.md).
 
@@ -22,12 +22,12 @@ O treinamento offline compara Dummy, regressão linear, Random Forest e referên
 
 ## Evolução para AI Engineering
 
-A consulta `POST /api/routes/fastest` retorna o caminho de menor tempo previsto, com prontidão dos recursos e falhas controladas. O próximo passo é integrar e persistir o plano no Delivery. Java continuará cuidando das transações. A avaliação offline já compara os caminhos previstos com os melhores caminhos pelos tempos observados no teste sintético.
+A consulta `POST /api/routes/fastest` retorna o caminho de menor tempo previsto, com prontidão dos recursos e falhas controladas. Delivery já integra e persiste o plano. O próximo passo é preparar as imagens e a execução em rede pelo Compose. Java continuará cuidando das transações. A avaliação offline já compara os caminhos previstos com os melhores caminhos pelos tempos observados no teste sintético.
 
-A integração de rotas com Delivery ainda está planejada. Grafo e observações são fictícios e não representam ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
+A [integração de rotas com Delivery](docs/delivery-route-integration.md) está implementada. Grafo e observações são fictícios e não representam ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
 
 - [Arquitetura de Route Intelligence e domínio de Delivery](docs/route-intelligence.md).
-- [Contrato HTTP e integração futura Java ↔ Python](docs/route-intelligence-contract.md).
+- [Contrato HTTP Java ↔ Python](docs/route-intelligence-contract.md).
 - [Dados, prevenção de leakage e avaliação dos modelos](docs/route-intelligence-data.md).
 - [Roadmap por feature branch](docs/roadmap.md).
 
@@ -154,6 +154,8 @@ O Order Service exige `order-db` em execução, e Delivery exige `delivery-db`. 
 ## Criar e acompanhar entregas
 
 A API atende diretamente em `http://localhost:8085` ou pelo Gateway em `http://localhost:8080`, sob `/api/deliveries`. Ela inclui cadastro de entregadores em `/api/deliveries/couriers`, criação de entregas, consulta por entrega/pedido e comandos do ciclo. Os horários são gerados pelo servidor; comandos repetidos retornam `409`.
+
+Delivery também oferece `POST` e `GET /api/deliveries/{id}/route` para planejar e consultar a rota. A nova previsão exige Python com modelo compatível; falhas preservam o plano anterior. Veja [configuração e exemplos de planejamento](docs/delivery-route-integration.md).
 
 Veja [o contrato, exemplos completos e validação de entregas](docs/delivery-lifecycle.md). Para criar a entrega com dados do pedido e do catálogo, use a [solicitação de entrega de um pedido confirmado](docs/order-delivery-integration.md).
 
