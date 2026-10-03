@@ -30,10 +30,10 @@ class HttpDeliveryIntegrationTests {
         });
         server.start();
         try (var client = HttpClient.newHttpClient()) {
-            String url = "http://localhost:" + server.getAddress().getPort();
+            String url = "http://127.0.0.1:" + server.getAddress().getPort();
             var adapter = new HttpDeliveryIntegration(client, new ObjectMapper(), url, url, Duration.ofMillis(50));
             assertThatThrownBy(() -> adapter.findById(UUID.randomUUID()))
-                    .isInstanceOf(RemoteServiceUnavailableException.class).hasRootCauseInstanceOf(HttpTimeoutException.class);
+                    .isInstanceOf(RemoteServiceUnavailableException.class).hasCauseInstanceOf(HttpTimeoutException.class);
         } finally {
             server.stop(0);
         }
