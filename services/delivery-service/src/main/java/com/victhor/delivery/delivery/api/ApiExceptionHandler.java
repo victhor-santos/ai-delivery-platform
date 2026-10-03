@@ -19,6 +19,11 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 import com.victhor.delivery.delivery.application.CourierNotFoundException;
 import com.victhor.delivery.delivery.application.DeliveryNotFoundException;
+import com.victhor.delivery.delivery.application.RouteNotFoundException;
+import com.victhor.delivery.delivery.application.RoutePlanNotFoundException;
+import com.victhor.delivery.delivery.application.RouteServiceUnavailableException;
+import com.victhor.delivery.delivery.application.StaleRoutePlanException;
+import com.victhor.delivery.delivery.application.UnsupportedRouteLocationException;
 import com.victhor.delivery.delivery.domain.DeliveryStateConflictException;
 
 @RestControllerAdvice
@@ -35,6 +40,41 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(CourierNotFoundException.class)
     ProblemDetail handleCourierNotFound(CourierNotFoundException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Entregador não encontrado.");
+    }
+
+    @ExceptionHandler(RoutePlanNotFoundException.class)
+    ProblemDetail handlePlanNotFound(RoutePlanNotFoundException exception) {
+        return routeProblem(HttpStatus.NOT_FOUND, "A entrega ainda não possui um plano de rota.", "ROUTE_PLAN_NOT_FOUND");
+    }
+
+    @ExceptionHandler(UnsupportedRouteLocationException.class)
+    ProblemDetail handleUnsupportedRoute(UnsupportedRouteLocationException exception) {
+        return routeProblem(HttpStatus.UNPROCESSABLE_CONTENT, "A localização da entrega não é atendida pelo grafo de rotas.",
+                "OUTSIDE_ROUTE_COVERAGE");
+    }
+
+    @ExceptionHandler(RouteNotFoundException.class)
+    ProblemDetail handleRouteNotFound(RouteNotFoundException exception) {
+        return routeProblem(HttpStatus.UNPROCESSABLE_CONTENT, "Não existe caminho entre as localizações da entrega.",
+                "ROUTE_NOT_FOUND");
+    }
+
+    @ExceptionHandler(RouteServiceUnavailableException.class)
+    ProblemDetail handleRouteUnavailable(RouteServiceUnavailableException exception) {
+        return routeProblem(HttpStatus.SERVICE_UNAVAILABLE, "Não foi possível consultar uma nova rota. Tente novamente mais tarde.",
+                "ROUTE_SERVICE_UNAVAILABLE");
+    }
+
+    @ExceptionHandler(StaleRoutePlanException.class)
+    ProblemDetail handleStaleRoute(StaleRoutePlanException exception) {
+        return routeProblem(HttpStatus.CONFLICT, "A entrega foi alterada durante o cálculo da rota. Consulte o estado atual antes de tentar novamente.",
+                "STALE_ROUTE_PLAN");
+    }
+
+    private static ProblemDetail routeProblem(HttpStatus status, String detail, String code) {
+        var problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setProperty("code", code);
+        return problem;
     }
 
     @ExceptionHandler(DeliveryStateConflictException.class)
