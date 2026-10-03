@@ -1,6 +1,6 @@
 # Route Intelligence
 
-Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md), a [base Python](route-intelligence-foundation.md), o [roteamento com tempos de referência](road-graph.md) e o [gerador de dataset sintético](route-segment-dataset.md) estão implementados. Treinamento e consulta HTTP de rotas ainda são etapas futuras.
+Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md), a [base Python](route-intelligence-foundation.md), o [roteamento com tempos de referência](road-graph.md), o [dataset sintético](route-segment-dataset.md) e o [modelo com avaliação offline](route-segment-model.md) estão implementados. Consulta HTTP de rotas e integração com Delivery ainda são etapas futuras.
 
 ## Objetivo
 
@@ -123,6 +123,8 @@ services/route-intelligence-service/
         routing/__main__.py
         routing/data/synthetic-city-v1.json
         ml/features.py
+        ml/pipelines.py
+        ml/artifacts.py
         ml/predictor.py
     training/
         generate_dataset.py
@@ -130,6 +132,11 @@ services/route-intelligence-service/
         synthetic.py
         splits.py
         dataset.py
+        load_dataset.py
+        serialization.py
+        experiment.py
+        metrics.py
+        route_evaluation.py
         train.py
         evaluate.py
     data/synthetic/
@@ -141,7 +148,7 @@ services/route-intelligence-service/
     Dockerfile
 ```
 
-A base usa Python 3.12+, FastAPI, Pydantic, Pydantic Settings e Uvicorn, com pytest e Ruff em desenvolvimento. A versão de referência do Python é 3.12, registrada em `.python-version`; as dependências estão travadas em `uv.lock`. O gerador usa a biblioteca padrão, Pydantic e `tzdata` fixado para derivar horário e dia no fuso do grafo. NumPy, pandas, scikit-learn e joblib entram com os modelos. PyTorch e TensorFlow não são necessários para os modelos previstos.
+A base usa Python 3.12+, FastAPI, Pydantic, Pydantic Settings e Uvicorn, com pytest e Ruff em desenvolvimento. A versão de referência do Python é 3.12, registrada em `.python-version`; as dependências estão travadas em `uv.lock`. O gerador usa a biblioteca padrão, Pydantic e `tzdata` fixado para derivar horário e dia no fuso do grafo. Os modelos usam NumPy, scikit-learn e joblib, sem pandas. PyTorch e TensorFlow não são necessários para os modelos previstos.
 
 ## Docker e execução
 

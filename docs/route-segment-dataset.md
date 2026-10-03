@@ -135,4 +135,4 @@ uv lock --project .\services\route-intelligence-service --check
 uv build --project .\services\route-intelligence-service
 ```
 
-Esta etapa não altera Java, bancos, Gateway ou Compose; as suítes Maven não foram repetidas. A próxima feature treinará Dummy, regressão linear e Random Forest, comparará com a referência física e avaliará o modelo escolhido no teste reservado, conforme o [plano de dados e avaliação](route-intelligence-data.md).
+Esta etapa não altera Java, bancos, Gateway ou Compose; as suítes Maven não foram repetidas. Treinamento, comparação dos candidatos e avaliação no teste reservado foram implementados depois, na [etapa do modelo](route-segment-model.md).

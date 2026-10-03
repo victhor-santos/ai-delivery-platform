@@ -18,11 +18,13 @@ Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/he
 
 O gerador offline já produz observações sintéticas por trecho, com seed, timestamps de disponibilidade, schema de features, partições temporais por cenário e manifesto com checksums. Os dados completos são gerados localmente e ficam fora do Git. Veja [como gerar e conferir o dataset](docs/route-segment-dataset.md).
 
+O treinamento offline compara Dummy, regressão linear, Random Forest e referência física, seleciona pela validação e avalia o modelo salvo no teste reservado. O predictor em lote valida entradas e tempos; ainda não está conectado à API. Veja [treinamento, resultados e artefatos](docs/route-segment-model.md), incluindo a validação nativa no Windows e a compatibilidade por plataforma.
+
 ## Evolução para AI Engineering
 
-O próximo passo é treinar e comparar os modelos de tempo por trecho, usando as partições já geradas e uma referência física. Java continuará cuidando das transações. Depois, o modelo escolhido fornecerá os custos para Dijkstra. A demonstração atual já escolhe uma rota mais longa quando ela é mais rápida pelos custos de referência.
+O próximo passo é conectar o predictor ao Dijkstra e expor a consulta de rota mais rápida por HTTP, com prontidão do modelo e falhas controladas. Java continuará cuidando das transações. A avaliação offline já compara os caminhos previstos com os melhores caminhos pelos tempos observados no teste sintético.
 
-O treinamento, o modelo e a integração de rotas ainda estão planejados. Grafo e observações são fictícios e não representam ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
+A integração de rotas com Delivery ainda está planejada. Grafo e observações são fictícios e não representam ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
 
 - [Arquitetura de Route Intelligence e domínio de Delivery](docs/route-intelligence.md).
 - [Contrato futuro Java ↔ Python](docs/route-intelligence-contract.md).

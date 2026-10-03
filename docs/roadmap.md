@@ -1,6 +1,6 @@
 # Roadmap
 
-O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14 e o grafo com Dijkstra pelo PR #15. `feature/route-segment-dataset` acrescenta o [gerador reproduzível, schema de features, partições temporais e manifesto](route-segment-dataset.md). A próxima etapa é `feature/route-segment-model`, para comparar modelos usando esses dados.
+O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14, o grafo com Dijkstra pelo PR #15 e o dataset pelo PR #16. `feature/route-segment-model` acrescenta [comparação, seleção, artefato, predictor e avaliação offline](route-segment-model.md). A próxima etapa é `feature/intelligent-routing-api`, para conectar o modelo ao Dijkstra e expor o contrato HTTP.
 
 A base necessária para ML é uma entrega com origem, destino e ciclo de vida definido. Pagamentos, cardápios completos e autenticação podem evoluir separadamente.
 

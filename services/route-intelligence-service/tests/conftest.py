@@ -1,6 +1,26 @@
 import pytest
 
 
+@pytest.fixture(scope="session")
+def model_bundle(tmp_path_factory):
+    from app.routing.demo import load_demo_graph
+    from training.dataset import export_dataset
+    from training.load_dataset import load_dataset
+    from training.synthetic import GeneratorConfig
+    from training.train import train_dataset
+
+    root = tmp_path_factory.mktemp("segment-model")
+    dataset = root / "dataset"
+    artifact = root / "artifact"
+    export_dataset(
+        load_demo_graph(),
+        GeneratorConfig(train_days=7, validation_days=7, test_days=7, interval_minutes=360),
+        dataset,
+    )
+    train_dataset(load_dataset(dataset), artifact)
+    return artifact, dataset
+
+
 @pytest.fixture
 def graph_data():
     return {
