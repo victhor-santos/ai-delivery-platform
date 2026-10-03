@@ -1,6 +1,6 @@
 # Dados e modelo de tempo por trecho
 
-O [gerador de dataset sintético](route-segment-dataset.md) implementa seed, schema compartilhado de features, observações com disponibilidade, partições por tempo/cenário e manifesto. O [treinamento e a avaliação offline](route-segment-model.md) já comparam modelos, selecionam na validação e produzem artefato e relatórios. Este documento mantém as regras de dados e avaliação; a integração futura está descrita na [arquitetura](route-intelligence.md) e no [contrato](route-intelligence-contract.md).
+O [gerador de dataset sintético](route-segment-dataset.md) implementa seed, schema compartilhado de features, observações com disponibilidade, partições por tempo/cenário e manifesto. O [treinamento e a avaliação offline](route-segment-model.md) já comparam modelos, selecionam na validação e produzem artefato e relatórios. Este documento mantém as regras de dados e avaliação; a integração está descrita na [arquitetura](route-intelligence.md) e no [contrato](route-intelligence-contract.md).
 
 ## O que o modelo prevê
 
@@ -110,7 +110,7 @@ As métricas sintéticas medem o comportamento dentro das hipóteses do gerador.
 
 ## Treinamento, artefatos e inferência
 
-Fluxo implementado offline, seguido da integração planejada:
+Fluxo implementado, com treinamento offline e inferência pela API:
 
 ```text
 dataset -> divisão dos conjuntos -> pipeline de features -> treino
@@ -120,7 +120,7 @@ dataset -> divisão dos conjuntos -> pipeline de features -> treino
 
 `training.train` produz um diretório novo com `segment_travel_time_model.joblib`, `metadata.json` e `validation-report.json`. `training.evaluate` avalia o artefato no teste original sem reajustar ou selecionar modelos. Checksums, versões do runtime/dependências/plataforma, dataset e grafo são conferidos antes de carregar. O [guia do modelo](route-segment-model.md) documenta comandos, seleção, resultados e limitações. O gerador é executado por `python -m training.generate_dataset`, conforme o [guia do dataset](route-segment-dataset.md).
 
-O FastAPI carregará o pipeline uma vez por processo e não treinará no startup ou em uma requisição. O mesmo pipeline fará as transformações em treino e inferência. Artefatos serão de origem controlada e carregados em ambiente compatível: joblib usa mecanismos de persistência que não devem receber arquivos não confiáveis. [Persistência de modelos](https://scikit-learn.org/stable/model_persistence.html).
+O FastAPI carrega o pipeline uma vez por processo e não treina no startup ou em uma requisição. O mesmo pipeline realiza as transformações em treino e inferência. Artefatos devem ser de origem controlada e carregados em ambiente compatível: joblib usa mecanismos de persistência que não devem receber arquivos não confiáveis. [Persistência de modelos](https://scikit-learn.org/stable/model_persistence.html).
 
 O primeiro versionamento será por arquivos de metadados e artefatos imutáveis; MLflow, registry, monitoramento de drift e retreinamento automático ficarão para depois do caso funcional.
 

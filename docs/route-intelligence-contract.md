@@ -1,10 +1,10 @@
 # Contrato de rotas
 
-Contrato implementado no serviço Python. A integração Java ainda será implementada. `/health` verifica a prontidão dos recursos de roteamento. Veja a [execução da API](intelligent-routing-api.md), o [roteamento de referência](road-graph.md) e a [arquitetura](route-intelligence.md).
+Contrato implementado no serviço Python. A [integração Java com Delivery](delivery-route-integration.md) também está implementada. `/health` verifica a prontidão dos recursos de roteamento. Veja a [execução da API](intelligent-routing-api.md), o [roteamento de referência](road-graph.md) e a [arquitetura](route-intelligence.md).
 
-## Porta Java planejada
+## Porta Java
 
-A aplicação Java acessará o cálculo de rotas pela interface `application/RouteOptimizer`:
+A aplicação Java acessa o cálculo de rotas pela interface `application/RouteOptimizer`:
 
 ```java
 OptimizedRoute optimizeRoute(GeoPoint origin, GeoPoint destination, RouteContext context);
@@ -12,9 +12,9 @@ OptimizedRoute optimizeRoute(GeoPoint origin, GeoPoint destination, RouteContext
 
 `RouteContext` leva a partida planejada. `OptimizedRoute` devolve o caminho, os custos e as versões usadas. Esses tipos pertencem à aplicação Java e não dependem de HTTP, JPA ou bibliotecas Python. A interface distingue três falhas: entrada não suportada, ausência de caminho e serviço indisponível.
 
-`infrastructure/FastApiRouteOptimizerClient` implementará a interface e converterá os tipos Java para os DTOs HTTP. A URL será configurável: `http://localhost:8000` na máquina e `http://route-intelligence-service:8000` na rede Docker.
+`infrastructure/FastApiRouteOptimizerClient` implementa a interface e converte os tipos Java para os DTOs HTTP. A URL é configurável: `http://localhost:8000` na máquina e `http://route-intelligence-service:8000` na rede Docker.
 
-Antes de salvar o plano, o cliente confere os campos obrigatórios, a ordem dos trechos, os custos e os totais. Uma resposta inválida é tratada como falha de integração.
+Antes de salvar o plano, o cliente confere campos obrigatórios, quantidade de coordenadas e trechos, pontas do percurso, custos e totais. Preserva a ordem recebida; não mantém outra cópia do grafo para reconstruir cada identificador de trecho. Uma resposta inválida é tratada como falha de integração.
 
 ## POST /api/routes/fastest
 
@@ -109,15 +109,17 @@ Falha de conexão, timeout e resposta inválida também viram indisponibilidade 
 
 Retorna `200` com `{"status":"UP"}` se grafo, modelo, schema e tráfego estiverem carregados e compatíveis e o teste inicial de inferência produzir custos válidos. Caso contrário, retorna `503` com `{"status":"DOWN"}`. A API continua respondendo sem modelo; não executa treinamento para se recuperar. Os recursos são carregados uma vez por processo, sem recarga automática.
 
-## Resiliência e consistência planejadas no Java
+## Resiliência e consistência no Java
 
-Vamos começar com timeout de conexão de 1 segundo e de resposta de 3 segundos, configuráveis e ajustados após medir a API com inferência. Não haverá retentativa automática nessa versão. O grafo está limitado a 200 nós, 1000 trechos e arquivo de 1 MiB; o [guia de roteamento](road-graph.md) registra os testes de desempenho sem ML ou HTTP.
+Delivery usa timeout de conexão de 1 segundo e da chamada completa de 3 segundos, configuráveis. O limite inclui leitura do corpo da resposta. Não há retentativa automática. O grafo está limitado a 200 nós, 1000 trechos e arquivo de 1 MiB; o [guia de roteamento](road-graph.md) registra os testes de desempenho sem ML ou HTTP.
 
-Se o serviço estiver indisponível, o Delivery retorna `503` na operação de planejamento. O cliente pode tentar novamente. A rota anterior fica armazenada com seu instante e versão, mas não é apresentada como uma nova previsão. Também não haverá troca automática por uma rota calculada apenas pela distância.
+Se o serviço estiver indisponível, o Delivery retorna `503` na operação de planejamento. O cliente pode tentar novamente. A rota anterior fica armazenada com seu instante e versão, mas não é apresentada como uma nova previsão. Também não há troca automática por uma rota calculada apenas pela distância.
 
-O caso de uso lê a entrega, encerra a leitura, chama Python e salva a resposta em uma transação curta. Antes de salvar, confere se o estado ou a versão da entrega mudou. O contrato público de Delivery definirá os status das demais falhas de negócio, sem copiar automaticamente os status internos do Python.
+O caso de uso lê a entrega, encerra a leitura, chama Python e salva a resposta em uma transação curta. Antes de salvar, confere estado e versão por uma atualização condicional. Uma disputa retorna `409` e preserva o plano anterior. O [contrato público de Delivery](delivery-route-integration.md) distingue suas falhas sem copiar automaticamente os status internos do Python.
 
 ## Testes
+
+Python e Java possuem as suítes abaixo; execução integrada em containers pertence à próxima etapa.
 
 - FastAPI: entrada válida, inválida, fora da cobertura, ausência de caminho e modelo indisponível, com status e schemas acima.
 - Predictor: mesma transformação no treinamento e inferência, artefato incompatível e previsões inválidas.

@@ -2,6 +2,8 @@
 
 Delivery oferece criação e consulta de entregas, cadastro mínimo de entregador e comandos do ciclo. A API atende diretamente em `http://localhost:8085` e pelo Gateway em `http://localhost:8080`. Todos os endpoints usam `/api/deliveries`, incluindo entregadores; a rota existente do Gateway encaminha o caminho completo.
 
+O [planejamento de rotas](delivery-route-integration.md) acrescenta `POST` e `GET /api/deliveries/{id}/route`, com resposta própria, sem alterar o ciclo descrito abaixo.
+
 ## Contrato HTTP
 
 | Requisição | Resultado de sucesso |

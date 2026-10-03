@@ -35,13 +35,13 @@ docker compose stop delivery-db
 
 ## Schema e garantias
 
-Flyway aplica `V1__create_delivery_tables.sql`. Hibernate usa `ddl-auto=validate`, e `open-in-view` fica desabilitado. As versões das dependências seguem o Spring Boot, como nos outros serviços.
+Flyway aplica `V1__create_delivery_tables.sql` e `V2__create_delivery_route_plans.sql`. A segunda migration guarda o [último plano de rota por entrega](delivery-route-integration.md), sem modificar os registros antigos. Hibernate usa `ddl-auto=validate`, e `open-in-view` fica desabilitado. As versões das dependências seguem o Spring Boot, como nos outros serviços.
 
 `couriers` guarda UUID, indicador ativo e versão. `deliveries` guarda a referência ao pedido, as duas localizações, entregador atribuído, estado, horários e versão. A chave estrangeira de entregador aponta para uma tabela do próprio serviço. `order_id` é apenas uma referência: Delivery não consulta tabelas do banco de pedidos.
 
 O banco garante:
 
-- Uma entrega por `order_id`, inclusive depois de cancelamento. Nesta etapa, repetir a criação gera conflito; ainda não há contrato idempotente de integração.
+- Uma entrega por `order_id`, inclusive depois de cancelamento. A criação direta duplicada gera conflito; a [integração por pedido](order-delivery-integration.md) recupera idempotentemente entregas com os mesmos snapshots.
 - Um entregador por entrega em andamento, pelo índice único parcial sobre `courier_id` quando o estado é `ASSIGNED`, `PICKED_UP` ou `IN_TRANSIT`.
 - Coordenadas válidas, descrições preenchidas e consistência entre estado e horários.
 - Referência a um entregador cadastrado, quando houver atribuição.
@@ -88,4 +88,4 @@ Invoke-RestMethod http://localhost:8085/actuator/info
 Invoke-RestMethod http://localhost:8085/api/deliveries/ping
 ```
 
-Com o Gateway iniciado em outro terminal, `http://localhost:8080/api/deliveries/ping` continua encaminhando para Delivery. O health de Delivery inclui seu banco. A [API de negócio](delivery-lifecycle.md) também usa o prefixo `/api/deliveries/**`. A integração automática com pedidos e o serviço Python continuam planejados.
+Com o Gateway iniciado em outro terminal, `http://localhost:8080/api/deliveries/ping` continua encaminhando para Delivery. O health de Delivery inclui seu banco. A [API de negócio](delivery-lifecycle.md) também usa o prefixo `/api/deliveries/**`. A [integração com pedidos](order-delivery-integration.md) e o [planejamento com Python](delivery-route-integration.md) estão implementados.
