@@ -47,6 +47,17 @@ function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [int]$Status 
 
 Push-Location $repositoryRoot
 try {
+    if ($CheckRecovery -or $CheckPersistence) {
+        $gatewayBinding = @(& docker @composeArguments port api-gateway 8080)
+        if ($LASTEXITCODE -ne 0 -or $gatewayBinding.Count -ne 1) {
+            throw 'Cannot locate the Gateway in the selected Compose project.'
+        }
+        $publishedPort = [int]($gatewayBinding[0].Split(':')[-1])
+        if (-not $GatewayUrl.IsLoopback -or $GatewayUrl.Port -ne $publishedPort) {
+            throw 'GatewayUrl does not match the local Compose project. Check ComposeProject and EnvFile before recovery checks.'
+        }
+    }
+
     foreach ($service in @('users', 'catalog', 'orders', 'payments', 'deliveries')) {
         Invoke-Api 'GET' "/api/$service/ping" | Out-Null
     }
