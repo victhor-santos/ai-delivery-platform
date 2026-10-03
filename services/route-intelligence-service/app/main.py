@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 
 from app.api.health import router as health_router
+from app.api.problems import register_problem_handlers
+from app.api.routes import router as routes_router
 from app.config import Settings
 from app.services.runtime import RoutingRuntime, load_runtime, utc_now
 
@@ -32,5 +34,7 @@ def create_app(
     )
     app.state.routing_runtime = RoutingRuntime()
     app.state.clock = clock
+    register_problem_handlers(app)
     app.include_router(health_router)
+    app.include_router(routes_router)
     return app
