@@ -1,11 +1,16 @@
 package com.victhor.delivery.delivery.infrastructure;
 
 import java.net.http.HttpClient;
+import java.time.Clock;
 import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import com.victhor.delivery.delivery.application.DeliveryRouteRepository;
+import com.victhor.delivery.delivery.application.DeliveryRouteService;
+import com.victhor.delivery.delivery.application.RouteOptimizer;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -22,5 +27,10 @@ class DeliveryRouteConfiguration {
             @Value("${delivery.routing.url}") String url,
             @Value("${delivery.routing.timeout-ms}") long timeoutMs) {
         return new FastApiRouteOptimizerClient(routeHttpClient, mapper, url, Duration.ofMillis(timeoutMs));
+    }
+
+    @Bean
+    DeliveryRouteService deliveryRouteService(DeliveryRouteRepository routes, RouteOptimizer optimizer, Clock clock) {
+        return new DeliveryRouteService(routes, optimizer, clock);
     }
 }
