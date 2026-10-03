@@ -1,6 +1,6 @@
 # Base do serviço Route Intelligence
 
-`services/route-intelligence-service` executa uma API FastAPI independente. Esta etapa acrescentou configuração, dependências reproduzíveis, health check e testes. Grafo e Dijkstra foram acrescentados depois, com [demonstração por terminal](road-graph.md), assim como o [gerador offline de dataset](route-segment-dataset.md) e o [treinamento e predictor](route-segment-model.md). A consulta HTTP de rotas segue o [roadmap](roadmap.md).
+`services/route-intelligence-service` executa uma API FastAPI independente. Esta etapa acrescentou configuração, dependências reproduzíveis, health check e testes. Grafo e Dijkstra foram acrescentados depois, com [demonstração por terminal](road-graph.md), assim como o [gerador offline de dataset](route-segment-dataset.md) e o [treinamento e predictor](route-segment-model.md). A [consulta HTTP de rotas previstas](intelligent-routing-api.md) também está implementada; a integração com Java segue o [roadmap](roadmap.md).
 
 ## Organização
 
@@ -9,7 +9,7 @@
 | `app/main.py` | Factory da aplicação, metadados e registro de routers |
 | `app/__main__.py` | Inicialização do Uvicorn com configuração validada |
 | `app/config.py` | Leitura e validação das variáveis de ambiente com Pydantic Settings |
-| `app/api/health.py` | Contrato HTTP de disponibilidade |
+| `app/api/health.py` | Contrato HTTP de prontidão |
 | `tests/` | Configuração e contrato HTTP com pytest e TestClient |
 | `pyproject.toml` | Metadados, dependências, grupo de desenvolvimento e configuração de ferramentas |
 | `uv.lock` | Versões e hashes das dependências resolvidas |
@@ -42,6 +42,9 @@ O ambiente `.venv`, caches e arquivos de build são ignorados pelo Git. `uv sync
 | `ROUTE_INTELLIGENCE_HOST` | `127.0.0.1` | Texto não vazio após remover espaços nas extremidades |
 | `ROUTE_INTELLIGENCE_PORT` | `8000` | Inteiro entre 1 e 65535 |
 | `ROUTE_INTELLIGENCE_LOG_LEVEL` | `info` | `critical`, `error`, `warning`, `info`, `debug` ou `trace` |
+| `ROUTE_INTELLIGENCE_MODEL_PATH` | Sem modelo | Diretório do bundle compatível; texto não vazio |
+| `ROUTE_INTELLIGENCE_GRAPH_PATH` | Grafo empacotado | Arquivo JSON opcional; texto não vazio |
+| `ROUTE_INTELLIGENCE_TRAFFIC_PATH` | Tráfego empacotado | Arquivo JSON opcional; texto não vazio |
 
 As variáveis são lidas do ambiente do processo; o `.env` dos serviços Java não é carregado pelo Python. Configuração inválida gera erro antes de iniciar o servidor. Endereço inválido ou porta ocupada também impedem o startup.
 
@@ -61,9 +64,9 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 Invoke-RestMethod http://127.0.0.1:8000/openapi.json
 ```
 
-`GET /health` retorna HTTP `200`, `application/json` e `{"status":"UP"}`. Ele mede apenas a disponibilidade da aplicação. A documentação interativa está em `http://127.0.0.1:8000/docs`.
+`GET /health` retorna `200` com `{"status":"UP"}` quando os recursos de roteamento estão prontos, ou `503` com `{"status":"DOWN"}`. Sem `ROUTE_INTELLIGENCE_MODEL_PATH`, o servidor inicia com `DOWN`. A documentação interativa está em `http://127.0.0.1:8000/docs`.
 
-`POST /api/routes/fastest` ainda não existe. A verificação de prontidão de grafo, schema e modelo será acrescentada com a inferência, conforme o [contrato Java ↔ Python](route-intelligence-contract.md). Portanto, `UP` nesta etapa não significa que seja possível planejar uma entrega.
+`POST /api/routes/fastest` está disponível conforme o [contrato HTTP](route-intelligence-contract.md). Veja [como configurar o modelo e consultar rotas](intelligent-routing-api.md). Caminhos relativos são resolvidos a partir do diretório do processo; prefira caminhos absolutos. Recursos ausentes ou incompatíveis mantêm o servidor em `DOWN`, sem treinamento ou recuperação automática.
 
 ## Validação
 
@@ -76,9 +79,9 @@ uv run --project .\services\route-intelligence-service --locked python -m ruff f
 uv build --project .\services\route-intelligence-service
 ```
 
-O build gera wheel e distribuição de fontes no `dist/` do serviço. Os testes tratam warnings como erros. TestClient inicia e encerra a aplicação por contexto, preparado para os recursos de startup que serão adicionados depois.
+O build gera wheel e distribuição de fontes no `dist/` do serviço. Os testes tratam warnings como erros. TestClient inicia e encerra a aplicação por contexto, executando o carregamento dos recursos de startup e sua liberação.
 
-Verificado em 2026-10-02, com Python 3.12.14 e uv 0.12.11:
+Registro histórico da etapa inicial, verificada em 2026-10-02 com Python 3.12.14 e uv 0.12.11. A validação atual está no [guia da API de rotas](intelligent-routing-api.md):
 
 - 14 testes passaram: padrões, variáveis de ambiente, portas inválidas e limites, host vazio, nível de log inválido, health HTTP e schema OpenAPI.
 - Ruff passou para imports, análise estática e formatação.

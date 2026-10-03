@@ -1,6 +1,6 @@
 # Route Intelligence
 
-Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md), a [base Python](route-intelligence-foundation.md), o [roteamento com tempos de referência](road-graph.md), o [dataset sintético](route-segment-dataset.md) e o [modelo com avaliação offline](route-segment-model.md) estão implementados. Consulta HTTP de rotas e integração com Delivery ainda são etapas futuras.
+Este documento descreve a evolução planejada do projeto. O catálogo já possui restaurantes e localização de coleta. Pedidos têm cadastro, consulta, confirmação e cancelamento. Delivery possui [regras de domínio testadas](delivery-domain.md), [persistência PostgreSQL](delivery-persistence.md) e [API HTTP do ciclo de entregas](delivery-lifecycle.md). A [integração entre pedidos e entregas](order-delivery-integration.md), a [base Python](route-intelligence-foundation.md), o [roteamento com tempos de referência](road-graph.md), o [dataset sintético](route-segment-dataset.md) e o [modelo com avaliação offline](route-segment-model.md) estão implementados. A [consulta HTTP de rotas previstas](intelligent-routing-api.md) também está implementada. A integração com Delivery ainda é uma etapa futura.
 
 ## Objetivo
 
@@ -88,11 +88,11 @@ Distância e velocidade precisam ser finitas e positivas. Uma via de mão dupla 
 
 As distâncias do fixture são coerentes com as coordenadas do cenário, sem representar ruas reais. O arquivo possui `graph_version`, `timezone: America/Sao_Paulo`, `vehicle_profile: motorcycle` e `data_origin: synthetic`. Alterar a geometria ou os atributos estáticos exige uma nova versão.
 
-O tráfego virá de cenários sintéticos reproduzíveis, com valor, fonte e horário por trecho. Cada requisição calculará seu próprio `predicted_travel_time_minutes`, mantendo o grafo compartilhado inalterado.
+O tráfego vem de um cenário sintético configurado por trecho, carregado uma vez com fonte e instante de disponibilidade. Cada requisição calcula seu próprio `predicted_travel_time_minutes`, mantendo o grafo e o snapshot compartilhados inalterados.
 
 Dijkstra já usa lista de adjacência e `heapq` da biblioteca padrão, com custos de tempo separados do grafo. A demonstração usa `60 * distance_km / reference_speed_kmh`; esse valor é uma referência física, não uma previsão de ML. Isso atende ao grafo pequeno e aos custos positivos sem precisar de NetworkX. A* pode ser avaliado se o desempenho justificar a mudança; ele também exigiria uma heurística admissível de tempo. Usar distância diretamente não atenderia à unidade do custo. [Referência de Dijkstra](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.shortest_paths.weighted.dijkstra_path.html).
 
-Fluxo previsto para a futura consulta HTTP:
+Fluxo implementado na consulta HTTP:
 
 1. Validar entrada e associar as coordenadas aos nós do cenário.
 2. Obter os atributos estáticos e o snapshot de contexto por trecho.
@@ -114,14 +114,22 @@ services/route-intelligence-service/
         main.py
         __main__.py
         config.py
-        api/
-        schemas/
+        api/health.py
+        api/routes.py
+        api/problems.py
+        schemas/routes.py
+        services/runtime.py
         services/route_planner.py
         routing/graph.py
+        routing/coordinates.py
+        routing/coverage.py
+        routing/provenance.py
+        routing/traffic.py
         routing/dijkstra.py
         routing/demo.py
         routing/__main__.py
         routing/data/synthetic-city-v1.json
+        routing/data/synthetic-traffic-v1.json
         ml/features.py
         ml/pipelines.py
         ml/artifacts.py
@@ -145,7 +153,6 @@ services/route-intelligence-service/
     pyproject.toml
     uv.lock
     .python-version
-    Dockerfile
 ```
 
 A base usa Python 3.12+, FastAPI, Pydantic, Pydantic Settings e Uvicorn, com pytest e Ruff em desenvolvimento. A versão de referência do Python é 3.12, registrada em `.python-version`; as dependências estão travadas em `uv.lock`. O gerador usa a biblioteca padrão, Pydantic e `tzdata` fixado para derivar horário e dia no fuso do grafo. Os modelos usam NumPy, scikit-learn e joblib, sem pandas. PyTorch e TensorFlow não são necessários para os modelos previstos.
