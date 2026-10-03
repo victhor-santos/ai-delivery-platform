@@ -52,10 +52,11 @@ def evaluate_routes(
         predicted = {s.segment_id: value for s, value in rows}
         route = find_fastest_route(graph, origin, destination, predicted)
         selected_time = sum(observed[segment.segment_id] for segment in route.segments)
-        regret = max(0.0, selected_time - oracle.travel_time_minutes)
-        optimal += math.isclose(
+        equivalent = math.isclose(
             selected_time, oracle.travel_time_minutes, rel_tol=1e-9, abs_tol=1e-9
         )
+        regret = 0.0 if equivalent else selected_time - oracle.travel_time_minutes
+        optimal += equivalent
         regrets.append(regret)
         excess_percent.append(regret / oracle.travel_time_minutes * 100)
         selected_times.append(selected_time)

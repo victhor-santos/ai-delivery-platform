@@ -42,6 +42,16 @@ def test_oracle_predictions_have_zero_regret(model_bundle):
     assert report["optimal_observed_time_fraction"] == 1
 
 
+def test_equivalent_oracle_routes_have_exactly_zero_regret_across_all_scenarios(model_bundle):
+    _, directory = model_bundle
+    samples = load_dataset(directory).split.test
+    predictions = np.array([sample.actual_travel_time_minutes for sample in samples])
+    report = evaluate_routes(load_demo_graph(), samples, predictions, "A", "C")
+    assert report["optimal_observed_time_fraction"] == 1
+    assert report["mean_regret_minutes"] == 0
+    assert report["p95_regret_minutes"] == 0
+
+
 def test_invalid_scenario_is_counted_and_not_reported_as_zero_regret(model_bundle):
     samples = one_scenario(model_bundle)
     predictions = np.ones(len(samples))
