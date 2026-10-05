@@ -4,6 +4,7 @@ import pytest
 from app.ml.pipelines import feature_matrix
 from app.routing.demo import load_demo_graph
 from training.experiment import select_candidate, train_candidates
+from training.schema import SegmentSample
 from training.splits import split_plan_for, split_samples
 from training.synthetic import GeneratorConfig, generate_samples
 
@@ -52,3 +53,16 @@ def test_training_and_selection_are_reproducible_without_receiving_test_rows():
         )
     assert first.report["selection"]["test_used_for_selection"] is False
     assert "test" not in first.report["candidates"]["random_forest"]
+
+
+@pytest.mark.parametrize("partition", ["train", "validation"])
+def test_training_reports_numeric_overflow_without_emitting_runtime_warnings(partition):
+    config = GeneratorConfig(train_days=1, validation_days=1, test_days=1, interval_minutes=360)
+    split = split_samples(generate_samples(load_demo_graph(), config), split_plan_for(config))
+    subsets = {"train": split.train[:3], "validation": split.validation[:3]}
+    subsets[partition] = tuple(
+        SegmentSample.model_validate(row.model_dump() | {"distance_km": distance})
+        for row, distance in zip(subsets[partition], (1e308, 9e307, 8e307), strict=True)
+    )
+    with pytest.raises(ValueError, match="numeric range"):
+        train_candidates(subsets["train"], subsets["validation"])

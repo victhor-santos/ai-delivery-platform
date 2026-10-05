@@ -8,6 +8,7 @@ from sklearn.pipeline import Pipeline
 
 from app.ml.pipelines import CANDIDATE_NAMES, build_candidates, feature_matrix
 from training.metrics import evaluate_predictions
+from training.observations import DeliveryObservation
 from training.schema import SegmentSample
 
 MAE_SIMPLICITY_MARGIN_MINUTES = 0.01
@@ -50,7 +51,9 @@ class TrainingResult:
 
 
 def train_candidates(
-    train: Sequence[SegmentSample], validation: Sequence[SegmentSample], seed: int = 42
+    train: Sequence[SegmentSample | DeliveryObservation],
+    validation: Sequence[SegmentSample | DeliveryObservation],
+    seed: int = 42,
 ) -> TrainingResult:
     """Fit on training only, then select on validation. This function receives no test data."""
     if not train or not validation:
@@ -60,17 +63,23 @@ def train_candidates(
     candidates = build_candidates(seed)
     reports = {}
     for name, model in candidates.items():
-        started = perf_counter()
-        model.fit(matrices["train"], target)
-        fit_seconds = perf_counter() - started
-        reports[name] = {
-            "estimator": type(model.named_steps["regressor"]).__name__,
-            "parameters": model.named_steps["regressor"].get_params(deep=False),
-            "fit_seconds": fit_seconds,
-            "train": evaluate_predictions(train, model.predict(matrices["train"])),
-            "validation": evaluate_predictions(validation, model.predict(matrices["validation"])),
-            "validation_batch_latency": batch_latency(model, matrices["validation"]),
-        }
+        try:
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                started = perf_counter()
+                model.fit(matrices["train"], target)
+                fit_seconds = perf_counter() - started
+                reports[name] = {
+                    "estimator": type(model.named_steps["regressor"]).__name__,
+                    "parameters": model.named_steps["regressor"].get_params(deep=False),
+                    "fit_seconds": fit_seconds,
+                    "train": evaluate_predictions(train, model.predict(matrices["train"])),
+                    "validation": evaluate_predictions(
+                        validation, model.predict(matrices["validation"])
+                    ),
+                    "validation_batch_latency": batch_latency(model, matrices["validation"]),
+                }
+        except (FloatingPointError, OverflowError) as exc:
+            raise ValueError("Training exceeded the supported numeric range.") from exc
     selected = select_candidate(reports)
     report = {
         "report_version": "segment-validation-report-v1",
