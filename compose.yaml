@@ -57,6 +57,23 @@ services:
       retries: 10
       start_period: 10s
 
+  user-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: users
+      POSTGRES_USER: ${USER_DB_USERNAME:-users}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:?Set USER_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${USER_DB_PORT:-5436}:5432"
+    volumes:
+      - user_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   user-service:
     <<: *java-service
     image: delivery-order-system/user-service:local
@@ -66,6 +83,12 @@ services:
         SERVICE_PATH: services/user-service
     environment:
       SERVER_PORT: 8081
+      USER_DB_URL: jdbc:postgresql://user-db:5432/users
+      USER_DB_USERNAME: ${USER_DB_USERNAME:-users}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD:?Set USER_DB_PASSWORD in .env}
+    depends_on:
+      user-db:
+        condition: service_healthy
 
   catalog-service:
     <<: *java-service
@@ -185,3 +208,4 @@ volumes:
   catalog_postgres_data:
   order_postgres_data:
   delivery_postgres_data:
+  user_postgres_data:
