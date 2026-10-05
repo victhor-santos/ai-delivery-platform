@@ -41,9 +41,10 @@ class CatalogServiceApplicationTests {
         assertThat(jdbc.queryForObject("SELECT current_database()", String.class))
                 .isEqualTo(POSTGRES.getDatabaseName());
         assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM flyway_schema_history WHERE version IN ('1', '2') AND success", Integer.class))
-                .isEqualTo(2);
+                "SELECT count(*) FROM flyway_schema_history WHERE version IN ('1', '2', '3') AND success", Integer.class))
+                .isEqualTo(3);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurants", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM menu_items", Integer.class)).isZero();
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
     }
 

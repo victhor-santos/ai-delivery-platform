@@ -1,8 +1,8 @@
 # Roadmap
 
-O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14, o grafo com Dijkstra pelo PR #15 e o dataset pelo PR #16. O modelo foi integrado pelo PR #17 e acrescenta [comparação, seleção, artefato, predictor e avaliação offline](route-segment-model.md). A API de rotas foi integrada pelo PR #18 e oferece [consulta HTTP com prontidão e erros controlados](intelligent-routing-api.md). A integração com Delivery entrou pelo PR #19, com [cliente Java, persistência do plano e controle de concorrência](delivery-route-integration.md). O PR #20 acrescenta a [demonstração completa em containers](route-intelligence-compose.md), o PR #21 registra [observações simuladas por trecho e exportação histórica](delivery-segment-observations.md), o PR #22 acrescenta a [avaliação offline desses exports](segment-observation-evaluation.md), e o PR #23 prepara [partições temporais por entrega com manifesto e carregamento validado](segment-observation-dataset.md). A branch atual, `feature/segment-observation-training`, acrescenta [treinamento e avaliação offline de modelos observacionais](segment-observation-training.md); seu merge permanece pendente.
+O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14, o grafo com Dijkstra pelo PR #15 e o dataset pelo PR #16. O modelo foi integrado pelo PR #17 e acrescenta [comparação, seleção, artefato, predictor e avaliação offline](route-segment-model.md). A API de rotas foi integrada pelo PR #18 e oferece [consulta HTTP com prontidão e erros controlados](intelligent-routing-api.md). A integração com Delivery entrou pelo PR #19, com [cliente Java, persistência do plano e controle de concorrência](delivery-route-integration.md). O PR #20 acrescenta a [demonstração completa em containers](route-intelligence-compose.md), o PR #21 registra [observações simuladas por trecho e exportação histórica](delivery-segment-observations.md), o PR #22 acrescenta a [avaliação offline desses exports](segment-observation-evaluation.md), o PR #23 prepara [partições temporais por entrega com manifesto e carregamento validado](segment-observation-dataset.md), e o PR #24 integra [treinamento e avaliação offline de modelos observacionais](segment-observation-training.md). A branch atual, `feature/restaurant-menu`, implementa [itens de cardápio, preços BRL e disponibilidade](restaurant-menu.md); seu push e merge permanecem pendentes.
 
-A base necessária para ML é uma entrega com origem, destino e ciclo de vida definido. Pagamentos, cardápios completos e autenticação podem evoluir separadamente.
+A base de entregas e ML já funciona na demonstração local. A próxima fase completa o fluxo comercial e a interface da V1, preservando a arquitetura e a identificação explícita de dados simulados.
 
 ## Workflow Git
 
@@ -40,10 +40,36 @@ A `main` não recebe desenvolvimento direto nem force push.
 | 15. `feature/segment-observation-evaluation` | Importar exports, validar snapshots e comparar previsões armazenadas com tempos observados | Contrato Java, duplicatas/conflitos, disponibilidade, métricas, identidade e CLI | Relatório reproduzível por modelo/grafo, proveniência e corte explícitos; sem inferir rotas completas ou retreinar |
 | 16. `feature/segment-observation-dataset` | Preparar partições temporais por entrega com manifesto próprio | Disponibilidade, fronteiras, isolamento, proveniência, integridade, vazias e CLI | CSVs simulados preservados e carregamento reconstrói a política; sem misturar com o dataset sintético ou treinar |
 | 17. `feature/segment-observation-training` | Treinar modelos offline sobre as partições preparadas e avaliar no teste reservado | Proveniência, grafo, isolamento do teste, serialização, limites numéricos e CLI | Bundle simulado próprio, rejeitado pelo runtime atual; comparação de tempos por trecho sem inferir a melhor rota |
+| 18. `feature/restaurant-menu` | Cardápio por restaurante, preço BRL e disponibilidade, com domínio, JPA, V3 e API | Centavos sem arredondamento, ownership, consultas, paginação, preservação dos restaurantes e Gateway | Cardápio administrável e persistido; pedidos ainda sem itens e totais |
 
 Se persistência e API ficarem grandes demais para revisar juntas, dividir a etapa em dois PRs. O mesmo vale para a criação das imagens Docker dos serviços.
 
 Os dados sintéticos permitem treinar o primeiro modelo antes de existir coleta real. As observações do Delivery permitem auditar previsões, preparar partições e treinar outro modelo offline, preservando a origem simulada. Sua publicação na API requer uma etapa própria de contrato e validação.
+
+## Entregas restantes para a V1
+
+A V1 deverá permitir usuário → cardápio → pedido com itens e valores preservados → pagamento explicitamente simulado → entrega → acompanhamento da rota pela interface web. A estimativa é de 12–15 PRs adicionais, incluindo a feature atual. O tamanho e os critérios de revisão definem as divisões; a quantidade não é uma meta de histórico.
+
+| Branch proposta | Entrega e critério de aceite |
+| --- | --- |
+| `feature/restaurant-menu` (atual) | Cadastro, consulta e atualização do cardápio com preço/disponibilidade, migrations e testes |
+| `feature/order-items` | Itens e quantidades, consulta ao catálogo, snapshots monetários e totais; mudança posterior de preço não altera pedido existente |
+| `feature/user-profiles` | Cadastro e perfil de usuário, endereços e persistência própria, com validação |
+| `feature/authentication` | Login, senhas protegidas e credenciais de acesso, com testes de sucesso/recusa |
+| `feature/resource-authorization` | Permissões e vínculo entre usuário e recursos; impedir acesso ou alteração de pedido alheio |
+| `feature/simulated-payments` | Tentativas de pagamento simuladas com aprovação/recusa, persistência e idempotência |
+| `feature/order-payment-integration` | Regras de compra e recuperação de falhas entre pedido/pagamento/entrega, sem duplicar cobrança ou entrega |
+| `feature/frontend-foundation` | Interface web conectada ao Gateway, navegação, login e tratamento de erros; framework definido nessa etapa |
+| `feature/frontend-checkout` | Restaurantes, cardápio, quantidades, resumo de valores, criação do pedido e pagamento simulado |
+| `feature/frontend-deliveries` | Acompanhamento dos estados e visualização do grafo/rota sintética; ações operacionais autorizadas |
+| `feature/ci-validation` | Builds e testes Java/Python/frontend reproduzíveis em CI, incluindo integrações com PostgreSQL |
+| `feature/request-observability` | Correlação de requisições, logs úteis e métricas do fluxo/roteamento, sem expor credenciais |
+| `feature/model-promotion-validation` | Coleta simulada cobrindo trechos, horários e tráfego; validar contrato, métricas e compatibilidade antes de permitir promoção do modelo |
+| `feature/v1-release-validation` | Testes E2E do fluxo completo, falhas e retomada, documentação de execução e limites, checklist de release |
+
+A meta de planejamento é 17/10/2026, com revisão após as primeiras 2–3 entregas desta fase. O fluxo integrado é prioridade; estimativas de tempo e número de PRs devem acompanhar o que foi efetivamente validado.
+
+Pagamentos não movimentarão dinheiro real. Ruas, trânsito e travessias continuam fictícios; maior cobertura da simulação não comprova qualidade no mundo real. A promoção do modelo observacional depende dos resultados e de uma etapa explícita de compatibilidade; o bundle offline atual continua rejeitado pela API. GPS, mapas reais, VRP e cloud permanecem fora desta V1.
 
 ## Títulos de PR e mensagens de squash
 
@@ -69,19 +95,19 @@ Para cada branch, usar o mesmo assunto no título do PR e na mensagem final do s
 | `feature/segment-observation-evaluation` | `feat: evaluate exported segment travel observations` |
 | `feature/segment-observation-dataset` | `feat: prepare temporal datasets from delivery observations` |
 | `feature/segment-observation-training` | `feat: train and evaluate offline models from delivery observations` |
+| `feature/restaurant-menu` | `feat: add restaurant menu items and pricing` |
 
 Os commits de implementação podem separar domínio, persistência e API, sempre acompanhados dos testes correspondentes. Por exemplo: `feat: model restaurant pickup location` e `feat: persist restaurant pickup locations`.
 
 Antes de abrir o PR, conferir os critérios da etapa. Mudanças de documentação pedem revisão de links e exemplos. Mudanças de código pedem testes e build; persistência exige Testcontainers, e integrações precisam de verificação entre os serviços. Registrar no PR o que passou e o que não foi executado.
 
-## Evoluções posteriores
+## Evoluções posteriores à V1
 
-- Interface web: painel de restaurantes, pedidos e entregas conectado ao Gateway; visualização de rotas quando a API estiver integrada. Framework, escopo das telas e branches serão definidos em uma etapa própria. A primeira visualização pode desenhar o grafo sintético; GPS e mapas reais exigem integrações posteriores.
 - Fonte real de mapas e tráfego: definir licença, cobertura, atualização e associação de posições aos trechos antes de integrar OpenStreetMap, OSRM, GraphHopper ou APIs externas.
 - VRP: múltiplas entregas e ordem de visitas, depois da rota de uma entrega funcionar.
 - Atribuição de entregadores: critérios de capacidade, carga e custo, sem confundir esse problema com previsão por trecho.
 - Mensageria: eventos duráveis, idempotência e outbox apenas quando o fluxo exigir; não colocar um broker entre aplicação e banco.
-- MLOps: tracking, versionamento mais completo, registry, métricas de inferência, drift, retreinamento e CI/CD após o primeiro modelo funcional.
+- MLOps ampliado: tracking de experimentos, registry, drift e automação de retreinamento após os critérios de validação/promoção e a CI da V1.
 - Cloud: avaliar AWS ECS/Fargate, RDS, S3 e CloudWatch depois da demonstração local reproduzível.
 
-Essas etapas serão detalhadas depois que a primeira integração de rotas estiver funcionando.
+Essas etapas serão detalhadas após a validação da V1; não são requisitos para encerrar a demonstração comercial planejada.

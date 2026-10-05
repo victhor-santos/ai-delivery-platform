@@ -8,7 +8,7 @@ O monorepo também contém [Route Intelligence em Python](route-intelligence-fou
 
 O pacote `training` gera e valida o [dataset sintético de tempo por trecho](route-segment-dataset.md), compara modelos, seleciona na validação e avalia o artefato no teste reservado. Também importa e [avalia os CSVs de observações do Delivery](segment-observation-evaluation.md), comparando previsões armazenadas com durações simuladas e preservando a proveniência. A [preparação dessas observações](segment-observation-dataset.md) cria outro dataset, com manifesto próprio, partições por entrega e carregamento que reconstrói a política temporal. O [treino observacional](segment-observation-training.md) reutiliza candidatos, seleção, métricas e serialização, preservando a origem `simulated` em artefatos offline próprios. A API continua carregando exclusivamente os bundles sintéticos v1. `app/ml` contém features compartilhadas, pipelines, carregamento validado e predictor em lote. Geração e treinamento não são executados no startup ou em endpoints.
 
-O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O Order Service cria, consulta, confirma e cancela pedidos em outro PostgreSQL. Delivery cria e consulta entregas e entregadores por HTTP e executa o ciclo de entrega, com persistência em banco próprio. Usuários e pagamentos mantêm a base inicial, com endpoints de demonstração e Actuator.
+O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O catálogo também gerencia [itens de cardápio](restaurant-menu.md), com nome, descrição opcional, preço em BRL e disponibilidade. O Order Service cria, consulta, confirma e cancela pedidos em outro PostgreSQL; a integração com esses itens ainda será implementada. Delivery cria e consulta entregas e entregadores por HTTP e executa o ciclo de entrega, com persistência em banco próprio. Usuários e pagamentos mantêm a base inicial, com endpoints de demonstração e Actuator.
 
 ```mermaid
 flowchart TD
@@ -28,7 +28,7 @@ O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utiliz
 
 ## Responsabilidades e contratos
 
-As responsabilidades abaixo definem os limites de cada aplicação. O catálogo implementa cadastro, consultas e atualização da localização de coleta de restaurantes. Cardápios, produtos, preços e disponibilidade continuam planejados.
+As responsabilidades abaixo definem os limites de cada aplicação. O catálogo implementa cadastro, consultas e atualização da localização de coleta de restaurantes, além do cadastro, consultas e atualização dos itens de seus cardápios. Preços e disponibilidade pertencem ao catálogo; o pedido ainda não os utiliza.
 
 | Aplicação | Responsabilidade | Porta | Rota pelo Gateway | Pacote-base |
 | --- | --- | --- | --- | --- |
@@ -46,18 +46,20 @@ Todas as aplicações Java mantêm `/actuator/health` e `/actuator/info`. O heal
 
 ## Organização do catálogo
 
-A classe `CatalogServiceApplication` permanece no pacote-base para a descoberta dos componentes Spring. A separação de responsabilidades agora acompanha o primeiro caso de uso:
+A classe `CatalogServiceApplication` permanece no pacote-base para a descoberta dos componentes Spring. Restaurantes e itens de cardápio seguem a mesma separação de responsabilidades:
 
 | Pacote | Responsabilidade |
 | --- | --- |
 | `api` | Controllers, DTOs de entrada e saída, validação HTTP, paginação recebida e respostas de erro |
-| `application` | `RestaurantService` coordena os casos de uso; `RestaurantRepository` define a porta de persistência e `RestaurantPage` representa uma página, sem dependências de Spring ou JPA |
-| `domain` | `Restaurant` representa UUID, nome, estado ativo e localização opcional; `PickupLocation` valida latitude e longitude, sem depender de HTTP, Spring ou JPA |
-| `infrastructure.persistence` | Entidade JPA, repositório Spring Data e adaptador que implementa a porta, delimita as transações e converte entre o modelo de domínio e o de persistência |
+| `application` | `RestaurantService` e `MenuItemService` coordenam os casos de uso por portas próprias de repositório e retornam páginas de aplicação, sem dependências de Spring ou JPA |
+| `domain` | `Restaurant` representa UUID, nome, estado ativo e localização opcional; `PickupLocation` valida coordenadas; `MenuItem` valida identidade, vínculo ao restaurante, textos, preço e disponibilidade |
+| `infrastructure.persistence` | Entidades JPA, repositórios Spring Data e adaptadores que implementam as portas, delimitam as transações e convertem entre domínio e persistência |
 
-O domínio não contém anotações JPA ou de validação HTTP. A entidade JPA não é exposta na API. DTOs controlam o contrato público, e o adaptador concentra o mapeamento de persistência. Não há um framework genérico de casos de uso ou repositórios: uma porta específica do restaurante é suficiente.
+O domínio não contém anotações JPA ou de validação HTTP. As entidades JPA não são expostas na API. DTOs controlam o contrato público, e os adaptadores concentram o mapeamento de persistência. Cada recurso possui sua porta específica de persistência, sem framework genérico de casos de uso ou repositórios.
 
-`RestaurantConfiguration`, em `infrastructure`, fornece o serviço de aplicação como bean Spring e injeta o adaptador. `JpaRestaurantRepository` abre transações de escrita no cadastro e na atualização de localização, e transações de leitura nas consultas. Cada operação retorna depois da confirmação da transação. Um fluxo futuro com várias gravações relacionadas precisará de uma transação que englobe a operação inteira.
+`RestaurantConfiguration` e `MenuItemConfiguration`, em `infrastructure`, fornecem os serviços de aplicação como beans Spring e injetam os adaptadores. Os adaptadores JPA abrem transações de escrita no cadastro e nas atualizações, e transações de leitura nas consultas. Cada operação retorna depois da confirmação da transação. Um fluxo futuro com várias gravações relacionadas precisará de uma transação que englobe a operação inteira.
+
+`MenuItemService` exige restaurante existente e filtra consultas e atualizações por `restaurantId` e UUID do item. O `PUT` substitui os campos editáveis na mesma transação, preserva a identidade e o restaurante e retorna `404` quando o item não pertence ao restaurante informado. Atualizar um UUID ausente não cria um item. A disponibilidade pode ser alterada; a listagem de gestão também inclui itens indisponíveis. O preço usa `BigDecimal` com duas casas, sem arredondar frações de centavo. A moeda é BRL. Não há versionamento otimista nessa atualização: prevalece a última gravação confirmada.
 
 Usuários e pagamentos continuam com a classe `*Application` no pacote-base e controllers em `api`. Novas camadas serão criadas quando houver código que as justifique. O Gateway mantém organização própria para configuração e filtros.
 
@@ -139,9 +141,11 @@ O catálogo usa Spring Data JPA e driver PostgreSQL. Flyway controla a evoluçã
 
 A V2 adiciona as duas coordenadas como colunas opcionais, com constraints para exigir o par completo e respeitar os limites geográficos. Ela não altera a V1 nem preenche localizações nos registros existentes. Um teste com PostgreSQL migra dados da V1 para a V2 e confere essa preservação.
 
+A V3 cria `menu_items`, com chave estrangeira para `restaurants`, sem exclusão em cascata, preço `NUMERIC(10,2)`, constraints de texto/preço e índice `(restaurant_id, name, id)` para a paginação de cada restaurante. A entidade mantém `restaurantId` como UUID, sem associação JPA ao restaurante. A migração V2→V3 preserva restaurantes e coordenadas e não inventa itens. PostgreSQL pode arredondar valores com casas excedentes ao convertê-los para `NUMERIC(10,2)`; domínio e API rejeitam frações de centavo antes da persistência.
+
 Na inicialização, Flyway aplica as migrations pendentes e Hibernate valida o mapeamento com `spring.jpa.hibernate.ddl-auto=validate`. Não há criação ou atualização automática do schema pelo Hibernate. `spring.jpa.open-in-view=false` mantém o acesso ao banco dentro da camada de aplicação/persistência, antes da montagem da resposta HTTP.
 
-`compose.yaml` contém `catalog-db`, `order-db` e `delivery-db`, com imagem `postgres:17-alpine` e health check `pg_isready`. O catálogo usa banco `catalog`, volume `catalog_postgres_data` e porta padrão 5432. Pedidos usam banco `orders`, volume `order_postgres_data` e porta padrão 5434. Entregas usam banco `deliveries`, volume `delivery_postgres_data` e porta padrão 5435. As portas são publicadas em `127.0.0.1`. As aplicações Java continuam executadas na máquina, fora do Compose.
+`compose.yaml` contém `catalog-db`, `order-db` e `delivery-db`, com imagem `postgres:17-alpine` e health check `pg_isready`. O catálogo usa banco `catalog`, volume `catalog_postgres_data` e porta padrão 5432. Pedidos usam banco `orders`, volume `order_postgres_data` e porta padrão 5434. Entregas usam banco `deliveries`, volume `delivery_postgres_data` e porta padrão 5435. As portas são publicadas em `127.0.0.1`. Sem perfil, o Compose inicia somente os bancos; o perfil `demo` também executa as seis aplicações Java e Route Intelligence. A execução nativa continua disponível.
 
 `.env.example` documenta `CATALOG_DB_URL`, `CATALOG_DB_USERNAME`, `CATALOG_DB_PASSWORD` e `CATALOG_DB_PORT`, com valores apenas locais. A cópia `.env` não é versionada. A senha é obrigatória; o Spring importa o arquivo do diretório de execução, e o comando de desenvolvimento no README fixa esse diretório na raiz. Variáveis de ambiente também podem fornecer a configuração. Se a porta estiver ocupada, `CATALOG_DB_PORT` e a porta da URL JDBC devem ser ajustadas juntas.
 
@@ -151,7 +155,7 @@ Pedidos seguem o mesmo processo de configuração, com `ORDER_DB_URL`, `ORDER_DB
 
 ## Testes e validação
 
-Os testes do domínio verificam as invariantes do restaurante sem subir Spring ou banco. Os testes de integração do catálogo usam PostgreSQL 17 real via Testcontainers, com configuração dinâmica e banco isolado do Compose. Eles inicializam o contexto, aplicam as migrations Flyway, validam o schema com Hibernate e cobrem HTTP e persistência: cadastro, UUID/estado inicial, nome, dados salvos, consulta, paginação, entrada inválida e restaurante inexistente. Pings e Actuator permanecem cobertos no catálogo.
+Os testes do domínio verificam as invariantes de restaurantes e itens de cardápio sem subir Spring ou banco. Os testes de integração do catálogo usam PostgreSQL 17 real via Testcontainers, com configuração dinâmica e banco isolado do Compose. Eles inicializam o contexto, aplicam as migrations Flyway, validam o schema com Hibernate e cobrem HTTP e persistência: cadastro, atualização, UUID/estado inicial, textos, preço, dados salvos, consulta, paginação, entrada inválida, recursos inexistentes e isolamento dos itens por restaurante. Também verificam constraints e preservação dos dados nas migrations. Pings e Actuator permanecem cobertos no catálogo.
 
 O contexto do catálogo usa a mesma estratégia de banco descartável. A suíte completa exige Docker em execução e não ignora silenciosamente a integração quando ele está ausente. Pedidos também usam Testcontainers para testar cadastro, consulta, transições, erros, constraints do schema e duas transações que tentam alterar a mesma versão. Usuários, pagamentos e Gateway mantêm testes de inicialização de contexto.
 
@@ -163,6 +167,6 @@ Delivery testa seu domínio sem banco: transições, chegada antes da conclusão
 
 ## Próximas etapas
 
-O próximo passo é preparar as imagens e a rede do Compose para a demonstração integrada. Java continua responsável pelas transações; Python já prevê tempos por trecho e calcula rotas por HTTP. O [plano de Route Intelligence](route-intelligence.md), o [contrato HTTP](route-intelligence-contract.md), o [plano de dados](route-intelligence-data.md) e o [roadmap](roadmap.md) descrevem essa evolução.
+O Compose já oferece a demonstração integrada com hostnames da rede Docker e preservação dos volumes. O próximo passo do domínio comercial é integrar itens, quantidades e snapshots de preços aos pedidos, mantendo cada serviço dono de seus dados. Usuários, autenticação, pagamentos simulados e interface web seguirão em etapas próprias. O [roadmap](roadmap.md) define essa sequência.
 
-A demonstração com os serviços em containers usará hostnames da rede Docker e preservará os volumes existentes. Mensageria, outbox e compensações serão avaliadas quando o fluxo precisar dessas garantias. Produtos, pagamentos, autenticação, múltiplas entregas e cloud terão etapas próprias.
+Java continua responsável pelas transações; Python prevê tempos por trecho e calcula rotas por HTTP, com treinamento offline e dados explicitamente simulados. Mensageria, outbox e compensações serão avaliadas quando o fluxo precisar dessas garantias. Múltiplas entregas, mapas reais e cloud continuam em evoluções posteriores.

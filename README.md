@@ -4,15 +4,17 @@ Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projet
 
 ## Estado atual
 
-O Catalog Service cadastra e consulta restaurantes em PostgreSQL, com migrations Flyway, validação de entrada, paginação e testes de integração com Testcontainers. Um restaurante tem UUID, nome obrigatório e indicador `active`; o cadastro gera o UUID e inicia o restaurante ativo.
+O Catalog Service cadastra e consulta restaurantes e seus itens de cardápio em PostgreSQL, com migrations Flyway, validação de entrada, paginação e testes de integração com Testcontainers. Um restaurante tem UUID, nome obrigatório e indicador `active`; o cadastro gera o UUID e inicia o restaurante ativo.
 
 A localização de coleta pode ser informada no cadastro ou atualizada depois. Ela contém latitude e longitude e é salva no PostgreSQL. Restaurantes sem localização continuam válidos no catálogo; esse dado é exigido na primeira solicitação de entrega de um pedido.
+
+Cada item do cardápio pertence a um restaurante e tem nome, descrição opcional, preço em BRL e disponibilidade. A API permite cadastrar, consultar, listar e substituir seus dados, com valores monetários exatos e isolamento por restaurante. Veja o [contrato do cardápio](docs/restaurant-menu.md). A integração dos itens e preços com pedidos será a próxima etapa.
 
 O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Um pedido confirmado pode solicitar entrega, com validação do restaurante no catálogo, snapshots persistidos e criação idempotente no Delivery. Ainda não há itens, valores ou pagamento. Veja a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
 O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Consulta Python, salva o último plano de rota e registra [travessias simuladas por trecho](docs/delivery-segment-observations.md), com snapshots da previsão e exportação CSV por disponibilidade temporal. Veja também o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
-Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. Usuários e pagamentos ainda têm apenas a estrutura inicial. Produtos, cardápios, RabbitMQ e autenticação estão fora desta etapa.
+Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. Usuários e pagamentos ainda têm apenas a estrutura inicial. RabbitMQ e autenticação permanecem em etapas posteriores.
 
 Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A [API de rotas previstas](docs/intelligent-routing-api.md) combina o modelo em lote com Dijkstra. Delivery já consulta essa API e persiste o plano por entrega. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
@@ -45,6 +47,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 Gateway atende em `http://localhost:8080`; Python em `http://localhost:8000`. As portas Java 8081–8085 são internas neste perfil. Sem `demo`, o Compose continua iniciando somente bancos. Não é necessário instalar Java ou Python na máquina para esta demonstração. O script verifica um modelo existente e só treina se não houver bundle; a API nunca treina ao iniciar.
 
 Veja o [guia do Compose](docs/route-intelligence-compose.md) para configuração, compatibilidade do modelo, testes de queda/recuperação e preservação dos volumes. O smoke cria registros de demonstração no banco. Os comandos de execução nativa abaixo continuam disponíveis.
+
+Para verificar somente restaurantes e cardápios, com catálogo e Gateway disponíveis, execute `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -CatalogOnly`. Essa opção não exige Order, Delivery ou Python. O smoke completo também verifica o cardápio, sem incluir seus itens no pedido ainda.
 
 ## Requisitos para desenvolvimento e execução nativa
 
@@ -148,7 +152,7 @@ Não remova o volume para executar ou testar esta etapa. Os testes usam um banco
 
 ## Executar localmente
 
-Para trabalhar apenas com restaurantes, basta iniciar `catalog-db` e abrir dois terminais na raiz:
+Para trabalhar com restaurantes e cardápios, basta iniciar `catalog-db` e abrir dois terminais na raiz:
 
 ```powershell
 # Terminal 1: o diretório explícito faz o Spring carregar o .env da raiz
@@ -318,7 +322,7 @@ Com Docker funcionando, execute da raiz:
 .\services\order-service\mvnw.cmd -f .\services\order-service\pom.xml clean verify
 ```
 
-Os testes de domínio cobrem as regras do restaurante. Os testes de integração inicializam Spring e PostgreSQL real via Testcontainers, aplicam Flyway e exercitam cadastro, dados persistidos, consulta, paginação, entrada inválida, restaurante inexistente e os endpoints preservados. O `contextLoads` também usa o banco do Testcontainers. Não é necessário subir o Compose, criar `.env` ou fornecer credenciais locais para esses testes; eles não acessam o volume de desenvolvimento. A suíte completa exige Docker e falha quando ele está indisponível, em vez de ignorar a integração.
+Os testes de domínio cobrem as regras de restaurantes e itens de cardápio, incluindo preços sem frações de centavo. Os testes de integração inicializam Spring e PostgreSQL real via Testcontainers, aplicam Flyway e exercitam cadastro, dados persistidos, consulta, paginação, entrada inválida, recursos inexistentes e isolamento dos itens por restaurante. As migrations também são testadas sobre dados existentes. O `contextLoads` usa o banco do Testcontainers. Não é necessário subir o Compose, criar `.env` ou fornecer credenciais locais para esses testes; eles não acessam o volume de desenvolvimento. A suíte completa exige Docker e falha quando ele está indisponível, em vez de ignorar a integração.
 
 O JAR fica em `services/catalog-service/target/catalog-service-0.0.1-SNAPSHOT.jar`. Com o PostgreSQL local iniciado e `.env` configurado, ele também pode ser executado da raiz:
 

@@ -23,6 +23,8 @@ replay_pid*
 
 .ai/
 
+.idea/
+
 .venv/
 .venv-*/
 __pycache__/

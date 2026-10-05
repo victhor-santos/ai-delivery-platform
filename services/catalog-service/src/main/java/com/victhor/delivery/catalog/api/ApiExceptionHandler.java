@@ -13,6 +13,7 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import com.victhor.delivery.catalog.application.RestaurantNotFoundException;
+import com.victhor.delivery.catalog.application.MenuItemNotFoundException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
@@ -23,6 +24,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(RestaurantNotFoundException.class)
     ProblemDetail handleNotFound(RestaurantNotFoundException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Restaurante não encontrado.");
+    }
+
+    @ExceptionHandler(MenuItemNotFoundException.class)
+    ProblemDetail handleMenuItemNotFound(MenuItemNotFoundException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Item do cardápio não encontrado.");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
