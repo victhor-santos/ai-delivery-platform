@@ -44,7 +44,7 @@ O cliente acessa o sistema pelo Gateway. O Delivery chama o serviço Python inte
 
 O catálogo já permite informar coordenadas no cadastro ou em uma atualização, sem serviço externo de geocodificação. Restaurantes sem localização continuam válidos no catálogo, mas precisarão desse dado antes de serem usados em uma entrega.
 
-O pedido já possui UUID, `restaurantId`, destino, timestamps e os estados `CREATED`, `CONFIRMED` e `CANCELLED`. A confirmação é manual e não indica pagamento aprovado; produtos e cobrança ainda não foram implementados.
+O pedido já possui UUID, `restaurantId`, destino, timestamps e os estados `CREATED`, `CONFIRMED` e `CANCELLED`. Também guarda [itens, quantidades e preços preservados](order-items.md), consultados por HTTP no catálogo. A confirmação é manual e não indica pagamento aprovado; cobrança ainda não foi implementada.
 
 Somente um pedido confirmado pode solicitar entrega. A integração verifica restaurante ativo e localização na primeira solicitação, persiste os snapshots e cria/recupera a entrega por HTTP. Cancelar o pedido depois da intenção de entrega exige coordenação entre serviços; essa operação é rejeitada nesta versão. O [contrato de integração](order-delivery-integration.md) descreve falhas, novas tentativas e limites.
 
