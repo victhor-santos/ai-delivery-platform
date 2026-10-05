@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [uri]$GatewayUrl = 'http://localhost:8080',
+    [switch]$CatalogOnly,
     [switch]$CheckRecovery,
     [switch]$CheckPersistence,
     [string]$ComposeProject,
@@ -8,6 +9,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($CatalogOnly -and ($CheckRecovery -or $CheckPersistence)) {
+    throw 'CatalogOnly cannot be combined with the full demo recovery or persistence checks.'
+}
 Add-Type -AssemblyName System.Net.Http
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $baseUrl = $GatewayUrl.AbsoluteUri.TrimEnd('/')
@@ -60,13 +64,42 @@ try {
         }
     }
 
-    foreach ($service in @('users', 'catalog', 'orders', 'payments', 'deliveries')) {
+    $services = if ($CatalogOnly) { @('catalog') } else { @('users', 'catalog', 'orders', 'payments', 'deliveries') }
+    foreach ($service in $services) {
         Invoke-Api 'GET' "/api/$service/ping" | Out-Null
     }
     $restaurant = Invoke-Api 'POST' '/api/catalog/restaurants' @{
         name = "Compose Demo $([guid]::NewGuid().ToString('N').Substring(0, 8))"
         pickupLocation = @{ latitude = -23.5505; longitude = -46.6333 }
     } 201
+    $menuPath = "/api/catalog/restaurants/$($restaurant.id)/menu-items"
+    $menuItem = Invoke-Api 'POST' $menuPath @{
+        name = 'Prato do dia'; description = 'Cardapio de demonstracao'; price = [decimal]25.90
+    } 201
+    Assert-Condition ($menuItem.restaurantId -eq $restaurant.id -and $menuItem.available) 'Menu item has invalid ownership or availability.'
+    Assert-Condition ($menuItem.currency -eq 'BRL' -and $menuItem.price -eq [decimal]25.90) 'Menu price or currency is invalid.'
+    $itemPath = "$menuPath/$($menuItem.id)"
+    $updatedItem = Invoke-Api 'PUT' $itemPath @{
+        name = 'Prato especial'; description = $null; price = [decimal]29.90; available = $false
+    }
+    Assert-Condition (-not $updatedItem.available -and $updatedItem.price -eq [decimal]29.90) 'Menu update was not applied.'
+    $savedItem = Invoke-Api 'GET' $itemPath
+    Assert-Condition (($savedItem | ConvertTo-Json -Compress) -eq ($updatedItem | ConvertTo-Json -Compress)) 'Saved menu item differs from the update.'
+    $menu = Invoke-Api 'GET' "${menuPath}?page=0&size=1"
+    Assert-Condition ($menu.totalElements -eq 1 -and $menu.content[0].id -eq $menuItem.id) 'Menu pagination lost the item.'
+    $otherRestaurant = Invoke-Api 'POST' '/api/catalog/restaurants' @{
+        name = "Compose Demo ownership $([guid]::NewGuid().ToString('N').Substring(0, 8))"
+    } 201
+    $otherItemPath = "/api/catalog/restaurants/$($otherRestaurant.id)/menu-items/$($menuItem.id)"
+    Invoke-Api 'GET' $otherItemPath -Status 404 | Out-Null
+    Invoke-Api 'PUT' $otherItemPath @{
+        name = 'Alterado'; price = [decimal]1.00; available = $true
+    } 404 | Out-Null
+    $preservedItem = Invoke-Api 'GET' $itemPath
+    Assert-Condition (($preservedItem | ConvertTo-Json -Compress) -eq ($updatedItem | ConvertTo-Json -Compress)) 'Another restaurant changed the menu item.'
+    Write-Output "Catalog passed: restaurant=$($restaurant.id), menuItem=$($menuItem.id)."
+    if ($CatalogOnly) { return }
+
     $order = Invoke-Api 'POST' '/api/orders' @{
         restaurantId = $restaurant.id
         destination = @{ address = 'Destino sintetico C'; latitude = -23.561; longitude = -46.656 }
@@ -146,10 +179,12 @@ try {
         Invoke-Compose -CommandArguments @('up', '-d', '--no-build', '--force-recreate',
             '--wait', '--wait-timeout', '240')
         $persistedRestaurant = Invoke-Api 'GET' "/api/catalog/restaurants/$($restaurant.id)"
+        $persistedMenuItem = Invoke-Api 'GET' $itemPath
         $persistedOrder = Invoke-Api 'GET' $orderPath
         $persistedDelivery = Invoke-Api 'GET' $deliveryPath
         $persistedPlan = Invoke-Api 'GET' "$deliveryPath/route"
         Assert-Condition ($persistedRestaurant.id -eq $restaurant.id) 'Restaurant was lost after restart.'
+        Assert-Condition (($persistedMenuItem | ConvertTo-Json -Compress) -eq ($updatedItem | ConvertTo-Json -Compress)) 'Menu item changed after restart.'
         Assert-Condition ($persistedOrder.status -eq 'CONFIRMED') 'Order was lost after restart.'
         Assert-Condition (($persistedDelivery | ConvertTo-Json -Depth 10 -Compress) -eq ($delivery | ConvertTo-Json -Depth 10 -Compress)) 'Delivery changed after restart.'
         Assert-Condition (($persistedPlan | ConvertTo-Json -Depth 10 -Compress) -eq ($plan | ConvertTo-Json -Depth 10 -Compress)) 'Saved route changed after restart.'
