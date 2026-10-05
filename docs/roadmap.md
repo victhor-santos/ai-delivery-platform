@@ -1,6 +1,6 @@
 # Roadmap
 
-O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14, o grafo com Dijkstra pelo PR #15 e o dataset pelo PR #16. O modelo foi integrado pelo PR #17 e acrescenta [comparação, seleção, artefato, predictor e avaliação offline](route-segment-model.md). A API de rotas foi integrada pelo PR #18 e oferece [consulta HTTP com prontidão e erros controlados](intelligent-routing-api.md). A integração com Delivery entrou pelo PR #19, com [cliente Java, persistência do plano e controle de concorrência](delivery-route-integration.md). O PR #20 acrescenta a [demonstração completa em containers](route-intelligence-compose.md). A branch atual, `feature/delivery-segment-observations`, implementa [observações simuladas por trecho e exportação histórica](delivery-segment-observations.md); o merge permanece pendente.
+O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14, o grafo com Dijkstra pelo PR #15 e o dataset pelo PR #16. O modelo foi integrado pelo PR #17 e acrescenta [comparação, seleção, artefato, predictor e avaliação offline](route-segment-model.md). A API de rotas foi integrada pelo PR #18 e oferece [consulta HTTP com prontidão e erros controlados](intelligent-routing-api.md). A integração com Delivery entrou pelo PR #19, com [cliente Java, persistência do plano e controle de concorrência](delivery-route-integration.md). O PR #20 acrescenta a [demonstração completa em containers](route-intelligence-compose.md), e o PR #21 registra [observações simuladas por trecho e exportação histórica](delivery-segment-observations.md). A branch atual, `feature/segment-observation-evaluation`, acrescenta a [avaliação offline desses exports](segment-observation-evaluation.md); seu merge permanece pendente.
 
 A base necessária para ML é uma entrega com origem, destino e ciclo de vida definido. Pagamentos, cardápios completos e autenticação podem evoluir separadamente.
 
@@ -37,6 +37,7 @@ A `main` não recebe desenvolvimento direto nem force push.
 | 12. `feature/delivery-route-integration` | Porta `RouteOptimizer`, cliente HTTP e persistência do plano por entrega | Contrato Java, timeouts, resposta inválida, serviço indisponível e resultado obsoleto | Delivery registra a rota sem conhecer ML; falha remota não corrompe estado ou plano anterior |
 | 13. `feature/route-intelligence-compose` | Dockerfiles e Compose para os serviços necessários à demonstração | Rede por hostnames, health checks, artefato, indisponibilidade Python e recuperação | Fluxo reproduzível com containers, sem treino no startup e sem apagar volumes |
 | 14. `feature/delivery-segment-observations` | Registrar travessias por trecho e exportar features históricas com rótulos posteriores | Duplicatas, eventos fora de ordem, timestamps, rótulos incompletos e cortes temporais | Previsão e resultado associáveis por trecho; eventos simulados identificados, coleta real não presumida |
+| 15. `feature/segment-observation-evaluation` | Importar exports, validar snapshots e comparar previsões armazenadas com tempos observados | Contrato Java, duplicatas/conflitos, disponibilidade, métricas, identidade e CLI | Relatório reproduzível por modelo/grafo, proveniência e corte explícitos; sem inferir rotas completas ou retreinar |
 
 Se persistência e API ficarem grandes demais para revisar juntas, dividir a etapa em dois PRs. O mesmo vale para a criação das imagens Docker dos serviços.
 
@@ -63,6 +64,7 @@ Para cada branch, usar o mesmo assunto no título do PR e na mensagem final do s
 | `feature/delivery-route-integration` | `feat: integrate delivery route optimization` |
 | `feature/route-intelligence-compose` | `chore: containerize the route intelligence demo` |
 | `feature/delivery-segment-observations` | `feat: record segment travel observations` |
+| `feature/segment-observation-evaluation` | `feat: evaluate exported segment travel observations` |
 
 Os commits de implementação podem separar domínio, persistência e API, sempre acompanhados dos testes correspondentes. Por exemplo: `feat: model restaurant pickup location` e `feat: persist restaurant pickup locations`.
 

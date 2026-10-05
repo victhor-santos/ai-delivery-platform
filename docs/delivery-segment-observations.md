@@ -53,7 +53,7 @@ Sem saída, duração e disponibilidade do rótulo ficam nulas. A duração é `
 
 O schema exportado é `delivery-segment-observation-v1`, com 34 colunas: identidade da travessia/plano, proveniência, versões, seis features, timestamps, previsão e duração observada. Campos são delimitados por vírgula e valores por aspas. A ordem segue a sequência dos trechos. `recorded_at` é um alias de `label_available_at` nesta versão; a entrada possui `entry_recorded_at` próprio. Endereços e IDs de entregadores não são exportados.
 
-O CSV serve para auditoria e comparação. **Não é entrada direta de `training.train`**: o carregador atual espera o dataset `segment-sample-v1`, produzido pelo gerador sintético, com manifesto, checksums e partições por cenário. Uma integração futura deverá converter explicitamente as observações, preservar a origem `simulated` e separar entregas e períodos sem vazamento. Esta etapa não retreina o modelo nem mistura automaticamente esses dados ao dataset anterior.
+O CSV serve para auditoria e comparação pelo comando de [avaliação das observações](segment-observation-evaluation.md), que valida o contrato, deduplica exports e gera métricas das previsões originais. **Não é entrada direta de `training.train`**: o carregador de treinamento espera o dataset `segment-sample-v1`, produzido pelo gerador sintético, com manifesto, checksums e partições por cenário. Uma integração futura deverá converter explicitamente as observações, preservar a origem `simulated` e separar entregas e períodos sem vazamento. A avaliação não retreina o modelo nem mistura automaticamente esses dados ao dataset anterior.
 
 ## Executar e verificar
 
