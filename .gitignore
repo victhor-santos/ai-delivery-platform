@@ -32,4 +32,5 @@ __pycache__/
 *.egg-info/
 services/route-intelligence-service/dist/
 services/route-intelligence-service/data/synthetic/
+services/route-intelligence-service/data/observations/
 services/route-intelligence-service/artifacts/

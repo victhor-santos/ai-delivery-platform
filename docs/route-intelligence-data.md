@@ -26,7 +26,7 @@ O tempo total da entrega inclui espera no restaurante, coleta e atendimento ao c
 
 IDs de entrega, entregador e trecho ajudam a relacionar registros e separar os conjuntos, mas não entram nas features iniciais. O dataset exportado também dispensa dados pessoais. Travessias incompletas ou canceladas ficam sem rótulo e fora do treino; atribuir zero a elas ensinaria um resultado errado ao modelo.
 
-Para usar dados reais, precisaremos registrar travessias por trecho. Isso pode vir de eventos associados ao grafo ou de posições GPS associadas às vias. Essa coleta ainda não existe; até lá, as observações serão identificadas como sintéticas.
+Para usar dados reais, precisaremos coletar travessias por trecho. Isso pode vir de eventos associados ao grafo ou de posições GPS associadas às vias. Essa coleta ainda não existe. O gerador offline usa origem `synthetic`; a API de Delivery registra travessias explicitamente `simulated`, preservando previsões sobre o grafo sintético. A [avaliação dos exports](segment-observation-evaluation.md) mantém essa distinção e aplica cortes pela disponibilidade dos rótulos, sem misturar automaticamente as observações ao treinamento.
 
 ## Features iniciais
 
