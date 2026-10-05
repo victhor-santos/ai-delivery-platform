@@ -1,6 +1,6 @@
 # Roadmap
 
-O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14, o grafo com Dijkstra pelo PR #15 e o dataset pelo PR #16. O modelo foi integrado pelo PR #17 e acrescenta [comparação, seleção, artefato, predictor e avaliação offline](route-segment-model.md). A API de rotas foi integrada pelo PR #18 e oferece [consulta HTTP com prontidão e erros controlados](intelligent-routing-api.md). A integração com Delivery entrou pelo PR #19, com [cliente Java, persistência do plano e controle de concorrência](delivery-route-integration.md). O PR #20 acrescenta a [demonstração completa em containers](route-intelligence-compose.md), e o PR #21 registra [observações simuladas por trecho e exportação histórica](delivery-segment-observations.md). A branch atual, `feature/segment-observation-evaluation`, acrescenta a [avaliação offline desses exports](segment-observation-evaluation.md); seu merge permanece pendente.
+O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14, o grafo com Dijkstra pelo PR #15 e o dataset pelo PR #16. O modelo foi integrado pelo PR #17 e acrescenta [comparação, seleção, artefato, predictor e avaliação offline](route-segment-model.md). A API de rotas foi integrada pelo PR #18 e oferece [consulta HTTP com prontidão e erros controlados](intelligent-routing-api.md). A integração com Delivery entrou pelo PR #19, com [cliente Java, persistência do plano e controle de concorrência](delivery-route-integration.md). O PR #20 acrescenta a [demonstração completa em containers](route-intelligence-compose.md), o PR #21 registra [observações simuladas por trecho e exportação histórica](delivery-segment-observations.md), e o PR #22 acrescenta a [avaliação offline desses exports](segment-observation-evaluation.md). A branch atual, `feature/segment-observation-dataset`, prepara [partições temporais por entrega com manifesto e carregamento validado](segment-observation-dataset.md); seu merge permanece pendente.
 
 A base necessária para ML é uma entrega com origem, destino e ciclo de vida definido. Pagamentos, cardápios completos e autenticação podem evoluir separadamente.
 
@@ -38,10 +38,11 @@ A `main` não recebe desenvolvimento direto nem force push.
 | 13. `feature/route-intelligence-compose` | Dockerfiles e Compose para os serviços necessários à demonstração | Rede por hostnames, health checks, artefato, indisponibilidade Python e recuperação | Fluxo reproduzível com containers, sem treino no startup e sem apagar volumes |
 | 14. `feature/delivery-segment-observations` | Registrar travessias por trecho e exportar features históricas com rótulos posteriores | Duplicatas, eventos fora de ordem, timestamps, rótulos incompletos e cortes temporais | Previsão e resultado associáveis por trecho; eventos simulados identificados, coleta real não presumida |
 | 15. `feature/segment-observation-evaluation` | Importar exports, validar snapshots e comparar previsões armazenadas com tempos observados | Contrato Java, duplicatas/conflitos, disponibilidade, métricas, identidade e CLI | Relatório reproduzível por modelo/grafo, proveniência e corte explícitos; sem inferir rotas completas ou retreinar |
+| 16. `feature/segment-observation-dataset` | Preparar partições temporais por entrega com manifesto próprio | Disponibilidade, fronteiras, isolamento, proveniência, integridade, vazias e CLI | CSVs simulados preservados e carregamento reconstrói a política; sem misturar com o dataset sintético ou treinar |
 
 Se persistência e API ficarem grandes demais para revisar juntas, dividir a etapa em dois PRs. O mesmo vale para a criação das imagens Docker dos serviços.
 
-Os dados sintéticos permitem treinar o primeiro modelo antes de existir coleta real. A última etapa acrescenta o registro das travessias para comparar o tempo previsto com o observado.
+Os dados sintéticos permitem treinar o primeiro modelo antes de existir coleta real. As observações do Delivery permitem auditar previsões e preparar partições para uma integração posterior ao treinamento, preservando a origem simulada.
 
 ## Títulos de PR e mensagens de squash
 
@@ -65,6 +66,7 @@ Para cada branch, usar o mesmo assunto no título do PR e na mensagem final do s
 | `feature/route-intelligence-compose` | `chore: containerize the route intelligence demo` |
 | `feature/delivery-segment-observations` | `feat: record segment travel observations` |
 | `feature/segment-observation-evaluation` | `feat: evaluate exported segment travel observations` |
+| `feature/segment-observation-dataset` | `feat: prepare temporal datasets from delivery observations` |
 
 Os commits de implementação podem separar domínio, persistência e API, sempre acompanhados dos testes correspondentes. Por exemplo: `feat: model restaurant pickup location` e `feat: persist restaurant pickup locations`.
 

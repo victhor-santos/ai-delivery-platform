@@ -77,7 +77,7 @@ A ordem dos arquivos ou linhas não altera a identidade do conjunto normalizado 
 
 O export pode representar uma rota parcial. O relatório não infere métricas de entrega completa ou de escolha da melhor rota. Modelos diferentes podem ter sido usados em viagens distintas; seus grupos não constituem uma comparação controlada.
 
-O comando não cria partições de treino/validação/teste, não mistura eventos ao dataset sintético anterior e não substitui `training.evaluate`, que avalia o artefato no teste reservado. Retreinamento com observações exige definir elegibilidade, grupos por entrega, períodos e proveniência. Coleta real de GPS/trânsito e interface web continuam no roadmap.
+O comando não cria partições de treino/validação/teste, não mistura eventos ao dataset sintético anterior e não substitui `training.evaluate`, que avalia o artefato no teste reservado. Um comando separado de [preparação das observações](segment-observation-dataset.md) define partições temporais por entrega e um manifesto próprio. Retreinamento ainda exige integrar esse contrato à seleção de modelos e à avaliação de trechos, com dados suficientes. Coleta real de GPS/trânsito e interface web continuam no roadmap.
 
 ## Validação
 

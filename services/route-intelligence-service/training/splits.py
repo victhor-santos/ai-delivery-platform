@@ -1,7 +1,7 @@
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Self
 
@@ -25,6 +25,21 @@ class SplitPlan(BaseModel):
             raise ValueError("Split boundaries must be strictly increasing.")
         return self
 
+    def partition_at(self, prediction_at: datetime) -> str:
+        if self.start_at <= prediction_at < self.train_end:
+            return "train"
+        if self.train_end <= prediction_at < self.validation_end:
+            return "validation"
+        if self.validation_end <= prediction_at < self.test_end:
+            return "test"
+        return "outside"
+
+    def cutoff_for(self, partition: str) -> datetime:
+        return getattr(
+            self,
+            {"train": "train_end", "validation": "validation_end", "test": "test_end"}[partition],
+        )
+
 
 def split_plan_for(config: GeneratorConfig) -> SplitPlan:
     train_end = config.start_at + timedelta(days=config.train_days)
@@ -38,15 +53,15 @@ def split_plan_for(config: GeneratorConfig) -> SplitPlan:
 
 
 @dataclass(frozen=True)
-class DatasetSplit:
+class DatasetSplit[Sample]:
     plan: SplitPlan
-    train: tuple[SegmentSample, ...]
-    validation: tuple[SegmentSample, ...]
-    test: tuple[SegmentSample, ...]
-    excluded: tuple[SegmentSample, ...]
+    train: tuple[Sample, ...]
+    validation: tuple[Sample, ...]
+    test: tuple[Sample, ...]
+    excluded: tuple[Sample, ...]
     excluded_reasons: Mapping[str, str]
 
-    def subsets(self) -> dict[str, tuple[SegmentSample, ...]]:
+    def subsets(self) -> dict[str, tuple[Sample, ...]]:
         return {
             "train": self.train,
             "validation": self.validation,
@@ -55,7 +70,7 @@ class DatasetSplit:
         }
 
 
-def split_samples(samples: Sequence[SegmentSample], plan: SplitPlan) -> DatasetSplit:
+def split_samples(samples: Sequence[SegmentSample], plan: SplitPlan) -> DatasetSplit[SegmentSample]:
     if not samples:
         raise ValueError("Cannot split an empty dataset.")
     identifiers = {sample.traversal_id for sample in samples}
@@ -77,28 +92,14 @@ def split_samples(samples: Sequence[SegmentSample], plan: SplitPlan) -> DatasetS
         group = sorted(
             groups[scenario_id], key=lambda sample: (sample.prediction_at, sample.traversal_id)
         )
-        memberships = set()
-        for sample in group:
-            if plan.start_at <= sample.prediction_at < plan.train_end:
-                memberships.add("train")
-            elif plan.train_end <= sample.prediction_at < plan.validation_end:
-                memberships.add("validation")
-            elif plan.validation_end <= sample.prediction_at < plan.test_end:
-                memberships.add("test")
-            else:
-                memberships.add("outside")
+        memberships = {plan.partition_at(sample.prediction_at) for sample in group}
         if memberships == {"outside"}:
             reason = "outside_period"
         elif len(memberships) != 1:
             reason = "crosses_time_boundary"
         else:
             partition = memberships.pop()
-            cutoff = getattr(
-                plan,
-                {"train": "train_end", "validation": "validation_end", "test": "test_end"}[
-                    partition
-                ],
-            )
+            cutoff = plan.cutoff_for(partition)
             reason = (
                 "label_unavailable_at_cutoff"
                 if any(sample.label_available_at > cutoff for sample in group)
