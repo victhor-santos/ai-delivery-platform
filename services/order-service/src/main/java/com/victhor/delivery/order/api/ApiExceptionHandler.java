@@ -14,6 +14,7 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import com.victhor.delivery.order.application.OrderNotFoundException;
+import com.victhor.delivery.order.application.CatalogSelectionConflictException;
 import com.victhor.delivery.order.application.RemoteServiceUnavailableException;
 import com.victhor.delivery.order.application.DeliveryIntegrationConflictException;
 import com.victhor.delivery.order.domain.OrderStateConflictException;
@@ -40,10 +41,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 "O restaurante ou os dados da entrega não permitem esta solicitação.");
     }
 
+    @ExceptionHandler(CatalogSelectionConflictException.class)
+    ProblemDetail handleCatalogConflict(CatalogSelectionConflictException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "O restaurante ou os itens informados não estão disponíveis para este pedido.");
+    }
+
     @ExceptionHandler(RemoteServiceUnavailableException.class)
     ProblemDetail handleRemoteServiceUnavailable(RemoteServiceUnavailableException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
-                "Não foi possível confirmar a entrega. Tente solicitar novamente mais tarde.");
+                "Não foi possível consultar um serviço necessário. Tente novamente mais tarde.");
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)

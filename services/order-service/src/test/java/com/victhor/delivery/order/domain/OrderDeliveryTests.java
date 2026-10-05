@@ -1,6 +1,8 @@
 package com.victhor.delivery.order.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -11,9 +13,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class OrderDeliveryTests {
 
     private static final Instant TIME = Instant.parse("2026-10-02T10:00:00Z");
+    private static final OrderPricing PRICING = new OrderPricing(List.of(
+            new OrderItem(UUID.randomUUID(), "Prato executivo", 2, new BigDecimal("25.00"))));
 
     private Order created() {
-        return Order.create(UUID.randomUUID(), new DeliveryDestination("Rua Central", 0, 0), TIME);
+        return Order.create(UUID.randomUUID(), new DeliveryDestination("Rua Central", 0, 0), PRICING, TIME);
     }
 
     @Test
@@ -30,6 +34,7 @@ class OrderDeliveryTests {
         assertThat(requested.confirmedAt()).isEqualTo(confirmed.confirmedAt());
         assertThat(requested.deliveryRequestedAt()).isEqualTo(TIME.plusSeconds(2));
         assertThat(requested.updatedAt()).isEqualTo(requested.deliveryRequestedAt());
+        assertThat(requested.pricing()).isSameAs(confirmed.pricing());
         assertThat(requested.requestDelivery(TIME.plusSeconds(3))).isSameAs(requested);
         assertThat(requested.confirm(TIME.plusSeconds(3))).isSameAs(requested);
         assertThatThrownBy(() -> requested.cancel(TIME.plusSeconds(3))).isInstanceOf(OrderStateConflictException.class);
