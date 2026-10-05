@@ -60,7 +60,15 @@ Com todos os serviços saudáveis:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 ```
 
-O script cria um restaurante, confirma um pedido, solicita entrega duas vezes e verifica a idempotência. Planeja a rota e compara a consulta persistida com a resposta original, incluindo a identificação dos dados sintéticos. Depois atribui entregador, registra partida, entrada/saída em cada trecho e conclusão da entrega, conferindo snapshots, idempotência e exportação CSV. As travessias são explicitamente simuladas; seus tempos curtos não representam medições reais. Ele usa apenas HTTP pelo Gateway e deixa os registros de demonstração no banco. Cada execução cria novos registros identificados pelo nome `Compose Demo`.
+O script cria um restaurante e verifica cadastro, atualização de preço/disponibilidade e consultas do cardápio. Confirma um pedido, solicita entrega duas vezes e verifica a idempotência. Planeja a rota e compara a consulta persistida com a resposta original, incluindo a identificação dos dados sintéticos. Depois atribui entregador, registra partida, entrada/saída em cada trecho e conclusão da entrega, conferindo snapshots, idempotência e exportação CSV. As travessias são explicitamente simuladas; seus tempos curtos não representam medições reais. Ele usa apenas HTTP pelo Gateway e deixa os registros de demonstração no banco. Cada execução cria novos registros identificados pelo nome `Compose Demo`. O pedido ainda não usa os itens do cardápio; essa integração pertence à próxima feature.
+
+Para conferir somente o [cardápio](restaurant-menu.md), com catálogo, seu banco e Gateway disponíveis:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -CatalogOnly
+```
+
+Esse modo não consulta pedidos, pagamentos, usuários, Delivery ou Python. Não pode ser combinado com as opções de recuperação/persistência da demonstração completa.
 
 Para verificar indisponibilidade e persistência:
 
@@ -69,7 +77,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
     -CheckRecovery -CheckPersistence
 ```
 
-`-CheckRecovery` interrompe Python antes da partida, espera `503 ROUTE_SERVICE_UNAVAILABLE` e confirma que entrega e plano anterior não mudaram. Restaura Python em `finally`, aguarda sua prontidão e verifica um novo planejamento. `-CheckPersistence` recria os containers com `--force-recreate`, reutilizando os volumes; depois consulta restaurante, pedido, entrega, plano, observações e CSV, e repete a solicitação idempotente. Essas opções interrompem temporariamente os serviços da demonstração; use-as quando não houver outras operações em andamento.
+`-CheckRecovery` interrompe Python antes da partida, espera `503 ROUTE_SERVICE_UNAVAILABLE` e confirma que entrega e plano anterior não mudaram. Restaura Python em `finally`, aguarda sua prontidão e verifica um novo planejamento. `-CheckPersistence` recria os containers com `--force-recreate`, reutilizando os volumes; depois consulta restaurante, item de cardápio, pedido, entrega, plano, observações e CSV, e repete a solicitação idempotente. Essas opções interrompem temporariamente os serviços da demonstração; use-as quando não houver outras operações em andamento.
 
 Se alterar a porta do Gateway, informe `-GatewayUrl http://localhost:NOVA_PORTA`. Para um projeto Compose isolado, informe também `-ComposeProject` e `-EnvFile` com os mesmos valores usados ao iniciar o ambiente. Antes de criar dados ou interromper serviços, as verificações de recuperação/persistência exigem um Gateway local cuja porta corresponda à publicada pelo projeto selecionado. Só mudar o endereço HTTP não muda o projeto que os testes de recuperação operam.
 
