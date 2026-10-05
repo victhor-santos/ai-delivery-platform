@@ -1,6 +1,6 @@
 # Roadmap
 
-O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14, o grafo com Dijkstra pelo PR #15 e o dataset pelo PR #16. O modelo foi integrado pelo PR #17 e acrescenta [comparação, seleção, artefato, predictor e avaliação offline](route-segment-model.md). A API de rotas foi integrada pelo PR #18 e oferece [consulta HTTP com prontidão e erros controlados](intelligent-routing-api.md). A integração com Delivery entrou pelo PR #19, com [cliente Java, persistência do plano e controle de concorrência](delivery-route-integration.md). O PR #20 acrescenta a [demonstração completa em containers](route-intelligence-compose.md), o PR #21 registra [observações simuladas por trecho e exportação histórica](delivery-segment-observations.md), o PR #22 acrescenta a [avaliação offline desses exports](segment-observation-evaluation.md), o PR #23 prepara [partições temporais por entrega com manifesto e carregamento validado](segment-observation-dataset.md), e o PR #24 integra [treinamento e avaliação offline de modelos observacionais](segment-observation-training.md). O PR #25 integra [itens de cardápio, preços BRL e disponibilidade](restaurant-menu.md). A branch atual, `feature/order-items`, acrescenta [itens, quantidades e preços preservados nos pedidos](order-items.md); seu push e merge permanecem pendentes.
+O catálogo foi integrado pelo PR #6, a localização de coleta pelo PR #8, o ciclo mínimo de pedidos pelo PR #9, o domínio de entregas pelo PR #10, a persistência pelo PR #11, a API de entregas pelo PR #12, a integração entre pedidos e entregas pelo PR #13, a base Python pelo PR #14, o grafo com Dijkstra pelo PR #15 e o dataset pelo PR #16. O modelo foi integrado pelo PR #17 e acrescenta [comparação, seleção, artefato, predictor e avaliação offline](route-segment-model.md). A API de rotas foi integrada pelo PR #18 e oferece [consulta HTTP com prontidão e erros controlados](intelligent-routing-api.md). A integração com Delivery entrou pelo PR #19, com [cliente Java, persistência do plano e controle de concorrência](delivery-route-integration.md). O PR #20 acrescenta a [demonstração completa em containers](route-intelligence-compose.md), o PR #21 registra [observações simuladas por trecho e exportação histórica](delivery-segment-observations.md), o PR #22 acrescenta a [avaliação offline desses exports](segment-observation-evaluation.md), o PR #23 prepara [partições temporais por entrega com manifesto e carregamento validado](segment-observation-dataset.md), e o PR #24 integra [treinamento e avaliação offline de modelos observacionais](segment-observation-training.md). O PR #25 integra [itens de cardápio, preços BRL e disponibilidade](restaurant-menu.md). O PR #26 integra [itens, quantidades e preços preservados nos pedidos](order-items.md). A branch atual, `feature/user-profiles`, acrescenta [perfis e endereços de usuários](user-profiles.md), com PostgreSQL próprio; seu push e merge permanecem pendentes.
 
 A base de entregas e ML já funciona na demonstração local. A próxima fase completa o fluxo comercial e a interface da V1, preservando a arquitetura e a identificação explícita de dados simulados.
 
@@ -42,6 +42,7 @@ A `main` não recebe desenvolvimento direto nem force push.
 | 17. `feature/segment-observation-training` | Treinar modelos offline sobre as partições preparadas e avaliar no teste reservado | Proveniência, grafo, isolamento do teste, serialização, limites numéricos e CLI | Bundle simulado próprio, rejeitado pelo runtime atual; comparação de tempos por trecho sem inferir a melhor rota |
 | 18. `feature/restaurant-menu` | Cardápio por restaurante, preço BRL e disponibilidade, com domínio, JPA, V3 e API | Centavos sem arredondamento, ownership, consultas, paginação, preservação dos restaurantes e Gateway | Cardápio administrável e persistido; pedidos ainda sem itens e totais |
 | 19. `feature/order-items` | Composição comercial, consulta HTTP ao catálogo, snapshots e total BRL, com V3 e contrato de pedidos | Precisão monetária, seleção inválida, falhas sem gravação parcial, rollback, legados e preservação nas transições | Novos pedidos exigem itens; cardápio alterado não modifica composição salva; fluxo de entrega preservado |
+| 20. `feature/user-profiles` | Perfil com e-mail único e endereços próprios, JPA, Flyway V1 e API pelo Gateway | Formato/normalização, duplicidade concorrente, ownership, paginação, constraints e reinício | Perfil e endereços persistidos; UUID/e-mail preservados nas atualizações; login e autorização em etapas próprias |
 
 Se persistência e API ficarem grandes demais para revisar juntas, dividir a etapa em dois PRs. O mesmo vale para a criação das imagens Docker dos serviços.
 
@@ -49,13 +50,13 @@ Os dados sintéticos permitem treinar o primeiro modelo antes de existir coleta 
 
 ## Plano de entregas para a V1
 
-A V1 deverá permitir usuário → cardápio → pedido com itens e valores preservados → pagamento explicitamente simulado → entrega → acompanhamento da rota pela interface web. O plano inicial desta fase estimava 12–15 PRs e detalhou as 14 entregas abaixo. Cardápio já foi integrado; itens de pedidos estão na feature atual. Após seu merge, restam 12 entregas planejadas. O tamanho e os critérios de revisão podem alterar as divisões; a quantidade não é uma meta de histórico.
+A V1 deverá permitir usuário → cardápio → pedido com itens e valores preservados → pagamento explicitamente simulado → entrega → acompanhamento da rota pela interface web. O plano inicial desta fase estimava 12–15 PRs e detalhou as 14 entregas abaixo. Cardápio e itens de pedidos já foram integrados; perfis de usuários estão na feature atual. Após seu merge, restam 11 entregas planejadas. O tamanho e os critérios de revisão podem alterar as divisões; a quantidade não é uma meta de histórico.
 
 | Branch proposta | Entrega e critério de aceite |
 | --- | --- |
 | `feature/restaurant-menu` (PR #25 integrado) | Cadastro, consulta e atualização do cardápio com preço/disponibilidade, migrations e testes |
-| `feature/order-items` (atual) | Itens e quantidades, consulta ao catálogo, snapshots monetários e totais; mudança posterior de preço não altera pedido existente |
-| `feature/user-profiles` | Cadastro e perfil de usuário, endereços e persistência própria, com validação |
+| `feature/order-items` (PR #26 integrado) | Itens e quantidades, consulta ao catálogo, snapshots monetários e totais; mudança posterior de preço não altera pedido existente |
+| `feature/user-profiles` (atual) | Cadastro e perfil de usuário, endereços e persistência própria, com validação |
 | `feature/authentication` | Login, senhas protegidas e credenciais de acesso, com testes de sucesso/recusa |
 | `feature/resource-authorization` | Permissões e vínculo entre usuário e recursos; impedir acesso ou alteração de pedido alheio |
 | `feature/simulated-payments` | Tentativas de pagamento simuladas com aprovação/recusa, persistência e idempotência |
@@ -98,6 +99,7 @@ Para cada branch, usar o mesmo assunto no título do PR e na mensagem final do s
 | `feature/segment-observation-training` | `feat: train and evaluate offline models from delivery observations` |
 | `feature/restaurant-menu` | `feat: add restaurant menu items and pricing` |
 | `feature/order-items` | `feat: add priced order items and preserve menu snapshots` |
+| `feature/user-profiles` | `feat: add user profiles and saved addresses` |
 
 Os commits de implementação podem separar domínio, persistência e API, sempre acompanhados dos testes correspondentes. Por exemplo: `feat: model restaurant pickup location` e `feat: persist restaurant pickup locations`.
 
