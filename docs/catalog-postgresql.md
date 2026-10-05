@@ -106,7 +106,7 @@ Com o Gateway em execução, a rota existente `/api/catalog/**` atende essas mes
 
 Os endpoints ficam sob `/api/catalog/restaurants/{restaurantId}/menu-items`, diretamente na porta 8082 ou pelo Gateway na 8080. Cadastro gera UUID e `available=true`; o `PUT /{id}` exige nome, preço e disponibilidade, com descrição opcional. O preço é um número JSON em BRL, com precisão de centavos; strings numéricas são rejeitadas. O contrato de resposta inclui `currency: "BRL"`. A paginação tem os mesmos limites da listagem de restaurantes. Não há exclusão de itens nesta etapa.
 
-Veja o [contrato, exemplos e limitações do cardápio](restaurant-menu.md). A integração desses itens aos pedidos permanece pendente. Com catálogo e Gateway disponíveis, `scripts/smoke-route-demo.ps1 -CatalogOnly` verifica cadastro, consulta, paginação, atualização e isolamento por restaurante sem depender dos demais serviços. O smoke completo também verifica o cardápio; `-CheckPersistence` acrescenta a consulta do item após recriar os containers.
+Veja o [contrato, exemplos e limitações do cardápio](restaurant-menu.md) e a [compra com itens e preços preservados](order-items.md). Com catálogo e Gateway disponíveis, `scripts/smoke-route-demo.ps1 -CatalogOnly` verifica cadastro, consulta, paginação, atualização e isolamento por restaurante sem depender dos demais serviços. O smoke completo também verifica o cardápio; `-CheckPersistence` acrescenta a consulta do item após recriar os containers.
 
 ## Preservar os dados
 

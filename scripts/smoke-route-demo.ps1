@@ -2,6 +2,7 @@
 param(
     [uri]$GatewayUrl = 'http://localhost:8080',
     [switch]$CatalogOnly,
+    [switch]$OrderOnly,
     [switch]$CheckRecovery,
     [switch]$CheckPersistence,
     [string]$ComposeProject,
@@ -9,8 +10,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($CatalogOnly -and ($CheckRecovery -or $CheckPersistence)) {
-    throw 'CatalogOnly cannot be combined with the full demo recovery or persistence checks.'
+if ($CatalogOnly -and $OrderOnly) {
+    throw 'Select either CatalogOnly or OrderOnly.'
+}
+if (($CatalogOnly -or $OrderOnly) -and ($CheckRecovery -or $CheckPersistence)) {
+    throw 'Partial smoke modes cannot be combined with the full demo recovery or persistence checks.'
 }
 Add-Type -AssemblyName System.Net.Http
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -64,7 +68,8 @@ try {
         }
     }
 
-    $services = if ($CatalogOnly) { @('catalog') } else { @('users', 'catalog', 'orders', 'payments', 'deliveries') }
+    $services = if ($CatalogOnly) { @('catalog') } elseif ($OrderOnly) { @('catalog', 'orders') }
+        else { @('users', 'catalog', 'orders', 'payments', 'deliveries') }
     foreach ($service in $services) {
         Invoke-Api 'GET' "/api/$service/ping" | Out-Null
     }
@@ -100,13 +105,29 @@ try {
     Write-Output "Catalog passed: restaurant=$($restaurant.id), menuItem=$($menuItem.id)."
     if ($CatalogOnly) { return }
 
+    Invoke-Api 'PUT' $itemPath @{
+        name = 'Prato especial'; price = [decimal]29.90; available = $true
+    } | Out-Null
     $order = Invoke-Api 'POST' '/api/orders' @{
         restaurantId = $restaurant.id
+        items = @(@{ menuItemId = $menuItem.id; quantity = 2 })
         destination = @{ address = 'Destino sintetico C'; latitude = -23.561; longitude = -46.656 }
     } 201
+    Assert-Condition ($order.currency -eq 'BRL' -and $order.total -eq [decimal]59.80) 'Order total was not calculated from the menu.'
+    Assert-Condition ($order.items.Count -eq 1 -and $order.items[0].unitPrice -eq [decimal]29.90) 'Order item snapshot is invalid.'
+    $updatedItem = Invoke-Api 'PUT' $itemPath @{
+        name = 'Prato com novo preco'; price = [decimal]39.90; available = $false
+    }
     $orderPath = "/api/orders/$($order.id)"
+    $storedOrder = Invoke-Api 'GET' $orderPath
+    Assert-Condition ($storedOrder.total -eq $order.total -and $storedOrder.currency -eq $order.currency) 'Menu changes altered the stored order total or currency.'
+    Assert-Condition (($storedOrder.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Menu changes altered the stored item snapshots.'
     $confirmed = Invoke-Api 'POST' "$orderPath/confirm"
     Assert-Condition ($confirmed.status -eq 'CONFIRMED') 'Order was not confirmed.'
+    Assert-Condition ($confirmed.total -eq $order.total) 'Menu changes repriced the order.'
+    Assert-Condition (($confirmed.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Confirmation changed the item snapshots.'
+    Write-Output "Orders passed: order=$($order.id), total=$($order.total) BRL."
+    if ($OrderOnly) { return }
     $receipt = Invoke-Api 'POST' "$orderPath/delivery"
     $repeated = Invoke-Api 'POST' "$orderPath/delivery"
     Assert-Condition ($receipt.deliveryId -eq $repeated.deliveryId) 'Delivery creation was not idempotent.'
@@ -186,6 +207,9 @@ try {
         Assert-Condition ($persistedRestaurant.id -eq $restaurant.id) 'Restaurant was lost after restart.'
         Assert-Condition (($persistedMenuItem | ConvertTo-Json -Compress) -eq ($updatedItem | ConvertTo-Json -Compress)) 'Menu item changed after restart.'
         Assert-Condition ($persistedOrder.status -eq 'CONFIRMED') 'Order was lost after restart.'
+        Assert-Condition ($persistedOrder.total -eq $order.total) 'Order total changed after restart.'
+        Assert-Condition ($persistedOrder.currency -eq $order.currency) 'Order currency changed after restart.'
+        Assert-Condition (($persistedOrder.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Item snapshots changed after restart.'
         Assert-Condition (($persistedDelivery | ConvertTo-Json -Depth 10 -Compress) -eq ($delivery | ConvertTo-Json -Depth 10 -Compress)) 'Delivery changed after restart.'
         Assert-Condition (($persistedPlan | ConvertTo-Json -Depth 10 -Compress) -eq ($plan | ConvertTo-Json -Depth 10 -Compress)) 'Saved route changed after restart.'
         $persistedObservations = @(Invoke-Api 'GET' "$deliveryPath/segments")

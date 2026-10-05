@@ -8,9 +8,9 @@ O Catalog Service cadastra e consulta restaurantes e seus itens de cardápio em 
 
 A localização de coleta pode ser informada no cadastro ou atualizada depois. Ela contém latitude e longitude e é salva no PostgreSQL. Restaurantes sem localização continuam válidos no catálogo; esse dado é exigido na primeira solicitação de entrega de um pedido.
 
-Cada item do cardápio pertence a um restaurante e tem nome, descrição opcional, preço em BRL e disponibilidade. A API permite cadastrar, consultar, listar e substituir seus dados, com valores monetários exatos e isolamento por restaurante. Veja o [contrato do cardápio](docs/restaurant-menu.md). A integração dos itens e preços com pedidos será a próxima etapa.
+Cada item do cardápio pertence a um restaurante e tem nome, descrição opcional, preço em BRL e disponibilidade. A API permite cadastrar, consultar, listar e substituir seus dados, com valores monetários exatos e isolamento por restaurante. Veja o [contrato do cardápio](docs/restaurant-menu.md).
 
-O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Um pedido confirmado pode solicitar entrega, com validação do restaurante no catálogo, snapshots persistidos e criação idempotente no Delivery. Ainda não há itens, valores ou pagamento. Veja a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
+O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. Um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e criação idempotente no Delivery. Pagamento ainda não foi implementado. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
 O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Consulta Python, salva o último plano de rota e registra [travessias simuladas por trecho](docs/delivery-segment-observations.md), com snapshots da previsão e exportação CSV por disponibilidade temporal. Veja também o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
@@ -48,7 +48,7 @@ Gateway atende em `http://localhost:8080`; Python em `http://localhost:8000`. As
 
 Veja o [guia do Compose](docs/route-intelligence-compose.md) para configuração, compatibilidade do modelo, testes de queda/recuperação e preservação dos volumes. O smoke cria registros de demonstração no banco. Os comandos de execução nativa abaixo continuam disponíveis.
 
-Para verificar somente restaurantes e cardápios, com catálogo e Gateway disponíveis, execute `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -CatalogOnly`. Essa opção não exige Order, Delivery ou Python. O smoke completo também verifica o cardápio, sem incluir seus itens no pedido ainda.
+Para verificar somente restaurantes e cardápios, com catálogo e Gateway disponíveis, execute `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -CatalogOnly`. Para incluir criação, consulta, confirmação e preservação de preços dos pedidos, acrescente Order e seu banco e use `-OrderOnly`. Os dois modos são exclusivos e não podem ser combinados com `-CheckRecovery` ou `-CheckPersistence`. `-OrderOnly` não exige Delivery ou Python. O smoke completo inclui os itens do cardápio no pedido e verifica os valores também após confirmação e, quando solicitado, recriação dos containers.
 
 ## Requisitos para desenvolvimento e execução nativa
 
@@ -192,7 +192,9 @@ Diretamente em `http://localhost:8083` ou pelo Gateway em `http://localhost:8080
 | `POST /api/orders/{id}/cancel` | `200` com estado `CANCELLED` |
 | `POST /api/orders/{id}/delivery` | `200` com `orderId`, `deliveryId` e estado da entrega; exige pedido confirmado |
 
-O cadastro recebe `restaurantId` e `destination`, com `address`, `latitude` e `longitude`. A confirmação é manual e não representa aprovação de pagamento. Repetir uma confirmação ou cancelamento já aplicado preserva os timestamps. Conflitos de atualização retornam `409`; consulte o pedido antes de tentar novamente.
+O cadastro recebe `restaurantId`, `destination` com `address`, `latitude` e `longitude`, e `items` com `menuItemId` e `quantity`. São aceitos de 1 a 50 itens distintos, com quantidades inteiras de 1 a 99. O servidor consulta o catálogo e calcula os valores; preços enviados pelo cliente não definem o total. Ausência de restaurante ou item, restaurante inativo ou item de outro restaurante/indisponível resulta em `409`; falhas do catálogo retornam `503` sem detalhes internos. A resposta inclui os itens com nomes e preços preservados, `lineTotal`, `total` e `currency: "BRL"`. Pedidos anteriores à migração mantêm `items: []`, `total: null` e `currency: null`.
+
+A confirmação é manual e não representa aprovação de pagamento. Repetir uma confirmação ou cancelamento já aplicado preserva os timestamps e a composição do pedido. Conflitos de atualização retornam `409`; consulte o pedido antes de tentar novamente.
 
 Veja [o fluxo, exemplos completos e testes de pedidos](docs/orders.md).
 
@@ -322,7 +324,7 @@ Com Docker funcionando, execute da raiz:
 .\services\order-service\mvnw.cmd -f .\services\order-service\pom.xml clean verify
 ```
 
-Os testes de domínio cobrem as regras de restaurantes e itens de cardápio, incluindo preços sem frações de centavo. Os testes de integração inicializam Spring e PostgreSQL real via Testcontainers, aplicam Flyway e exercitam cadastro, dados persistidos, consulta, paginação, entrada inválida, recursos inexistentes e isolamento dos itens por restaurante. As migrations também são testadas sobre dados existentes. O `contextLoads` usa o banco do Testcontainers. Não é necessário subir o Compose, criar `.env` ou fornecer credenciais locais para esses testes; eles não acessam o volume de desenvolvimento. A suíte completa exige Docker e falha quando ele está indisponível, em vez de ignorar a integração.
+Os testes de domínio cobrem as regras de restaurantes, cardápios e composição dos pedidos, incluindo preços sem frações de centavo e cálculo exato dos totais. Os testes de integração inicializam Spring e PostgreSQL real via Testcontainers, aplicam Flyway e exercitam cadastro, dados persistidos, consulta, paginação, entrada inválida, recursos inexistentes e isolamento dos itens por restaurante. Pedidos usam servidores HTTP locais para testar a consulta ao catálogo, indisponibilidade e preservação dos valores após alterações remotas e transições. As migrations também são testadas sobre dados existentes, preservando pedidos antigos sem inventar preços. O `contextLoads` usa o banco do Testcontainers. Não é necessário subir o Compose, criar `.env` ou fornecer credenciais locais para esses testes; eles não acessam o volume de desenvolvimento. A suíte completa exige Docker e falha quando ele está indisponível, em vez de ignorar a integração.
 
 O JAR fica em `services/catalog-service/target/catalog-service-0.0.1-SNAPSHOT.jar`. Com o PostgreSQL local iniciado e `.env` configurado, ele também pode ser executado da raiz:
 

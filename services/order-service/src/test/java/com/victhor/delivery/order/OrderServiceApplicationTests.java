@@ -1,6 +1,7 @@
 package com.victhor.delivery.order;
 
 import java.net.URI;
+import java.math.BigDecimal;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -19,13 +20,21 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import com.victhor.delivery.order.application.CatalogLookup;
+import com.victhor.delivery.order.application.CatalogSelectionConflictException;
+import com.victhor.delivery.order.application.RemoteServiceUnavailableException;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "ORDER_DB_PASSWORD=testcontainers-only")
@@ -33,10 +42,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OrderServiceApplicationTests {
 
     private static final UUID RESTAURANT_ID = UUID.randomUUID();
+    private static final UUID MENU_ITEM_ID = UUID.randomUUID();
     private static final String VALID_REQUEST = """
-            {"restaurantId":"%s","destination":{
+            {"restaurantId":"%s","items":[{"menuItemId":"%s","quantity":2}],"destination":{
               "address":"  Rua das Flores, 42  ","latitude":-23.55,"longitude":-46.63}}
-            """.formatted(RESTAURANT_ID);
+            """.formatted(RESTAURANT_ID, MENU_ITEM_ID);
 
     @Container
     @ServiceConnection
@@ -54,18 +64,24 @@ class OrderServiceApplicationTests {
     @Autowired
     private Environment environment;
 
+    @MockitoBean
+    private CatalogLookup catalog;
+
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     @BeforeEach
     void clearOrders() {
         jdbc.update("DELETE FROM orders");
+        when(catalog.isRestaurantActive(RESTAURANT_ID)).thenReturn(true);
+        when(catalog.findMenuItem(RESTAURANT_ID, MENU_ITEM_ID))
+                .thenReturn(new CatalogLookup.CatalogMenuItem("Prato do dia", new BigDecimal("25.90"), true));
     }
 
     @Test
     void loadsContextWithFlywayAndHibernateValidation() {
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class))
-                .isEqualTo(2);
+                .isEqualTo(3);
     }
 
     @Test
@@ -84,6 +100,15 @@ class OrderServiceApplicationTests {
         assertThat(Instant.parse(order.path("createdAt").asString())).isNotNull();
         assertThat(order.path("confirmedAt").isNull()).isTrue();
         assertThat(order.path("cancelledAt").isNull()).isTrue();
+        assertThat(order.path("currency").asString()).isEqualTo("BRL");
+        assertThat(order.path("total").asDouble()).isEqualTo(51.80);
+        assertThat(order.path("items").size()).isEqualTo(1);
+        var item = order.path("items").get(0);
+        assertThat(item.path("menuItemId").asString()).isEqualTo(MENU_ITEM_ID.toString());
+        assertThat(item.path("name").asString()).isEqualTo("Prato do dia");
+        assertThat(item.path("quantity").asInt()).isEqualTo(2);
+        assertThat(item.path("unitPrice").asDouble()).isEqualTo(25.90);
+        assertThat(item.path("lineTotal").asDouble()).isEqualTo(51.80);
         var retrieved = send("GET", location, null);
         assertThat(retrieved.statusCode()).isEqualTo(200);
         assertThat(json(retrieved)).isEqualTo(order);
@@ -97,13 +122,16 @@ class OrderServiceApplicationTests {
     void ignoresClientSuppliedIdentityStatusAndTimestamps() throws Exception {
         UUID suppliedId = UUID.randomUUID();
         String request = VALID_REQUEST.strip().replaceFirst("\\{", """
-                {"id":"%s","status":"CONFIRMED","createdAt":"2000-01-01T00:00:00Z",
-                """.formatted(suppliedId));
+                {"id":"%s","status":"CONFIRMED","createdAt":"2000-01-01T00:00:00Z","total":0.01,"currency":"USD",
+                """.formatted(suppliedId)).replace("\"quantity\":2", "\"quantity\":2,\"name\":\"Falso\",\"unitPrice\":0.01");
         var response = send("POST", "/api/orders", request);
         assertThat(response.statusCode()).isEqualTo(201);
         assertThat(json(response).path("id").asString()).isNotEqualTo(suppliedId.toString());
         assertThat(json(response).path("status").asString()).isEqualTo("CREATED");
         assertThat(json(response).path("createdAt").asString()).doesNotStartWith("2000-");
+        assertThat(json(response).path("total").asDouble()).isEqualTo(51.80);
+        assertThat(json(response).path("currency").asString()).isEqualTo("BRL");
+        assertThat(json(response).path("items").get(0).path("name").asString()).isEqualTo("Prato do dia");
     }
 
     @Test
@@ -142,6 +170,7 @@ class OrderServiceApplicationTests {
     void rejectsInvalidInputWithoutPersisting(String body) throws Exception {
         assertProblem(send("POST", "/api/orders", body), 400);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM orders", Integer.class)).isZero();
+        verifyNoInteractions(catalog);
     }
 
     static Stream<String> invalidRequests() {
@@ -156,6 +185,89 @@ class OrderServiceApplicationTests {
                 VALID_REQUEST.replace("-23.55", "null"), VALID_REQUEST.replace("-23.55", "1e309"),
                 "{\"restaurantId\":\"" + RESTAURANT_ID + "\",\"destination\":null}",
                 "{\"restaurantId\":\"" + RESTAURANT_ID + "\",\"destination\":{}}");
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidItemRequests")
+    void rejectsMissingInvalidOrDuplicateSelectionsBeforeCallingCatalog(String body) throws Exception {
+        assertProblem(send("POST", "/api/orders", body), 400);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM orders", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items", Integer.class)).isZero();
+        verifyNoInteractions(catalog);
+    }
+
+    static Stream<String> invalidItemRequests() {
+        String item = "{\"menuItemId\":\"" + MENU_ITEM_ID + "\",\"quantity\":2}";
+        String items = "[" + item + "]";
+        String manyItems = "[" + String.join(",", java.util.Collections.nCopies(51, item)) + "]";
+        return Stream.of(VALID_REQUEST.replace("\"items\":" + items + ",", ""),
+                VALID_REQUEST.replace(items, "null"), VALID_REQUEST.replace(items, "[]"),
+                VALID_REQUEST.replace(items, "{}"), VALID_REQUEST.replace(items, "[null]"),
+                VALID_REQUEST.replace(items, "[{}]"), VALID_REQUEST.replace(MENU_ITEM_ID.toString(), "invalid"),
+                VALID_REQUEST.replace(items, "[" + item + "," + item + "]"), VALID_REQUEST.replace(items, manyItems),
+                VALID_REQUEST.replace("\"quantity\":2", "\"quantity\":0"),
+                VALID_REQUEST.replace("\"quantity\":2", "\"quantity\":100"),
+                VALID_REQUEST.replace("\"quantity\":2", "\"quantity\":null"),
+                VALID_REQUEST.replace("\"quantity\":2", "\"quantity\":\"2\""),
+                VALID_REQUEST.replace("\"quantity\":2", "\"quantity\":true"),
+                VALID_REQUEST.replace("\"quantity\":2", "\"quantity\":2.0"),
+                VALID_REQUEST.replace("\"quantity\":2", "\"quantity\":2.5"),
+                VALID_REQUEST.replace("\"quantity\":2", "\"quantity\":2147483648"));
+    }
+
+    @Test
+    void preservesSnapshotsWhenCatalogChangesOrBecomesUnavailable() throws Exception {
+        var created = send("POST", "/api/orders", VALID_REQUEST);
+        assertThat(created.statusCode()).isEqualTo(201);
+        String path = created.headers().firstValue("Location").orElseThrow();
+        JsonNode original = json(created);
+        when(catalog.findMenuItem(RESTAURANT_ID, MENU_ITEM_ID))
+                .thenReturn(new CatalogLookup.CatalogMenuItem("Novo nome", new BigDecimal("100.00"), false));
+        when(catalog.isRestaurantActive(RESTAURANT_ID)).thenThrow(new RemoteServiceUnavailableException());
+        clearInvocations(catalog);
+
+        for (var response : new HttpResponse<?>[] { send("GET", path, null), send("POST", path + "/confirm", null),
+                send("POST", path + "/cancel", null) }) {
+            assertThat(response.statusCode()).isEqualTo(200);
+            JsonNode order = mapper.readTree((String) response.body());
+            assertThat(order.path("items")).isEqualTo(original.path("items"));
+            assertThat(order.path("total")).isEqualTo(original.path("total"));
+        }
+        verifyNoInteractions(catalog);
+    }
+
+    @Test
+    void rejectsInactiveRestaurantUnavailableItemAndCatalogFailuresWithoutWriting() throws Exception {
+        when(catalog.isRestaurantActive(RESTAURANT_ID)).thenReturn(false);
+        assertProblem(send("POST", "/api/orders", VALID_REQUEST), 409);
+        when(catalog.isRestaurantActive(RESTAURANT_ID)).thenReturn(true);
+        when(catalog.findMenuItem(RESTAURANT_ID, MENU_ITEM_ID))
+                .thenReturn(new CatalogLookup.CatalogMenuItem("Prato", new BigDecimal("25.90"), false));
+        assertProblem(send("POST", "/api/orders", VALID_REQUEST), 409);
+        when(catalog.findMenuItem(RESTAURANT_ID, MENU_ITEM_ID)).thenThrow(new CatalogSelectionConflictException());
+        assertProblem(send("POST", "/api/orders", VALID_REQUEST), 409);
+        when(catalog.isRestaurantActive(RESTAURANT_ID)).thenThrow(new RemoteServiceUnavailableException());
+        assertProblem(send("POST", "/api/orders", VALID_REQUEST), 503);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM orders", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items", Integer.class)).isZero();
+    }
+
+    @Test
+    void readsAndTransitionsAnExistingLegacyOrderWithoutInventingPrices() throws Exception {
+        UUID id = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO orders (id,restaurant_id,destination_address,destination_latitude,destination_longitude,
+                    status,created_at,updated_at) VALUES (?,?,'Legacy',0,0,'CREATED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """, id, RESTAURANT_ID);
+
+        for (String suffix : new String[] { "", "/confirm", "/cancel" }) {
+            var response = send(suffix.isEmpty() ? "GET" : "POST", "/api/orders/" + id + suffix, null);
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(json(response).path("items").size()).isZero();
+            assertThat(json(response).path("total").isNull()).isTrue();
+            assertThat(json(response).path("currency").isNull()).isTrue();
+        }
+        verifyNoInteractions(catalog);
     }
 
     @Test

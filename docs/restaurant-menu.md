@@ -1,6 +1,6 @@
 # Cardápio por restaurante
 
-O Catalog Service mantém itens de cardápio em seu próprio PostgreSQL. Cada item pertence a um restaurante existente e possui UUID, nome, descrição opcional, preço em reais e disponibilidade. Pedidos ainda não consomem esses itens: quantidades, preços preservados e totais serão implementados na próxima feature.
+O Catalog Service mantém itens de cardápio em seu próprio PostgreSQL. Cada item pertence a um restaurante existente e possui UUID, nome, descrição opcional, preço em reais e disponibilidade. O Order Service consome esses itens por HTTP na criação de pedidos e guarda quantidades, nomes e preços preservados, junto ao total. Veja o [contrato de itens dos pedidos](order-items.md).
 
 ## Contrato HTTP
 
@@ -62,7 +62,7 @@ O smoke existente também aceita execução apenas do catálogo:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -CatalogOnly
 ```
 
-`-GatewayUrl` permite outra porta. Esse modo exige somente catálogo, PostgreSQL e Gateway. Cria restaurantes e item, altera preço/disponibilidade e confere consultas, paginação e isolamento entre restaurantes. Os registros ficam no banco escolhido. `-CatalogOnly` não pode ser combinado com `-CheckRecovery` ou `-CheckPersistence`, que exercitam a demonstração completa. Sem a opção, o smoke verifica também o cardápio antes do fluxo de pedidos e rotas; o pedido continua sem associação aos itens nesta etapa.
+`-GatewayUrl` permite outra porta. Esse modo exige somente catálogo, PostgreSQL e Gateway. Cria restaurantes e item, altera preço/disponibilidade e confere consultas, paginação e isolamento entre restaurantes. Os registros ficam no banco escolhido. Para testar também a compra, com Order e seu banco disponíveis, use `-OrderOnly`: o smoke cria um pedido com duas unidades, altera o preço e a disponibilidade no catálogo e confere que a confirmação mantém nomes e valores originais. Os modos `-CatalogOnly` e `-OrderOnly` são exclusivos e não podem ser combinados com `-CheckRecovery` ou `-CheckPersistence`, que exercitam a demonstração completa. Sem um desses modos, o smoke segue do cardápio e pedido com itens para o fluxo de entregas e rotas.
 
 ## Camadas e persistência
 
@@ -74,14 +74,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 
 O banco impõe limites de tamanho, nome não vazio e preço positivo dentro do intervalo. `NUMERIC(10,2)` pode arredondar frações de centavo enviadas diretamente por SQL; a rejeição dessas frações ocorre no domínio antes de qualquer gravação feita pela aplicação. A moeda é fixa no contrato e não ocupa uma coluna. Não há consulta ao banco de outro serviço nem relacionamento JPA bidirecional com restaurantes.
 
-## Validação
+## Validação da feature de cardápio
 
 Em 05/10/2026, `clean verify` do catálogo passou com 262 testes, sem falhas ou casos ignorados, e gerou o JAR executável. São 131 novos casos cobrindo regras monetárias, normalização, casos de uso, HTTP, isolamento por restaurante, PostgreSQL, constraints e atualização sem criação acidental. A migration V2→V3 foi testada com restaurantes existentes, e o teste V1→V2 mantém seu destino explícito.
 
 Gateway passou em `clean verify` com 6 testes. O smoke `-CatalogOnly` também passou com os JARs de catálogo e Gateway em execução, usando um PostgreSQL descartável sem volumes. Confirmou criação, atualização, consultas, paginação e rejeição de acesso/alteração pelo restaurante errado; uma consulta SQL conferiu a gravação. Processos e container de teste foram encerrados sem alterar os bancos de desenvolvimento.
 
-A demonstração completa com Python e as opções de recuperação/recriação de containers não foi reexecutada nesta feature. O modo completo recebeu as mesmas verificações de cardápio, incluindo consulta do item após reinício, para a próxima validação integrada.
+A demonstração completa com Python e as opções de recuperação/recriação de containers não foi reexecutada na feature de cardápio. Naquela etapa, o modo completo recebeu as mesmas verificações de cardápio, incluindo consulta do item após reinício. A execução integrada ocorreu depois, na feature de itens dos pedidos; veja o [registro de validação em 05/10/2026](route-intelligence-compose.md#validação-de-itens-de-pedidos-em-05102026).
 
-## Próxima integração
+## Integração com pedidos
 
-Orders deverá receber IDs e quantidades, consultar o catálogo por uma porta HTTP, exigir restaurante ativo e itens disponíveis e salvar nomes/preços unitários como snapshots junto ao total. Alterações posteriores do cardápio não deverão recalcular pedidos já criados. Nenhuma dessas regras de compra foi incorporada ao ciclo mínimo atual nesta feature. Autenticação e autorização continuam previstas em etapas próprias do [roadmap](roadmap.md).
+Orders recebe apenas IDs e quantidades dos itens, consulta o catálogo por uma porta HTTP, exige restaurante ativo e itens disponíveis e salva nomes/preços unitários como snapshots junto ao total em BRL. Alterações posteriores de nome, preço ou disponibilidade no cardápio não recalculam pedidos já criados nem impedem sua confirmação. Itens de outro restaurante são rejeitados no fluxo de compra. A coleta continua opcional para criar um pedido e é exigida apenas na primeira solicitação de entrega.
+
+A criação usa uma consulta de restaurante e uma consulta para cada item, todas fora da transação do pedido. Não há snapshot atômico entre essas consultas, reserva de estoque ou acesso ao banco do catálogo pelo Order. Ausência de restaurante/item, restaurante inativo ou item indisponível resulta em `409` no cadastro do pedido; timeout, falha HTTP ou resposta inválida resulta em `503`. Veja [limites e exemplos da compra](order-items.md). Autenticação e autorização continuam previstas em etapas próprias do [roadmap](roadmap.md).

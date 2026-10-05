@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 
 import com.victhor.delivery.order.application.OrderRepository;
 import com.victhor.delivery.order.application.OrderService;
+import com.victhor.delivery.order.application.CatalogLookup;
 
 @Configuration(proxyBeanMethods = false)
 class OrderConfiguration {
@@ -17,7 +18,7 @@ class OrderConfiguration {
     }
 
     @Bean
-    OrderService orderService(OrderRepository orders, Clock clock) {
-        return new OrderService(orders, clock);
+    OrderService orderService(OrderRepository orders, CatalogLookup catalog, Clock clock) {
+        return new OrderService(orders, catalog, clock);
     }
 }

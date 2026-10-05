@@ -5,11 +5,18 @@ import java.util.Objects;
 import java.util.UUID;
 
 public record Order(UUID id, UUID restaurantId, DeliveryDestination destination, OrderStatus status,
-        Instant createdAt, Instant updatedAt, Instant confirmedAt, Instant cancelledAt, Instant deliveryRequestedAt) {
+        Instant createdAt, Instant updatedAt, Instant confirmedAt, Instant cancelledAt, Instant deliveryRequestedAt,
+        OrderPricing pricing) {
 
     public Order(UUID id, UUID restaurantId, DeliveryDestination destination, OrderStatus status,
             Instant createdAt, Instant updatedAt, Instant confirmedAt, Instant cancelledAt) {
-        this(id, restaurantId, destination, status, createdAt, updatedAt, confirmedAt, cancelledAt, null);
+        this(id, restaurantId, destination, status, createdAt, updatedAt, confirmedAt, cancelledAt, null, null);
+    }
+
+    public Order(UUID id, UUID restaurantId, DeliveryDestination destination, OrderStatus status,
+            Instant createdAt, Instant updatedAt, Instant confirmedAt, Instant cancelledAt, Instant deliveryRequestedAt) {
+        this(id, restaurantId, destination, status, createdAt, updatedAt, confirmedAt, cancelledAt, deliveryRequestedAt,
+                null);
     }
 
     public Order {
@@ -37,8 +44,10 @@ public record Order(UUID id, UUID restaurantId, DeliveryDestination destination,
         }
     }
 
-    public static Order create(UUID restaurantId, DeliveryDestination destination, Instant now) {
-        return new Order(UUID.randomUUID(), restaurantId, destination, OrderStatus.CREATED, now, now, null, null);
+    public static Order create(UUID restaurantId, DeliveryDestination destination, OrderPricing pricing, Instant now) {
+        Objects.requireNonNull(pricing, "Pricing is required for a new order");
+        return new Order(UUID.randomUUID(), restaurantId, destination, OrderStatus.CREATED, now, now, null, null,
+                null, pricing);
     }
 
     public Order confirm(Instant now) {
@@ -48,7 +57,7 @@ public record Order(UUID id, UUID restaurantId, DeliveryDestination destination,
         if (status == OrderStatus.CONFIRMED) {
             return this;
         }
-        return new Order(id, restaurantId, destination, OrderStatus.CONFIRMED, createdAt, now, now, null);
+        return new Order(id, restaurantId, destination, OrderStatus.CONFIRMED, createdAt, now, now, null, null, pricing);
     }
 
     public Order cancel(Instant now) {
@@ -58,7 +67,8 @@ public record Order(UUID id, UUID restaurantId, DeliveryDestination destination,
         if (status == OrderStatus.CANCELLED) {
             return this;
         }
-        return new Order(id, restaurantId, destination, OrderStatus.CANCELLED, createdAt, now, confirmedAt, now);
+        return new Order(id, restaurantId, destination, OrderStatus.CANCELLED, createdAt, now, confirmedAt, now,
+                null, pricing);
     }
 
     public Order requestDelivery(Instant now) {
@@ -68,6 +78,6 @@ public record Order(UUID id, UUID restaurantId, DeliveryDestination destination,
         if (deliveryRequestedAt != null) {
             return this;
         }
-        return new Order(id, restaurantId, destination, status, createdAt, now, confirmedAt, null, now);
+        return new Order(id, restaurantId, destination, status, createdAt, now, confirmedAt, null, now, pricing);
     }
 }

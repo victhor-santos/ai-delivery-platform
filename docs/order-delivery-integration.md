@@ -1,6 +1,6 @@
 # Integração entre pedidos e entregas
 
-Um pedido confirmado pode solicitar entrega por `POST /api/orders/{id}/delivery`, sem corpo. O endpoint atende diretamente no Order Service (:8083) e pelo Gateway (:8080). A confirmação continua sendo uma ação manual independente; solicitar entrega é o passo seguinte.
+Um pedido confirmado pode solicitar entrega por `POST /api/orders/{id}/delivery`, sem corpo. O endpoint atende diretamente no Order Service (:8083) e pelo Gateway (:8080). A criação do pedido exige [itens de cardápio e quantidades](order-items.md) e preserva nomes e preços. A confirmação continua sendo uma ação manual independente de pagamento; solicitar entrega é o passo seguinte.
 
 ## Fluxo e respostas
 
@@ -21,7 +21,7 @@ Uma resposta de sucesso identifica uma entrega confirmada pelo Delivery Service.
 | Disputa de versão com outra alteração do pedido | `409` |
 | Serviço remoto indisponível, timeout ou resposta inválida | `503` |
 
-Os erros usam `application/problem+json`, sem detalhes internos. `GET /api/orders/{id}` inclui `deliveryRequestedAt`: `null` antes da intenção, timestamp UTC depois dela. `confirmedAt` é preservado e `updatedAt` passa a refletir a solicitação.
+Os erros usam `application/problem+json`, sem detalhes internos. `GET /api/orders/{id}` inclui `deliveryRequestedAt`: `null` antes da intenção, timestamp UTC depois dela. `confirmedAt` é preservado e `updatedAt` passa a refletir a solicitação. A preparação da entrega mantém os itens, quantidades, nomes, preços e total do pedido, sem consultar novamente o cardápio ou recalcular valores.
 
 ## Novas tentativas e snapshots
 
@@ -52,17 +52,22 @@ $baseUrl = 'http://localhost:8080'
 $restaurant = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/catalog/restaurants" `
     -ContentType 'application/json' `
     -Body '{"name":"Restaurante Central","pickupLocation":{"latitude":-23.55,"longitude":-46.63}}'
+$item = Invoke-RestMethod -Method Post `
+    -Uri "$baseUrl/api/catalog/restaurants/$($restaurant.id)/menu-items" `
+    -ContentType 'application/json' -Body '{"name":"Prato do dia","price":29.90}'
 $body = @{
     restaurantId = $restaurant.id
     destination = @{ address = 'Rua Central, 42'; latitude = -23.56; longitude = -46.64 }
-} | ConvertTo-Json -Depth 3
+    items = @(@{ menuItemId = $item.id; quantity = 2 })
+} | ConvertTo-Json -Depth 10
 $order = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders" -ContentType 'application/json' -Body $body
+$order.total # 59.80, calculado a partir dos preços do catálogo
 $path = "$baseUrl/api/orders/$($order.id)"
 Invoke-RestMethod -Method Post -Uri "$path/confirm"
 $receipt = Invoke-RestMethod -Method Post -Uri "$path/delivery"
 Invoke-RestMethod "$baseUrl/api/deliveries/$($receipt.deliveryId)"
 Invoke-RestMethod -Method Post -Uri "$path/delivery" # recupera a mesma entrega
-Invoke-RestMethod $path # inclui deliveryRequestedAt
+Invoke-RestMethod $path # inclui deliveryRequestedAt e os itens/valores preservados
 ```
 
 Depois, use a [API do ciclo de entregas](delivery-lifecycle.md) para atribuir um entregador e registrar coleta, partida, chegada e conclusão.
@@ -79,3 +84,5 @@ Os testes usam PostgreSQL 17 descartável via Testcontainers. As integrações d
 Em 02/10/2026, os builds de Delivery (172 testes) e Order (92 testes) passaram, sem falhas, erros ou testes ignorados, gerando os JARs executáveis. Delivery foi validado com `clean verify`; Order com `clean verify` e depois `verify`, após acrescentar os testes de disputa e timeout.
 
 Catalog, Order, Delivery e Gateway também foram iniciados com bancos PostgreSQL descartáveis. Pelo Gateway, foram verificados criação/consulta, repetição preservando UUID e snapshots, restaurante sem coleta, cancelamento bloqueado após intenção e recuperação depois de interromper e reiniciar Delivery. Na indisponibilidade, Order retornou `503`; a tentativa seguinte recuperou o fluxo sem duplicação. Os processos e o container temporário foram encerrados, preservando os volumes de desenvolvimento.
+
+Em 05/10/2026, após a integração dos itens e preços aos pedidos, Order passou em `clean verify` com 270 testes, sem falhas, erros ou casos ignorados, e gerou o JAR executável. A suíte mantém as verificações de entrega e acrescenta preservação da composição e do total nas transições e na preparação idempotente da entrega, além da migração V2→V3 sobre um pedido com intenção já persistida.

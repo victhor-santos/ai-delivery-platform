@@ -20,6 +20,11 @@ class JsonConfiguration {
                 .withCoercionConfig(LogicalType.Float, config -> config
                         .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
                         .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail)
-                        .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail));
+                        .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail))
+                .withCoercionConfig(LogicalType.Integer, config -> config
+                        .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
+                        .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail)
+                        .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail)
+                        .setCoercion(CoercionInputShape.Float, CoercionAction.Fail));
     }
 }

@@ -27,7 +27,8 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<OrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
-        var response = OrderResponse.from(orders.create(request.restaurantId(), request.destination().toDomain()));
+        var items = request.items().stream().map(OrderItemRequest::toDomain).toList();
+        var response = OrderResponse.from(orders.create(request.restaurantId(), request.destination().toDomain(), items));
         return ResponseEntity.created(URI.create("/api/orders/" + response.id())).body(response);
     }
 

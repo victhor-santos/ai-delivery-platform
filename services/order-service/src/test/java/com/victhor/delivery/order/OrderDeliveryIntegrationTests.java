@@ -54,6 +54,7 @@ class OrderDeliveryIntegrationTests {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final UUID RESTAURANT = UUID.randomUUID();
+    private static final UUID MENU_ITEM = UUID.randomUUID();
     private static final HttpServer REMOTE = startRemote();
     private static final AtomicInteger CATALOG_CALLS = new AtomicInteger();
     private static final AtomicInteger CREATED_DELIVERIES = new AtomicInteger();
@@ -238,10 +239,12 @@ class OrderDeliveryIntegrationTests {
 
     private String newOrder() throws Exception {
         String body = """
-                {"restaurantId":"%s","destination":{"address":"Rua Central, 42","latitude":-23.56,"longitude":-46.64}}
-                """.formatted(RESTAURANT);
+                {"restaurantId":"%s","items":[{"menuItemId":"%s","quantity":2}],
+                 "destination":{"address":"Rua Central, 42","latitude":-23.56,"longitude":-46.64}}
+                """.formatted(RESTAURANT, MENU_ITEM);
         var response = send("POST", "/api/orders", body);
         assertThat(response.statusCode()).isEqualTo(201);
+        CATALOG_CALLS.set(0);
         return "/api/orders/" + JSON.readTree(response.body()).path("id").asString();
     }
 
@@ -281,6 +284,13 @@ class OrderDeliveryIntegrationTests {
 
     private static void catalog(HttpExchange exchange) throws IOException {
         CATALOG_CALLS.incrementAndGet();
+        if (exchange.getRequestURI().getPath().contains("/menu-items/")) {
+            var item = JSON.createObjectNode().put("id", MENU_ITEM.toString()).put("restaurantId", RESTAURANT.toString())
+                    .put("name", "Prato").put("price", new java.math.BigDecimal("25.90"))
+                    .put("currency", "BRL").put("available", true);
+            respond(exchange, 200, item.toString());
+            return;
+        }
         if (mode.equals("invalid-catalog")) {
             respond(exchange, 200, "{\"internal-detail\":true}");
             return;
