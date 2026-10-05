@@ -3,6 +3,7 @@ from collections.abc import Sequence
 import numpy as np
 from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 
+from training.observations import DeliveryObservation
 from training.schema import SegmentSample
 
 
@@ -47,7 +48,9 @@ def distance_band(distance_km: float) -> str:
     return "3_km_or_more"
 
 
-def evaluate_predictions(samples: Sequence[SegmentSample], predictions: np.ndarray) -> dict:
+def evaluate_predictions(
+    samples: Sequence[SegmentSample | DeliveryObservation], predictions: np.ndarray
+) -> dict:
     actual = np.array([sample.actual_travel_time_minutes for sample in samples])
     overall = regression_metrics(actual, predictions)
     grouped = {}
