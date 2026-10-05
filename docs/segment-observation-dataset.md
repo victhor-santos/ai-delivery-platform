@@ -63,7 +63,7 @@ Os limites de importação continuam em 100 arquivos, 100 mil linhas somadas ant
 2. Importa cada CSV separadamente e confere tamanho, SHA-256, contagem e ausência de duplicatas. Assim, as partições não consomem novamente o limite total de linhas das fontes.
 3. Reconstrói a divisão a partir de `samples.csv` e compara as partições, schemas, política, proveniência e resumos. Mover registros entre partições causa erro mesmo depois de recalcular seus hashes declarados.
 
-O gerador e carregador sintéticos continuam usando `segment-sample-v1`. `training.train` não aceita esse novo manifesto. O próximo passo é integrar a seleção e avaliação de modelos de tempo por trecho a esse contrato, preservando a proveniência do artefato e usando dados suficientes; nenhum modelo é treinado ou substituído nesta etapa.
+O gerador e carregador sintéticos continuam usando `segment-sample-v1`. `training.train` não aceita esse novo manifesto. A [etapa de treino observacional](segment-observation-training.md) acrescenta comandos próprios que consomem o dataset preparado e preservam a proveniência do artefato. A preparação em si não treina modelos; partições vazias continuam válidas para auditoria, mas impedem o novo treinamento.
 
 Exports podem conter apenas parte de uma rota e não informam os tempos das arestas não percorridas. Por isso, não permitem a avaliação contrafactual da melhor rota usada nos cenários sintéticos. Coleta real, trânsito real e interface web continuam como evoluções posteriores.
 
