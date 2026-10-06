@@ -27,7 +27,9 @@ public class OrderService {
         this.clock = clock;
     }
 
-    public Order create(UUID restaurantId, DeliveryDestination destination, List<OrderItemSelection> selections) {
+    public Order create(UUID customerId, UUID restaurantId, DeliveryDestination destination,
+            List<OrderItemSelection> selections) {
+        Objects.requireNonNull(customerId, "Customer id is required");
         Objects.requireNonNull(restaurantId, "Restaurant id is required");
         Objects.requireNonNull(destination, "Destination is required");
         List<OrderItemSelection> requested = validateSelections(selections);
@@ -42,7 +44,7 @@ public class OrderService {
             }
             items.add(new OrderItem(selection.menuItemId(), menuItem.name(), selection.quantity(), menuItem.price()));
         }
-        return orders.save(Order.create(restaurantId, destination, new OrderPricing(items), now()));
+        return orders.save(Order.create(customerId, restaurantId, destination, new OrderPricing(items), now()));
     }
 
     public Order findById(UUID id) {

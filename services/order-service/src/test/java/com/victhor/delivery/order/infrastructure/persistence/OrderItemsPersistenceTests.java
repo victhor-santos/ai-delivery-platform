@@ -70,7 +70,7 @@ class OrderItemsPersistenceTests {
         var pricing = new OrderPricing(List.of(
                 new OrderItem(UUID.randomUUID(), "Lasagna", 2, new BigDecimal("32.50")),
                 new OrderItem(UUID.randomUUID(), "Lemonade", 3, new BigDecimal("7.90"))));
-        order = orders.save(Order.create(UUID.randomUUID(), destination(), pricing, CREATED_AT));
+        order = orders.save(Order.create(UUID.randomUUID(), UUID.randomUUID(), destination(), pricing, CREATED_AT));
     }
 
     @Test
@@ -134,7 +134,7 @@ class OrderItemsPersistenceTests {
         var items = IntStream.range(0, 50)
                 .mapToObj(index -> new OrderItem(UUID.randomUUID(), "N".repeat(120), 99,
                         new BigDecimal("99999999.99"))).toList();
-        var maximum = Order.create(UUID.randomUUID(), destination(), new OrderPricing(items), CREATED_AT);
+        var maximum = Order.create(UUID.randomUUID(), UUID.randomUUID(), destination(), new OrderPricing(items), CREATED_AT);
 
         assertThat(orders.save(maximum)).isEqualTo(maximum);
         assertThat(orders.findById(maximum.id())).contains(maximum);
@@ -177,7 +177,7 @@ class OrderItemsPersistenceTests {
     void requiresAnExistingParentAndDeletesOnlyItsOwnedItems() {
         assertThatThrownBy(() -> insertItem(UUID.randomUUID(), 0, UUID.randomUUID()))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        var other = Order.create(UUID.randomUUID(), destination(), order.pricing(), CREATED_AT);
+        var other = Order.create(UUID.randomUUID(), UUID.randomUUID(), destination(), order.pricing(), CREATED_AT);
         orders.save(other);
 
         jdbc.update("DELETE FROM orders WHERE id = ?", order.id());
@@ -190,7 +190,7 @@ class OrderItemsPersistenceTests {
 
     @Test
     void rollsBackTheWholeAggregateIfItsTransactionFails() {
-        var candidate = Order.create(UUID.randomUUID(), destination(), order.pricing(), CREATED_AT);
+        var candidate = Order.create(UUID.randomUUID(), UUID.randomUUID(), destination(), order.pricing(), CREATED_AT);
         var transaction = new TransactionTemplate(transactions);
 
         assertThatThrownBy(() -> transaction.executeWithoutResult(status -> {

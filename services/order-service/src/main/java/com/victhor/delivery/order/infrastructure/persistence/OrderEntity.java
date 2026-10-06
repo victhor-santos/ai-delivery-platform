@@ -30,6 +30,8 @@ public class OrderEntity {
     @Id
     private UUID id;
 
+    private UUID customerId;
+
     @Column(nullable = false)
     private UUID restaurantId;
 
@@ -75,6 +77,7 @@ public class OrderEntity {
 
     private OrderEntity(Order order) {
         id = order.id();
+        customerId = order.customerId();
         restaurantId = order.restaurantId();
         destinationAddress = order.destination().address();
         destinationLatitude = order.destination().latitude();
@@ -96,7 +99,7 @@ public class OrderEntity {
         var pricing = total == null && items.isEmpty() ? null
                 : new OrderPricing(items.stream().map(OrderItemEmbeddable::toDomain).toList(), total);
         return new Order(id, restaurantId, destination, status, createdAt, updatedAt, confirmedAt, cancelledAt,
-                deliveryRequestedAt, pricing);
+                deliveryRequestedAt, pricing, customerId);
     }
 
     void applyState(Order order) {

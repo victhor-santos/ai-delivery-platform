@@ -85,7 +85,7 @@ class OrderServiceApplicationTests {
     void loadsContextWithFlywayAndHibernateValidation() {
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class))
-                .isEqualTo(3);
+                .isEqualTo(4);
     }
 
     @Test
@@ -96,6 +96,7 @@ class OrderServiceApplicationTests {
         var id = UUID.fromString(order.path("id").asString());
         String location = "/api/orders/" + id;
         assertThat(response.headers().firstValue("Location")).contains(location);
+        assertThat(order.path("customerId").asString()).isEqualTo(CUSTOMER_ID.toString());
         assertThat(order.path("restaurantId").asString()).isEqualTo(RESTAURANT_ID.toString());
         assertThat(order.path("destination").path("address").asString()).isEqualTo("Rua das Flores, 42");
         assertThat(order.path("destination").path("latitude").asDouble()).isEqualTo(-23.55);
@@ -118,19 +119,24 @@ class OrderServiceApplicationTests {
         assertThat(json(retrieved)).isEqualTo(order);
         assertThat(jdbc.queryForObject("SELECT restaurant_id FROM orders WHERE id = ?", UUID.class, id))
                 .isEqualTo(RESTAURANT_ID);
+        assertThat(jdbc.queryForObject("SELECT customer_id FROM orders WHERE id = ?", UUID.class, id))
+                .isEqualTo(CUSTOMER_ID);
         assertThat(jdbc.queryForObject("SELECT destination_address FROM orders WHERE id = ?", String.class, id))
                 .isEqualTo("Rua das Flores, 42");
     }
 
     @Test
-    void ignoresClientSuppliedIdentityStatusAndTimestamps() throws Exception {
+    void ignoresClientSuppliedIdentityCustomerStatusAndTimestamps() throws Exception {
         UUID suppliedId = UUID.randomUUID();
+        UUID suppliedCustomer = UUID.randomUUID();
         String request = VALID_REQUEST.strip().replaceFirst("\\{", """
-                {"id":"%s","status":"CONFIRMED","createdAt":"2000-01-01T00:00:00Z","total":0.01,"currency":"USD",
-                """.formatted(suppliedId)).replace("\"quantity\":2", "\"quantity\":2,\"name\":\"Falso\",\"unitPrice\":0.01");
+                {"id":"%s","customerId":"%s","status":"CONFIRMED","createdAt":"2000-01-01T00:00:00Z","total":0.01,
+                "currency":"USD",
+                """.formatted(suppliedId, suppliedCustomer)).replace("\"quantity\":2", "\"quantity\":2,\"name\":\"Falso\",\"unitPrice\":0.01");
         var response = send("POST", "/api/orders", request);
         assertThat(response.statusCode()).isEqualTo(201);
         assertThat(json(response).path("id").asString()).isNotEqualTo(suppliedId.toString());
+        assertThat(json(response).path("customerId").asString()).isEqualTo(CUSTOMER_ID.toString());
         assertThat(json(response).path("status").asString()).isEqualTo("CREATED");
         assertThat(json(response).path("createdAt").asString()).doesNotStartWith("2000-");
         assertThat(json(response).path("total").asDouble()).isEqualTo(51.80);

@@ -6,6 +6,8 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,9 +28,11 @@ public class OrderController {
     }
 
     @PostMapping
-    public ResponseEntity<OrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
+    public ResponseEntity<OrderResponse> create(@AuthenticationPrincipal Jwt principal,
+            @Valid @RequestBody CreateOrderRequest request) {
         var items = request.items().stream().map(OrderItemRequest::toDomain).toList();
-        var response = OrderResponse.from(orders.create(request.restaurantId(), request.destination().toDomain(), items));
+        var response = OrderResponse.from(orders.create(CurrentCustomer.id(principal), request.restaurantId(),
+                request.destination().toDomain(), items));
         return ResponseEntity.created(URI.create("/api/orders/" + response.id())).body(response);
     }
 
