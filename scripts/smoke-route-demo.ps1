@@ -36,11 +36,14 @@ function Assert-Condition([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
 
-function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [int]$Status = 200, [switch]$Raw) {
+function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [int]$Status = 200, [switch]$Raw, [string]$AccessToken) {
     $request = [System.Net.Http.HttpRequestMessage]::new(
         [System.Net.Http.HttpMethod]::new($Method), "$baseUrl$Path")
     $response = $null
     try {
+        if ($AccessToken) {
+            $request.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $AccessToken)
+        }
         if ($null -ne $Body) {
             $request.Content = [System.Net.Http.StringContent]::new(
                 ($Body | ConvertTo-Json -Depth 10 -Compress), [System.Text.Encoding]::UTF8, 'application/json')
@@ -78,10 +81,18 @@ try {
     }
     if (-not $CatalogOnly -and -not $OrderOnly) {
         $demoEmail = "demo-$([guid]::NewGuid().ToString('N'))@example.test"
-        $user = Invoke-Api 'POST' '/api/users' @{
-            name = 'Cliente Demo'; email = " $($demoEmail.ToUpperInvariant()) "
+        $demoPassword = 'demonstration-password-123'
+        $user = Invoke-Api 'POST' '/api/users/auth/register' @{
+            name = 'Cliente Demo'; email = " $($demoEmail.ToUpperInvariant()) "; password = $demoPassword
         } 201
         Assert-Condition ($user.email -eq $demoEmail) 'User email was not normalized.'
+        Invoke-Api 'POST' '/api/users/auth/login' @{ email = $demoEmail; password = 'incorrect-password' } 401 | Out-Null
+        Invoke-Api 'GET' '/api/users/auth/me' -Status 401 | Out-Null
+        Invoke-Api 'GET' '/api/users/auth/me' -AccessToken 'not-a-token' -Status 401 | Out-Null
+        $authentication = Invoke-Api 'POST' '/api/users/auth/login' @{ email = $demoEmail; password = $demoPassword }
+        Assert-Condition ($authentication.tokenType -eq 'Bearer' -and $authentication.expiresIn -eq 900) 'Invalid access token metadata.'
+        $identity = Invoke-Api 'GET' '/api/users/auth/me' -AccessToken $authentication.accessToken
+        Assert-Condition ($identity.id -eq $user.id -and $identity.email -eq $user.email) 'Token resolved to another user.'
         Invoke-Api 'POST' '/api/users' @{ name = 'Duplicado'; email = $demoEmail } 409 | Out-Null
         $userPath = "/api/users/$($user.id)"
         $updatedUser = Invoke-Api 'PUT' "$userPath/profile" @{ name = 'Cliente Atualizado' }
@@ -243,6 +254,11 @@ try {
         Invoke-Compose -CommandArguments @('up', '-d', '--no-build', '--force-recreate',
             '--wait', '--wait-timeout', '240')
         $persistedUser = Invoke-Api 'GET' $userPath
+        $persistedIdentity = Invoke-Api 'GET' '/api/users/auth/me' -AccessToken $authentication.accessToken
+        Assert-Condition ($persistedIdentity.id -eq $user.id) 'The existing token stopped resolving after restart.'
+        $newAuthentication = Invoke-Api 'POST' '/api/users/auth/login' @{ email = $demoEmail; password = $demoPassword }
+        $newIdentity = Invoke-Api 'GET' '/api/users/auth/me' -AccessToken $newAuthentication.accessToken
+        Assert-Condition ($newIdentity.id -eq $user.id) 'Persisted credentials did not allow login after restart.'
         $persistedAddress = Invoke-Api 'GET' $savedAddressPath
         Assert-Condition (($persistedUser | ConvertTo-Json -Compress) -eq ($updatedUser | ConvertTo-Json -Compress)) 'User profile changed after restart.'
         Assert-Condition (($persistedAddress | ConvertTo-Json -Compress) -eq ($updatedAddress | ConvertTo-Json -Compress)) 'User address changed after restart.'

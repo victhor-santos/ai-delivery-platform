@@ -86,6 +86,7 @@ services:
       USER_DB_URL: jdbc:postgresql://user-db:5432/users
       USER_DB_USERNAME: ${USER_DB_USERNAME:-users}
       USER_DB_PASSWORD: ${USER_DB_PASSWORD:?Set USER_DB_PASSWORD in .env}
+      USER_AUTH_SECRET: ${USER_AUTH_SECRET:?Generate USER_AUTH_SECRET with scripts/initialize-auth-secret.ps1}
     depends_on:
       user-db:
         condition: service_healthy
