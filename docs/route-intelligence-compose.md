@@ -1,12 +1,14 @@
 # Demonstração de rotas com Docker Compose
 
-O perfil `demo` executa as seis aplicações Java, Route Intelligence e os três PostgreSQL. O fluxo usa um restaurante fictício, itens de cardápio com preços preservados no pedido e os nós do grafo `synthetic-city-v1`: catálogo → pedido confirmado → entrega → plano de rota. Não há pagamento, interface web, ruas reais ou API de IA externa.
+O perfil `demo` executa as seis aplicações Java, Route Intelligence e os quatro PostgreSQL, totalizando onze containers. O smoke verifica perfis e endereços e executa o fluxo com um restaurante fictício, itens de cardápio com preços preservados no pedido e os nós do grafo `synthetic-city-v1`: catálogo → pedido confirmado → entrega → plano de rota. Pedidos ainda não referenciam usuários. Não há login, pagamento, interface web, ruas reais ou API de IA externa.
 
-Sem o perfil, `docker compose up` continua iniciando somente os bancos. Nomes de serviços, volumes e diretórios de dados dos PostgreSQL foram preservados. As migrations continuam sob responsabilidade de cada aplicação.
+Sem o perfil, `docker compose up` inicia somente os quatro bancos. Os volumes existentes foram preservados; `user-db` acrescenta banco `users`, volume `user_postgres_data` e porta padrão 5436. As migrations continuam sob responsabilidade de cada aplicação.
 
 ## Preparar e iniciar
 
 Execute na raiz, com Docker Desktop usando containers Linux e Compose v2 ou superior. Para esta demonstração não é necessário instalar JDK, Maven, Python ou `uv` na máquina. O primeiro build precisa de internet para baixar imagens e dependências.
+
+Se já houver `.env`, complete as entradas `USER_DB_*` a partir do `.env.example` antes de iniciar, sem substituir os valores existentes. O Compose exige `USER_DB_PASSWORD` junto às senhas dos demais bancos para resolver a configuração, mesmo ao selecionar apenas um serviço. Na execução nativa, User lê o `.env` da raiz ou suas próprias variáveis de ambiente.
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
@@ -44,13 +46,13 @@ O build Java compila e empacota com `-DskipTests`. Ele não tenta iniciar Testco
 
 No build Python, as dependências usam cache, mas o wheel do próprio projeto é instalado com `--no-cache` após copiar `app` e `training`. Isso impede que uma alteração de código com a mesma versão no `pyproject.toml` reutilize um pacote antigo.
 
-Gateway recebe `USER_SERVICE_URL`, `CATALOG_SERVICE_URL`, `ORDER_SERVICE_URL`, `PAYMENT_SERVICE_URL` e `DELIVERY_SERVICE_URL`. Os padrões continuam `localhost` para execução nativa; no Compose são hostnames dos containers. Order consulta `catalog-service` e `delivery-service`; Delivery consulta `route-intelligence-service`. As URLs JDBC apontam para o banco próprio na porta interna 5432, independentemente das portas publicadas na máquina.
+Gateway recebe `USER_SERVICE_URL`, `CATALOG_SERVICE_URL`, `ORDER_SERVICE_URL`, `PAYMENT_SERVICE_URL` e `DELIVERY_SERVICE_URL`. Os padrões continuam `localhost` para execução nativa; no Compose são hostnames dos containers. Order consulta `catalog-service` e `delivery-service`; Delivery consulta `route-intelligence-service`. User não consulta outros serviços. As URLs JDBC apontam para o banco próprio na porta interna 5432, independentemente das portas publicadas na máquina; User usa `jdbc:postgresql://user-db:5432/users`.
 
 O perfil publica somente Gateway, Python e bancos em `127.0.0.1`. As portas 8081–8085 das aplicações Java são internas à rede Docker. Gateway atende em `API_GATEWAY_PORT` (8080 por padrão); Python em `ROUTE_INTELLIGENCE_PORT` (8000). As variáveis de portas dos bancos continuam as mesmas do README. O Compose fornece as URLs internas explicitamente, sem reutilizar URLs `localhost` do `.env`.
 
 Os serviços com banco aguardam `service_healthy`. Order aguarda catálogo e Delivery, e Gateway aguarda os cinco backends Java. Delivery não depende da prontidão do Python: consultas e operações do ciclo continuam disponíveis durante uma falha de roteamento. `up --wait` aguarda a saúde de todos os serviços selecionados, inclusive Python. Um modelo inválido faz a demonstração falhar na prontidão; não há fallback silencioso.
 
-As senhas dos três bancos são obrigatórias. Preserve as credenciais correspondentes aos volumes existentes; mudar o `.env` não altera um banco já inicializado. O profile usa os mesmos volumes de desenvolvimento quando executado com o mesmo nome de projeto Compose.
+As senhas dos quatro bancos são obrigatórias. Preserve as credenciais correspondentes aos volumes existentes; mudar o `.env` não altera um banco já inicializado. O perfil usa os mesmos volumes de desenvolvimento quando executado com o mesmo nome de projeto Compose.
 
 ## Verificar o fluxo
 
@@ -60,7 +62,17 @@ Com todos os serviços saudáveis:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 ```
 
-O script cria um restaurante e verifica cadastro, atualização de preço/disponibilidade e consultas do cardápio. Ativa o item e cria um pedido com duas unidades a 29.90, totalizando 59.80 em BRL. Altera o cardápio após a compra e confirma que consulta e confirmação do pedido preservam os nomes e valores originais. Solicita entrega duas vezes e verifica a idempotência. Planeja a rota e compara a consulta persistida com a resposta original, incluindo a identificação dos dados sintéticos. Depois atribui entregador, registra partida, entrada/saída em cada trecho e conclusão da entrega, conferindo snapshots, idempotência e exportação CSV. As travessias são explicitamente simuladas; seus tempos curtos não representam medições reais. Ele usa apenas HTTP pelo Gateway e deixa os registros de demonstração no banco. Cada execução cria novos registros identificados pelo nome `Compose Demo`.
+O script começa cadastrando um perfil, conferindo e-mail normalizado e conflito de duplicidade, atualizando o nome e cadastrando/substituindo um endereço. Confere paginação e rejeita consulta/alteração do endereço sob outro usuário. Esses dados são independentes do pedido criado depois; o cadastro ainda não autentica as chamadas.
+
+Em seguida cria um restaurante e verifica cadastro, atualização de preço/disponibilidade e consultas do cardápio. Ativa o item e cria um pedido com duas unidades a 29.90, totalizando 59.80 em BRL. Altera o cardápio após a compra e confirma que consulta e confirmação do pedido preservam os nomes e valores originais. Solicita entrega duas vezes e verifica a idempotência. Planeja a rota e compara a consulta persistida com a resposta original, incluindo a identificação dos dados sintéticos. Depois atribui entregador, registra partida, entrada/saída em cada trecho e conclusão da entrega, conferindo snapshots, idempotência e exportação CSV. As travessias são explicitamente simuladas; seus tempos curtos não representam medições reais. Ele usa apenas HTTP pelo Gateway e deixa os registros de demonstração no banco. Cada execução cria novos perfis com e-mails fictícios únicos e restaurantes identificados pelo nome `Compose Demo`.
+
+Para conferir somente [perfis e endereços](user-profiles.md), com User, seu banco e Gateway disponíveis:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -UsersOnly
+```
+
+Esse modo verifica cadastro, atualização, normalização/duplicidade de e-mail, paginação e associação do endereço ao perfil, consultando somente User pelo Gateway.
 
 Para conferir somente o [cardápio](restaurant-menu.md), com catálogo, seu banco e Gateway disponíveis:
 
@@ -76,7 +88,7 @@ Para verificar também [itens, totais e preços preservados dos pedidos](order-i
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -OrderOnly
 ```
 
-Esse modo executa o fluxo de cardápio e a criação, consulta e confirmação do pedido, incluindo a alteração posterior do preço e da disponibilidade do item. Não consulta Delivery, Python, usuários ou pagamentos. `-CatalogOnly` e `-OrderOnly` são mutuamente exclusivos e nenhum deles pode ser combinado com as opções de recuperação/persistência da demonstração completa. Em execução nativa, basta iniciar os processos usados por cada modo; o perfil completo do Compose mantém suas dependências de inicialização.
+Esse modo executa o fluxo de cardápio e a criação, consulta e confirmação do pedido, incluindo a alteração posterior do preço e da disponibilidade do item. Não consulta Delivery, Python, usuários ou pagamentos. `-UsersOnly`, `-CatalogOnly` e `-OrderOnly` são mutuamente exclusivos e nenhum deles pode ser combinado com as opções de recuperação/persistência da demonstração completa. Em execução nativa, basta iniciar os processos usados por cada modo; o perfil completo do Compose mantém suas dependências de inicialização.
 
 Para verificar indisponibilidade e persistência:
 
@@ -85,7 +97,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
     -CheckRecovery -CheckPersistence
 ```
 
-`-CheckRecovery` interrompe Python antes da partida, espera `503 ROUTE_SERVICE_UNAVAILABLE` e confirma que entrega e plano anterior não mudaram. Restaura Python em `finally`, aguarda sua prontidão e verifica um novo planejamento. `-CheckPersistence` recria os containers com `--force-recreate`, reutilizando os volumes; depois consulta restaurante, item de cardápio, pedido, entrega, plano, observações e CSV, e repete a solicitação idempotente. A consulta do pedido também confere moeda, total e composição preservada, mesmo com os dados atuais do cardápio diferentes dos snapshots. Essas opções interrompem temporariamente os serviços da demonstração; use-as quando não houver outras operações em andamento.
+`-CheckRecovery` interrompe Python antes da partida, espera `503 ROUTE_SERVICE_UNAVAILABLE` e confirma que entrega e plano anterior não mudaram. Restaura Python em `finally`, aguarda sua prontidão e verifica um novo planejamento. `-CheckPersistence` recria os containers com `--force-recreate`, reutilizando os volumes; depois consulta perfil, endereço, restaurante, item de cardápio, pedido, entrega, plano, observações e CSV, e repete a solicitação idempotente. Confere os dados atualizados do perfil/endereço e a moeda, total e composição preservada do pedido, mesmo com os dados atuais do cardápio diferentes dos snapshots. Essas opções interrompem temporariamente os serviços da demonstração; use-as quando não houver outras operações em andamento.
 
 Se alterar a porta do Gateway, informe `-GatewayUrl http://localhost:NOVA_PORTA`. Para um projeto Compose isolado, informe também `-ComposeProject` e `-EnvFile` com os mesmos valores usados ao iniciar o ambiente. Antes de criar dados ou interromper serviços, as verificações de recuperação/persistência exigem um Gateway local cuja porta corresponda à publicada pelo projeto selecionado. Só mudar o endereço HTTP não muda o projeto que os testes de recuperação operam.
 
@@ -131,5 +143,19 @@ A demonstração foi executada novamente em um projeto Compose isolado, com cons
 - Recriação dos containers mantendo pedido com itens, total e moeda, entrega, plano e observações/CSV nos volumes do projeto isolado.
 
 O ambiente descartável foi encerrado e seus volumes próprios removidos ao final. Nenhum banco, volume ou arquivo `.env` de desenvolvimento foi alterado.
+
+## Validação de perfis de usuários em 05/10/2026
+
+User passou em `clean verify` com 276 testes, sem falhas, erros ou casos ignorados, e gerou o JAR executável. A suíte cobre cadastro concorrente com e-mail duplicado, validação, API, persistência, ownership dos endereços e constraints. Esse resultado se refere somente a User; as contagens dos outros serviços acima continuam sendo registros históricos.
+
+A imagem de User foi construída e os demais serviços reutilizaram as imagens já validadas na feature anterior. O projeto Compose isolado iniciou onze containers saudáveis, com portas próprias, credenciais de teste e quatro volumes descartáveis. Passaram:
+
+- `-UsersOnly`: perfil, e-mail normalizado/único, atualização efetiva do nome e dos dados do endereço, paginação e rejeição do endereço sob outro usuário.
+- `-OrderOnly`: seleção do cardápio, total BRL e preservação dos preços do pedido.
+- Fluxo completo: perfis e endereços, pedido com itens, entrega idempotente, rota, travessias simuladas e exportação CSV.
+- Recuperação do Python: `503` durante a interrupção, estado/plano preservados e novo planejamento após recuperação.
+- Recriação dos containers reutilizando volumes: perfil, endereço, cardápio, pedido, entrega, plano, observações/CSV e idempotência preservados.
+
+Ao final, o ambiente descartável e seus volumes próprios foram removidos. Os três bancos de desenvolvimento existentes permaneceram saudáveis; nenhum volume ou `.env` de desenvolvimento foi alterado.
 
 Referências: [profiles do Compose](https://docs.docker.com/compose/how-tos/profiles/), [ordem e saúde das dependências](https://docs.docker.com/compose/how-tos/startup-order/), [montagens do Compose](https://docs.docker.com/reference/compose-file/services/) e [instalação com uv em Docker](https://docs.astral.sh/uv/guides/integration/docker/).

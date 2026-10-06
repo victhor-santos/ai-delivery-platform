@@ -8,7 +8,7 @@ O monorepo também contém [Route Intelligence em Python](route-intelligence-fou
 
 O pacote `training` gera e valida o [dataset sintético de tempo por trecho](route-segment-dataset.md), compara modelos, seleciona na validação e avalia o artefato no teste reservado. Também importa e [avalia os CSVs de observações do Delivery](segment-observation-evaluation.md), comparando previsões armazenadas com durações simuladas e preservando a proveniência. A [preparação dessas observações](segment-observation-dataset.md) cria outro dataset, com manifesto próprio, partições por entrega e carregamento que reconstrói a política temporal. O [treino observacional](segment-observation-training.md) reutiliza candidatos, seleção, métricas e serialização, preservando a origem `simulated` em artefatos offline próprios. A API continua carregando exclusivamente os bundles sintéticos v1. `app/ml` contém features compartilhadas, pipelines, carregamento validado e predictor em lote. Geração e treinamento não são executados no startup ou em endpoints.
 
-O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O catálogo também gerencia [itens de cardápio](restaurant-menu.md), com nome, descrição opcional, preço em BRL e disponibilidade. O Order Service consulta esses dados por HTTP para criar pedidos com [itens e preços preservados](order-items.md) em outro PostgreSQL, além de consultar, confirmar e cancelar pedidos. Delivery cria e consulta entregas e entregadores por HTTP e executa o ciclo de entrega, com persistência em banco próprio. Usuários e pagamentos mantêm a base inicial, com endpoints de demonstração e Actuator.
+O User Service mantém [perfis e endereços](user-profiles.md) em PostgreSQL próprio. O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O catálogo também gerencia [itens de cardápio](restaurant-menu.md), com nome, descrição opcional, preço em BRL e disponibilidade. O Order Service consulta esses dados por HTTP para criar pedidos com [itens e preços preservados](order-items.md) em outro PostgreSQL, além de consultar, confirmar e cancelar pedidos. Delivery cria e consulta entregas e entregadores por HTTP e executa o ciclo de entrega, com persistência em banco próprio. Pagamentos mantêm a base inicial, com endpoints de demonstração e Actuator.
 
 ```mermaid
 flowchart TD
@@ -18,6 +18,7 @@ flowchart TD
     Gateway --> Orders[Order Service :8083]
     Gateway --> Payments[Payment Service :8084]
     Gateway --> Deliveries[Delivery Service :8085]
+    Users --> UserDB[(PostgreSQL de usuários)]
     Catalog --> CatalogDB[(PostgreSQL do catálogo)]
     Orders --> OrderDB[(PostgreSQL de pedidos)]
     Orders -->|HTTP: consultar restaurante e itens| Catalog
@@ -26,7 +27,7 @@ flowchart TD
     Deliveries -->|HTTP: planejar rota| Routes[Route Intelligence :8000 - rotas e health]
 ```
 
-O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utilizam Spring MVC. As rotas são estáticas, com endereços configuráveis por ambiente e padrões `localhost` para execução nativa. O Compose mantém os três bancos com volumes separados e oferece o [perfil `demo`](route-intelligence-compose.md) para as sete aplicações. Na rede Docker, HTTP e JDBC usam hostnames dos serviços; somente Gateway, Python e bancos publicam portas na máquina. O modelo é montado somente para leitura, e o treinamento permanece offline.
+O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utilizam Spring MVC. As rotas são estáticas, com endereços configuráveis por ambiente e padrões `localhost` para execução nativa. O Compose mantém os quatro bancos com volumes separados e oferece o [perfil `demo`](route-intelligence-compose.md) para as sete aplicações, totalizando onze containers. Na rede Docker, HTTP e JDBC usam hostnames dos serviços; somente Gateway, Python e bancos publicam portas na máquina. O modelo é montado somente para leitura, e o treinamento permanece offline.
 
 ## Responsabilidades e contratos
 
@@ -44,7 +45,7 @@ As responsabilidades abaixo definem os limites de cada aplicação. O catálogo 
 
 Cada serviço Java mantém `GET /api/{recurso}/ping`, respondendo HTTP 200 com `{"service":"<nome-do-serviço>","status":"ok"}`. O Gateway encaminha o caminho completo, sem remover prefixos. A rota `/api/catalog/**` atende também `/api/catalog/restaurants` e suas consultas, sem regras de negócio no Gateway.
 
-Todas as aplicações Java mantêm `/actuator/health` e `/actuator/info`. O health do Gateway mede sua própria saúde; a disponibilidade dos serviços precisa ser verificada separadamente. Catálogo, pedidos e entregas incluem a saúde dos respectivos bancos em seus endpoints.
+Todas as aplicações Java mantêm `/actuator/health` e `/actuator/info`. O health do Gateway mede sua própria saúde; a disponibilidade dos serviços precisa ser verificada separadamente. Usuários, catálogo, pedidos e entregas incluem a saúde dos respectivos bancos em seus endpoints.
 
 ## Organização do catálogo
 
@@ -63,7 +64,26 @@ O domínio não contém anotações JPA ou de validação HTTP. As entidades JPA
 
 `MenuItemService` exige restaurante existente e filtra consultas e atualizações por `restaurantId` e UUID do item. O `PUT` substitui os campos editáveis na mesma transação, preserva a identidade e o restaurante e retorna `404` quando o item não pertence ao restaurante informado. Atualizar um UUID ausente não cria um item. A disponibilidade pode ser alterada; a listagem de gestão também inclui itens indisponíveis. O preço usa `BigDecimal` com duas casas, sem arredondar frações de centavo. A moeda é BRL. Não há versionamento otimista nessa atualização: prevalece a última gravação confirmada.
 
-Usuários e pagamentos continuam com a classe `*Application` no pacote-base e controllers em `api`. Novas camadas serão criadas quando houver código que as justifique. O Gateway mantém organização própria para configuração e filtros.
+Pagamentos continuam com a classe `*Application` no pacote-base e controllers em `api`. Novas camadas serão criadas quando houver código que as justifique. O Gateway mantém organização própria para configuração e filtros.
+
+## Organização de usuários
+
+User segue a mesma separação de domínio, casos de uso, API e persistência, com build independente:
+
+| Pacote | Responsabilidade |
+| --- | --- |
+| `domain` | `UserProfile`, `EmailAddress` e `UserAddress` validam identidade, nomes, e-mail e coordenadas sem Spring/JPA |
+| `application` | `UserProfileService` e `UserAddressService` coordenam operações por `UserRepository` e `UserAddressRepository`; a página de endereços copia sua lista |
+| `api` | Controllers e DTOs de perfis/endereços, validação JSON e erros HTTP com `ProblemDetail` |
+| `infrastructure.persistence` | Entidades, repositórios Spring Data e adaptadores JPA delimitam transações e preservam os campos de identidade |
+
+`UserConfiguration` fornece os beans de aplicação. O cadastro gera UUID e normaliza o e-mail inteiro para minúsculas com `Locale.ROOT`; formato ASCII e limites são validados no domínio. Atualizar o perfil substitui somente o nome, preservando UUID e e-mail. E-mail imutável e UUID estável preparam o vínculo com credenciais futuras sem incluir autenticação no domínio dos endereços.
+
+Um endereço pertence a um usuário e contém rótulo, descrição textual e coordenadas explícitas. Criação e listagem verificam se o usuário existe. Consulta e atualização filtram pelo par `userId + addressId`; um endereço de outro usuário retorna `404`. O `PUT` substitui seus campos editáveis na mesma transação e preserva os UUIDs. Não há versão/ETag nessas atualizações: prevalece a última gravação confirmada, como no cardápio.
+
+`V1__create_users_and_addresses.sql` cria `users` e `user_addresses` no banco próprio. A FK fica restrita a esse banco; o índice `(user_id, label, id)` atende a paginação ordenada. A constraint `users_email_unique` garante unicidade do e-mail normalizado inclusive entre cadastros simultâneos. O adaptador faz flush e traduz especificamente essa violação para `409`, sem classificar outras falhas de integridade como duplicidade.
+
+Não há login, confirmação de e-mail, senha ou vínculo com Orders nesta etapa. Filtrar endereços pelo usuário informado organiza os dados, mas não comprova a identidade de quem faz a chamada. Autenticação e autorização terão contratos próprios. Alterar um endereço não modifica os destinos já preservados nos pedidos. Veja o [contrato de perfis e endereços](user-profiles.md).
 
 ## Domínio de entregas
 
@@ -151,19 +171,21 @@ A V3 cria `menu_items`, com chave estrangeira para `restaurants`, sem exclusão 
 
 Na inicialização, Flyway aplica as migrations pendentes e Hibernate valida o mapeamento com `spring.jpa.hibernate.ddl-auto=validate`. Não há criação ou atualização automática do schema pelo Hibernate. `spring.jpa.open-in-view=false` mantém o acesso ao banco dentro da camada de aplicação/persistência, antes da montagem da resposta HTTP.
 
-`compose.yaml` contém `catalog-db`, `order-db` e `delivery-db`, com imagem `postgres:17-alpine` e health check `pg_isready`. O catálogo usa banco `catalog`, volume `catalog_postgres_data` e porta padrão 5432. Pedidos usam banco `orders`, volume `order_postgres_data` e porta padrão 5434. Entregas usam banco `deliveries`, volume `delivery_postgres_data` e porta padrão 5435. As portas são publicadas em `127.0.0.1`. Sem perfil, o Compose inicia somente os bancos; o perfil `demo` também executa as seis aplicações Java e Route Intelligence. A execução nativa continua disponível.
+`compose.yaml` contém `catalog-db`, `order-db`, `delivery-db` e `user-db`, com imagem `postgres:17-alpine` e health check `pg_isready`. O catálogo usa banco `catalog`, volume `catalog_postgres_data` e porta padrão 5432. Pedidos usam banco `orders`, volume `order_postgres_data` e porta padrão 5434. Entregas usam banco `deliveries`, volume `delivery_postgres_data` e porta padrão 5435. Usuários usam banco `users`, volume `user_postgres_data` e porta padrão 5436. As portas são publicadas em `127.0.0.1`. Sem perfil, o Compose inicia somente os quatro bancos; o perfil `demo` também executa as seis aplicações Java e Route Intelligence. A execução nativa continua disponível.
 
 `.env.example` documenta `CATALOG_DB_URL`, `CATALOG_DB_USERNAME`, `CATALOG_DB_PASSWORD` e `CATALOG_DB_PORT`, com valores apenas locais. A cópia `.env` não é versionada. A senha é obrigatória; o Spring importa o arquivo do diretório de execução, e o comando de desenvolvimento no README fixa esse diretório na raiz. Variáveis de ambiente também podem fornecer a configuração. Se a porta estiver ocupada, `CATALOG_DB_PORT` e a porta da URL JDBC devem ser ajustadas juntas.
 
 Dados do volume sobrevivem a reinícios. Credenciais definidas pelo container inicializam um banco vazio, mas não reconfiguram um volume já existente. Execução e testes não exigem remover volumes ou dados locais. Cada serviço continuará sendo dono de seus dados; serviços não consultarão tabelas de outros serviços.
 
-Pedidos seguem o mesmo processo de configuração, com `ORDER_DB_URL`, `ORDER_DB_USERNAME`, `ORDER_DB_PASSWORD` e `ORDER_DB_PORT`. A migration `V1__create_orders.sql` pertence ao Order Service; Flyway gerencia seu schema e Hibernate apenas valida. A senha de pedidos não é exigida ao subir apenas o catálogo; para inicializar `order-db`, ela precisa estar definida, pois PostgreSQL rejeita senha vazia.
+Pedidos seguem o mesmo processo de configuração, com `ORDER_DB_URL`, `ORDER_DB_USERNAME`, `ORDER_DB_PASSWORD` e `ORDER_DB_PORT`. A migration `V1__create_orders.sql` pertence ao Order Service; Flyway gerencia seu schema e Hibernate apenas valida. Usuários usam `USER_DB_URL`, `USER_DB_USERNAME`, `USER_DB_PASSWORD` e `USER_DB_PORT`, documentadas no `.env.example`; arquivos `.env` anteriores precisam receber essas entradas preservando sua configuração. O Compose exige as senhas dos quatro bancos para resolver o arquivo, mesmo que o comando selecione um serviço. Ao executar User nativamente, seu processo precisa somente da configuração do próprio banco, com diretório de trabalho na raiz ou variáveis de ambiente fornecidas explicitamente.
 
 ## Testes e validação
 
 Os testes do domínio verificam as invariantes de restaurantes e itens de cardápio sem subir Spring ou banco. Os testes de integração do catálogo usam PostgreSQL 17 real via Testcontainers, com configuração dinâmica e banco isolado do Compose. Eles inicializam o contexto, aplicam as migrations Flyway, validam o schema com Hibernate e cobrem HTTP e persistência: cadastro, atualização, UUID/estado inicial, textos, preço, dados salvos, consulta, paginação, entrada inválida, recursos inexistentes e isolamento dos itens por restaurante. Também verificam constraints e preservação dos dados nas migrations. Pings e Actuator permanecem cobertos no catálogo.
 
-O contexto do catálogo usa a mesma estratégia de banco descartável. A suíte completa exige Docker em execução e não ignora silenciosamente a integração quando ele está ausente. Pedidos também usam Testcontainers para testar cadastro, consulta, transições, erros, constraints do schema, ordenação dos itens, cálculo exato do total, rollback do agregado e duas transações que tentam alterar a mesma versão. Servidores HTTP locais cobrem falhas do catálogo e preservação dos preços após alterações remotas. A migration V2→V3 é aplicada sobre um pedido com intenção de entrega existente. Usuários, pagamentos e Gateway mantêm testes de inicialização de contexto.
+O contexto do catálogo usa a mesma estratégia de banco descartável. A suíte completa exige Docker em execução e não ignora silenciosamente a integração quando ele está ausente. Pedidos também usam Testcontainers para testar cadastro, consulta, transições, erros, constraints do schema, ordenação dos itens, cálculo exato do total, rollback do agregado e duas transações que tentam alterar a mesma versão. Servidores HTTP locais cobrem falhas do catálogo e preservação dos preços após alterações remotas. A migration V2→V3 é aplicada sobre um pedido com intenção de entrega existente. Pagamentos e Gateway mantêm testes de inicialização de contexto.
+
+Usuários têm testes de domínio e casos de uso sem banco, além de API e persistência com PostgreSQL 17 descartável. São cobertos normalização independente de locale, sintaxe e limites de e-mail, alterações preservando identidade, coordenadas, paginação, consulta/alteração pelo usuário errado e constraints. Cadastros concorrentes com o mesmo e-mail verificam que só um perfil é criado e que o outro recebe conflito. O smoke oferece `-UsersOnly` pelo Gateway e acrescenta perfil/endereço ao fluxo completo e à verificação de persistência após recriar containers.
 
 `clean test` executa os testes; `clean verify` também gera o JAR executável. Além da suíte do catálogo, a verificação local exercita criação e consultas nas portas 8082 e 8080, conferindo `201`, `Location`, `200`, pings e saúde. O teste HTTP direto do catálogo não substitui a validação do encaminhamento pelo processo real do Gateway.
 
@@ -173,6 +195,6 @@ Delivery testa seu domínio sem banco: transições, chegada antes da conclusão
 
 ## Próximas etapas
 
-O Compose já oferece a demonstração integrada com hostnames da rede Docker e preservação dos volumes. Itens, quantidades e snapshots de preços estão integrados aos pedidos, mantendo cada serviço dono de seus dados. Usuários, autenticação, pagamentos simulados e interface web seguirão em etapas próprias. O [roadmap](roadmap.md) define essa sequência.
+O Compose já oferece a demonstração integrada com hostnames da rede Docker e preservação dos volumes. Itens, quantidades e snapshots de preços estão integrados aos pedidos; perfis e endereços têm persistência própria, mantendo cada serviço dono de seus dados. A próxima etapa é autenticação, seguida de autorização de recursos e vínculo com pedidos. Pagamentos simulados e interface web seguirão em etapas próprias. O [roadmap](roadmap.md) define essa sequência.
 
 Java continua responsável pelas transações; Python prevê tempos por trecho e calcula rotas por HTTP, com treinamento offline e dados explicitamente simulados. Mensageria, outbox e compensações serão avaliadas quando o fluxo precisar dessas garantias. Múltiplas entregas, mapas reais e cloud continuam em evoluções posteriores.

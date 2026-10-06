@@ -3,6 +3,7 @@ param(
     [uri]$GatewayUrl = 'http://localhost:8080',
     [switch]$CatalogOnly,
     [switch]$OrderOnly,
+    [switch]$UsersOnly,
     [switch]$CheckRecovery,
     [switch]$CheckPersistence,
     [string]$ComposeProject,
@@ -10,10 +11,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($CatalogOnly -and $OrderOnly) {
-    throw 'Select either CatalogOnly or OrderOnly.'
+$partialModeCount = [int]$CatalogOnly.IsPresent + [int]$OrderOnly.IsPresent + [int]$UsersOnly.IsPresent
+if ($partialModeCount -gt 1) {
+    throw 'Select only one of CatalogOnly, OrderOnly or UsersOnly.'
 }
-if (($CatalogOnly -or $OrderOnly) -and ($CheckRecovery -or $CheckPersistence)) {
+if ($partialModeCount -gt 0 -and ($CheckRecovery -or $CheckPersistence)) {
     throw 'Partial smoke modes cannot be combined with the full demo recovery or persistence checks.'
 }
 Add-Type -AssemblyName System.Net.Http
@@ -69,9 +71,50 @@ try {
     }
 
     $services = if ($CatalogOnly) { @('catalog') } elseif ($OrderOnly) { @('catalog', 'orders') }
+        elseif ($UsersOnly) { @('users') }
         else { @('users', 'catalog', 'orders', 'payments', 'deliveries') }
     foreach ($service in $services) {
         Invoke-Api 'GET' "/api/$service/ping" | Out-Null
+    }
+    if (-not $CatalogOnly -and -not $OrderOnly) {
+        $demoEmail = "demo-$([guid]::NewGuid().ToString('N'))@example.test"
+        $user = Invoke-Api 'POST' '/api/users' @{
+            name = 'Cliente Demo'; email = " $($demoEmail.ToUpperInvariant()) "
+        } 201
+        Assert-Condition ($user.email -eq $demoEmail) 'User email was not normalized.'
+        Invoke-Api 'POST' '/api/users' @{ name = 'Duplicado'; email = $demoEmail } 409 | Out-Null
+        $userPath = "/api/users/$($user.id)"
+        $updatedUser = Invoke-Api 'PUT' "$userPath/profile" @{ name = 'Cliente Atualizado' }
+        Assert-Condition ($updatedUser.id -eq $user.id -and $updatedUser.email -eq $user.email) 'Profile update changed identity or email.'
+        Assert-Condition ($updatedUser.name -eq 'Cliente Atualizado') 'Profile name was not updated.'
+        $addressPath = "$userPath/addresses"
+        $address = Invoke-Api 'POST' $addressPath @{
+            label = 'Casa'; address = 'Destino sintetico C'; latitude = -23.561; longitude = -46.656
+        } 201
+        Assert-Condition ($address.userId -eq $user.id) 'Address belongs to another user.'
+        $savedAddressPath = "$addressPath/$($address.id)"
+        $updatedAddress = Invoke-Api 'PUT' $savedAddressPath @{
+            label = 'Entrega'; address = 'Destino sintetico atualizado'; latitude = -23.562; longitude = -46.657
+        }
+        Assert-Condition ($updatedAddress.id -eq $address.id -and $updatedAddress.userId -eq $user.id) 'Address update changed identity or owner.'
+        Assert-Condition ($updatedAddress.label -eq 'Entrega' -and $updatedAddress.address -eq 'Destino sintetico atualizado' -and
+            $updatedAddress.latitude -eq -23.562 -and $updatedAddress.longitude -eq -46.657) 'Address details were not updated.'
+        $addressPage = Invoke-Api 'GET' "${addressPath}?page=0&size=1"
+        Assert-Condition ($addressPage.totalElements -eq 1 -and $addressPage.items[0].id -eq $address.id) 'Address pagination lost the saved address.'
+        $otherUser = Invoke-Api 'POST' '/api/users' @{
+            name = 'Outro Cliente'; email = "other-$([guid]::NewGuid().ToString('N'))@example.test"
+        } 201
+        $otherAddressPath = "/api/users/$($otherUser.id)/addresses/$($address.id)"
+        Invoke-Api 'GET' $otherAddressPath -Status 404 | Out-Null
+        Invoke-Api 'PUT' $otherAddressPath @{
+            label = 'Alterado'; address = 'Outro destino'; latitude = 0; longitude = 0
+        } 404 | Out-Null
+        $storedUser = Invoke-Api 'GET' $userPath
+        $storedAddress = Invoke-Api 'GET' $savedAddressPath
+        Assert-Condition (($storedUser | ConvertTo-Json -Compress) -eq ($updatedUser | ConvertTo-Json -Compress)) 'Stored profile differs from the update.'
+        Assert-Condition (($storedAddress | ConvertTo-Json -Compress) -eq ($updatedAddress | ConvertTo-Json -Compress)) 'Another user changed the address.'
+        Write-Output "Users passed: user=$($user.id), address=$($address.id)."
+        if ($UsersOnly) { return }
     }
     $restaurant = Invoke-Api 'POST' '/api/catalog/restaurants' @{
         name = "Compose Demo $([guid]::NewGuid().ToString('N').Substring(0, 8))"
@@ -199,6 +242,10 @@ try {
     if ($CheckPersistence) {
         Invoke-Compose -CommandArguments @('up', '-d', '--no-build', '--force-recreate',
             '--wait', '--wait-timeout', '240')
+        $persistedUser = Invoke-Api 'GET' $userPath
+        $persistedAddress = Invoke-Api 'GET' $savedAddressPath
+        Assert-Condition (($persistedUser | ConvertTo-Json -Compress) -eq ($updatedUser | ConvertTo-Json -Compress)) 'User profile changed after restart.'
+        Assert-Condition (($persistedAddress | ConvertTo-Json -Compress) -eq ($updatedAddress | ConvertTo-Json -Compress)) 'User address changed after restart.'
         $persistedRestaurant = Invoke-Api 'GET' "/api/catalog/restaurants/$($restaurant.id)"
         $persistedMenuItem = Invoke-Api 'GET' $itemPath
         $persistedOrder = Invoke-Api 'GET' $orderPath

@@ -87,4 +87,4 @@ O modo `-OrderOnly` e o fluxo completo com `-CheckRecovery -CheckPersistence` ta
 
 ## Continuação
 
-A próxima feature implementará cadastro e perfis de usuários, seguida de autenticação e autorização conforme o [roadmap](roadmap.md). Pagamentos serão explicitamente simulados em uma etapa própria; confirmação manual do pedido continua sem significado financeiro.
+O cadastro de [perfis e endereços de usuários](user-profiles.md) está implementado em sua feature própria, ainda sem vínculo automático com Orders. Autenticação e autorização seguem conforme o [roadmap](roadmap.md). Pagamentos serão explicitamente simulados em uma etapa própria; confirmação manual do pedido continua sem significado financeiro.
