@@ -128,6 +128,7 @@ services:
       CATALOG_SERVICE_URL: http://catalog-service:8082
       DELIVERY_SERVICE_URL: http://delivery-service:8085
       ORDER_REMOTE_TIMEOUT_MS: ${ORDER_REMOTE_TIMEOUT_MS:-5000}
+      USER_AUTH_SECRET: ${USER_AUTH_SECRET:?Generate USER_AUTH_SECRET with scripts/initialize-auth-secret.ps1}
     depends_on:
       order-db:
         condition: service_healthy

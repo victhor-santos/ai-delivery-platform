@@ -16,6 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.core.env.Environment;
@@ -30,12 +31,14 @@ import tools.jackson.databind.ObjectMapper;
 import com.victhor.delivery.order.application.CatalogLookup;
 import com.victhor.delivery.order.application.CatalogSelectionConflictException;
 import com.victhor.delivery.order.application.RemoteServiceUnavailableException;
+import com.victhor.delivery.order.infrastructure.auth.TestAccessTokens;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+@ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "ORDER_DB_PASSWORD=testcontainers-only")
 @Testcontainers
@@ -43,6 +46,7 @@ class OrderServiceApplicationTests {
 
     private static final UUID RESTAURANT_ID = UUID.randomUUID();
     private static final UUID MENU_ITEM_ID = UUID.randomUUID();
+    private static final UUID CUSTOMER_ID = UUID.randomUUID();
     private static final String VALID_REQUEST = """
             {"restaurantId":"%s","items":[{"menuItemId":"%s","quantity":2}],"destination":{
               "address":"  Rua das Flores, 42  ","latitude":-23.55,"longitude":-46.63}}
@@ -280,19 +284,51 @@ class OrderServiceApplicationTests {
     }
 
     @Test
-    void preservesPingAndActuator() throws Exception {
-        assertThat(send("GET", "/api/orders/ping", null).statusCode()).isEqualTo(200);
-        var health = send("GET", "/actuator/health", null);
+    void preservesPingAndActuatorWithoutCredentials() throws Exception {
+        assertThat(send("GET", "/api/orders/ping", null, null).statusCode()).isEqualTo(200);
+        var health = send("GET", "/actuator/health", null, null);
         assertThat(health.statusCode()).isEqualTo(200);
         assertThat(json(health).path("status").asString()).isEqualTo("UP");
+        assertThat(send("GET", "/actuator/info", null, null).statusCode()).isEqualTo(200);
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidCredentials")
+    void rejectsOrderRequestsWithoutAValidAccessTokenBeforeTouchingData(String token) throws Exception {
+        String location = send("POST", "/api/orders", VALID_REQUEST).headers().firstValue("Location").orElseThrow();
+        clearInvocations(catalog);
+
+        for (String[] call : new String[][] { { "POST", "/api/orders" }, { "GET", location },
+                { "POST", location + "/confirm" }, { "POST", location + "/cancel" },
+                { "POST", location + "/delivery" } }) {
+            var response = send(call[0], call[1], call[1].equals("/api/orders") ? VALID_REQUEST : null, token);
+            assertProblem(response, 401);
+            assertThat(response.headers().firstValue("WWW-Authenticate")).hasValueSatisfying(
+                    challenge -> assertThat(challenge).startsWith("Bearer"));
+        }
+        verifyNoInteractions(catalog);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM orders", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT status FROM orders", String.class)).isEqualTo("CREATED");
+    }
+
+    static Stream<String> invalidCredentials() {
+        return Stream.of(null, "not-a-token", TestAccessTokens.issue(
+                "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=", Instant.now(), claims -> { }),
+                TestAccessTokens.issue(TestAccessTokens.SECRET, Instant.now().minusSeconds(1000), claims -> { }));
     }
 
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
+        return send(method, path, body, TestAccessTokens.issue(CUSTOMER_ID));
+    }
+
+    private HttpResponse<String> send(String method, String path, String body, String token) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
-                .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return client.send(request, HttpResponse.BodyHandlers.ofString());
+                .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
+        if (token != null) {
+            request.header("Authorization", "Bearer " + token);
+        }
+        return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private JsonNode json(HttpResponse<String> response) {

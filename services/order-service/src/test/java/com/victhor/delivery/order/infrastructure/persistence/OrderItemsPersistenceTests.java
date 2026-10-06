@@ -16,6 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
@@ -34,6 +35,7 @@ import com.victhor.delivery.order.domain.Order;
 import com.victhor.delivery.order.domain.OrderItem;
 import com.victhor.delivery.order.domain.OrderPricing;
 
+@ActiveProfiles("test")
 @SpringBootTest(properties = "ORDER_DB_PASSWORD=testcontainers-only")
 @Testcontainers
 class OrderItemsPersistenceTests {

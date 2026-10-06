@@ -25,6 +25,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -44,9 +45,11 @@ import com.victhor.delivery.order.domain.DeliveryDestination;
 import com.victhor.delivery.order.domain.DeliveryRequest;
 import com.victhor.delivery.order.domain.OrderStatus;
 import com.victhor.delivery.order.domain.OrderStateConflictException;
+import com.victhor.delivery.order.infrastructure.auth.TestAccessTokens;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "ORDER_DB_PASSWORD=testcontainers-only")
 @Testcontainers
@@ -55,6 +58,7 @@ class OrderDeliveryIntegrationTests {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final UUID RESTAURANT = UUID.randomUUID();
     private static final UUID MENU_ITEM = UUID.randomUUID();
+    private static final UUID CUSTOMER = UUID.randomUUID();
     private static final HttpServer REMOTE = startRemote();
     private static final AtomicInteger CATALOG_CALLS = new AtomicInteger();
     private static final AtomicInteger CREATED_DELIVERIES = new AtomicInteger();
@@ -260,6 +264,7 @@ class OrderDeliveryIntegrationTests {
         if (body != null) {
             request.header("Content-Type", "application/json");
         }
+        request.header("Authorization", "Bearer " + TestAccessTokens.issue(CUSTOMER));
         return client.send(request.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     }
