@@ -47,15 +47,19 @@ public class OrderService {
         return orders.save(Order.create(customerId, restaurantId, destination, new OrderPricing(items), now()));
     }
 
-    public Order findById(UUID id) {
-        return orders.findById(id).orElseThrow(OrderNotFoundException::new);
+    /** Another customer's order is reported as absent so its existence is not revealed. */
+    public Order findById(UUID id, UUID customerId) {
+        return orders.findById(id).filter(order -> order.isPlacedBy(customerId))
+                .orElseThrow(OrderNotFoundException::new);
     }
 
-    public Order confirm(UUID id) {
+    public Order confirm(UUID id, UUID customerId) {
+        findById(id, customerId);
         return orders.confirm(id, now()).orElseThrow(OrderNotFoundException::new);
     }
 
-    public Order cancel(UUID id) {
+    public Order cancel(UUID id, UUID customerId) {
+        findById(id, customerId);
         return orders.cancel(id, now()).orElseThrow(OrderNotFoundException::new);
     }
 

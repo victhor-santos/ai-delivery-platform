@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -36,6 +37,7 @@ import com.victhor.delivery.order.domain.Order;
 import com.victhor.delivery.order.domain.OrderItem;
 import com.victhor.delivery.order.domain.OrderItemSelection;
 import com.victhor.delivery.order.domain.OrderPricing;
+import com.victhor.delivery.order.domain.OrderStatus;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTests {
@@ -236,9 +238,28 @@ class OrderServiceTests {
         when(orders.confirm(original.id(), DATABASE_TIME)).thenReturn(Optional.of(confirmed));
         when(orders.cancel(original.id(), DATABASE_TIME)).thenReturn(Optional.of(cancelled));
 
-        assertThat(service.findById(original.id()).pricing()).isSameAs(pricing);
-        assertThat(service.confirm(original.id()).pricing()).isSameAs(pricing);
-        assertThat(service.cancel(original.id()).pricing()).isSameAs(pricing);
+        assertThat(service.findById(original.id(), CUSTOMER_ID).pricing()).isSameAs(pricing);
+        assertThat(service.confirm(original.id(), CUSTOMER_ID).pricing()).isSameAs(pricing);
+        assertThat(service.cancel(original.id(), CUSTOMER_ID).pricing()).isSameAs(pricing);
+        verifyNoInteractions(catalog);
+    }
+
+    @Test
+    void hidesOrdersOfOtherCustomersAndUnownedLegacyOrdersWithoutTransitioningThem() {
+        var pricing = new OrderPricing(List.of(new OrderItem(FIRST_ITEM, "Prato", 1, BigDecimal.TEN)));
+        var foreign = Order.create(UUID.randomUUID(), RESTAURANT_ID, DESTINATION, pricing, DATABASE_TIME);
+        var legacy = new Order(UUID.randomUUID(), RESTAURANT_ID, DESTINATION, OrderStatus.CREATED, DATABASE_TIME,
+                DATABASE_TIME, null, null);
+        when(orders.findById(foreign.id())).thenReturn(Optional.of(foreign));
+        when(orders.findById(legacy.id())).thenReturn(Optional.of(legacy));
+
+        for (UUID id : List.of(foreign.id(), legacy.id())) {
+            assertThatThrownBy(() -> service.findById(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+            assertThatThrownBy(() -> service.confirm(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+            assertThatThrownBy(() -> service.cancel(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+        }
+        verify(orders, never()).confirm(any(), any());
+        verify(orders, never()).cancel(any(), any());
         verifyNoInteractions(catalog);
     }
 
@@ -246,11 +267,11 @@ class OrderServiceTests {
     void reportsMissingOrdersOnAllOperations() {
         UUID id = UUID.randomUUID();
 
-        assertThatThrownBy(() -> service.findById(id)).isInstanceOf(OrderNotFoundException.class);
-        assertThatThrownBy(() -> service.confirm(id)).isInstanceOf(OrderNotFoundException.class);
-        assertThatThrownBy(() -> service.cancel(id)).isInstanceOf(OrderNotFoundException.class);
-        verify(orders).confirm(id, DATABASE_TIME);
-        verify(orders).cancel(id, DATABASE_TIME);
+        assertThatThrownBy(() -> service.findById(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+        assertThatThrownBy(() -> service.confirm(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+        assertThatThrownBy(() -> service.cancel(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+        verify(orders, never()).confirm(any(), any());
+        verify(orders, never()).cancel(any(), any());
         verifyNoInteractions(catalog);
     }
 }

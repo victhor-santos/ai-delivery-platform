@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import com.victhor.delivery.order.application.OrderService;
 
@@ -26,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(SecurityConfiguration.class)
 class ApiExceptionHandlerTests {
 
+    private static final UUID CUSTOMER = UUID.randomUUID();
+
     @Autowired
     private MockMvc mvc;
 
@@ -38,8 +41,8 @@ class ApiExceptionHandlerTests {
     @Test
     void hidesInternalDetailsOfUnexpectedErrors() throws Exception {
         UUID id = UUID.randomUUID();
-        when(orders.confirm(id)).thenThrow(new IllegalStateException("internal database detail"));
-        var response = mvc.perform(post("/api/orders/{id}/confirm", id).with(jwt()))
+        when(orders.confirm(id, CUSTOMER)).thenThrow(new IllegalStateException("internal database detail"));
+        var response = mvc.perform(post("/api/orders/{id}/confirm", id).with(customer()))
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(500))
@@ -51,12 +54,16 @@ class ApiExceptionHandlerTests {
     @Test
     void returnsConflictForConcurrentUpdates() throws Exception {
         UUID id = UUID.randomUUID();
-        when(orders.confirm(id)).thenThrow(new OptimisticLockingFailureException("internal version detail"));
-        var response = mvc.perform(post("/api/orders/{id}/confirm", id).with(jwt()))
+        when(orders.confirm(id, CUSTOMER)).thenThrow(new OptimisticLockingFailureException("internal version detail"));
+        var response = mvc.perform(post("/api/orders/{id}/confirm", id).with(customer()))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(409))
                 .andReturn().getResponse();
         assertThat(response.getContentAsString()).doesNotContain("internal version detail");
+    }
+
+    private static RequestPostProcessor customer() {
+        return jwt().jwt(token -> token.subject(CUSTOMER.toString()));
     }
 }

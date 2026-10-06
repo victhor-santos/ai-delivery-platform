@@ -263,12 +263,13 @@ class OrderServiceApplicationTests {
     }
 
     @Test
-    void readsAndTransitionsAnExistingLegacyOrderWithoutInventingPrices() throws Exception {
+    void readsAndTransitionsAPricelessLegacyOrderAssignedToTheCustomerWithoutInventingPrices() throws Exception {
         UUID id = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO orders (id,restaurant_id,destination_address,destination_latitude,destination_longitude,
-                    status,created_at,updated_at) VALUES (?,?,'Legacy',0,0,'CREATED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-                """, id, RESTAURANT_ID);
+                INSERT INTO orders (id,customer_id,restaurant_id,destination_address,destination_latitude,
+                    destination_longitude,status,created_at,updated_at)
+                VALUES (?,?,?,'Legacy',0,0,'CREATED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """, id, CUSTOMER_ID, RESTAURANT_ID);
 
         for (String suffix : new String[] { "", "/confirm", "/cancel" }) {
             var response = send(suffix.isEmpty() ? "GET" : "POST", "/api/orders/" + id + suffix, null);
@@ -277,6 +278,42 @@ class OrderServiceApplicationTests {
             assertThat(json(response).path("total").isNull()).isTrue();
             assertThat(json(response).path("currency").isNull()).isTrue();
         }
+        verifyNoInteractions(catalog);
+    }
+
+    @Test
+    void hidesUnownedLegacyOrdersFromEveryCustomerWithoutChangingThem() throws Exception {
+        UUID id = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO orders (id,restaurant_id,destination_address,destination_latitude,destination_longitude,
+                    status,created_at,updated_at) VALUES (?,?,'Legacy',0,0,'CREATED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """, id, RESTAURANT_ID);
+
+        for (String suffix : new String[] { "", "/confirm", "/cancel", "/delivery" }) {
+            assertProblem(send(suffix.isEmpty() ? "GET" : "POST", "/api/orders/" + id + suffix, null), 404);
+        }
+        assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, id)).isEqualTo("CREATED");
+        assertThat(jdbc.queryForObject("SELECT customer_id FROM orders WHERE id = ?", UUID.class, id)).isNull();
+    }
+
+    @Test
+    void reportsAnotherCustomersOrderAsMissingAndLeavesItUnchanged() throws Exception {
+        String location = send("POST", "/api/orders", VALID_REQUEST).headers().firstValue("Location").orElseThrow();
+        var original = json(send("GET", location, null));
+        String intruder = TestAccessTokens.issue(UUID.randomUUID());
+        clearInvocations(catalog);
+
+        for (String suffix : new String[] { "", "/confirm", "/cancel", "/delivery" }) {
+            var response = send(suffix.isEmpty() ? "GET" : "POST", location + suffix, null, intruder);
+            assertProblem(response, 404);
+            assertThat(json(response).path("detail").asString()).isEqualTo("Pedido não encontrado.");
+            assertThat(response.body()).doesNotContain(CUSTOMER_ID.toString(), RESTAURANT_ID.toString());
+        }
+
+        assertThat(json(send("GET", location, null))).isEqualTo(original);
+        UUID id = UUID.fromString(original.path("id").asString());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM order_delivery_requests WHERE order_id = ?",
+                Integer.class, id)).isZero();
         verifyNoInteractions(catalog);
     }
 

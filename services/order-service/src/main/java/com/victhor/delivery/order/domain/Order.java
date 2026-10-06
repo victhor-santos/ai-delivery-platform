@@ -60,6 +60,11 @@ public record Order(UUID id, UUID restaurantId, DeliveryDestination destination,
                 null, pricing, customerId);
     }
 
+    /** Orders created before customers were recorded belong to nobody. */
+    public boolean isPlacedBy(UUID customer) {
+        return customerId != null && customerId.equals(customer);
+    }
+
     public Order confirm(Instant now) {
         if (status == OrderStatus.CANCELLED) {
             throw new OrderStateConflictException();

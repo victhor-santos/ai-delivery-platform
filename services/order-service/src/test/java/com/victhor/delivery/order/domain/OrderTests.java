@@ -147,6 +147,19 @@ class OrderTests {
     }
 
     @Test
+    void recognizesOnlyTheCustomerWhoPlacedTheOrder() {
+        Order order = Order.create(CUSTOMER_ID, UUID.randomUUID(), DESTINATION, PRICING, CREATED);
+        Order legacy = new Order(UUID.randomUUID(), UUID.randomUUID(), DESTINATION, OrderStatus.CREATED,
+                CREATED, CREATED, null, null);
+
+        assertThat(order.isPlacedBy(CUSTOMER_ID)).isTrue();
+        assertThat(order.isPlacedBy(UUID.randomUUID())).isFalse();
+        assertThat(order.isPlacedBy(null)).isFalse();
+        assertThat(legacy.isPlacedBy(null)).isFalse();
+        assertThat(legacy.isPlacedBy(CUSTOMER_ID)).isFalse();
+    }
+
+    @Test
     void keepsTheCustomerThroughEveryTransition() {
         Order confirmed = Order.create(CUSTOMER_ID, UUID.randomUUID(), DESTINATION, PRICING, CREATED)
                 .confirm(CREATED.plusSeconds(1));

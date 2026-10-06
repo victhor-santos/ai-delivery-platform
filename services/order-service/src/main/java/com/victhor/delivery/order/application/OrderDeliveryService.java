@@ -26,8 +26,9 @@ public class OrderDeliveryService {
         this.clock = clock;
     }
 
-    public DeliveryGateway.DeliveryReceipt requestDelivery(UUID orderId) {
-        Order order = orders.findById(orderId).orElseThrow(OrderNotFoundException::new);
+    public DeliveryGateway.DeliveryReceipt requestDelivery(UUID orderId, UUID customerId) {
+        Order order = orders.findById(orderId).filter(candidate -> candidate.isPlacedBy(customerId))
+                .orElseThrow(OrderNotFoundException::new);
         if (order.status() != OrderStatus.CONFIRMED) {
             throw new OrderStateConflictException("Only a confirmed order can request delivery");
         }
