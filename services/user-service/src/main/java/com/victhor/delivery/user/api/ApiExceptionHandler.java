@@ -13,6 +13,7 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import com.victhor.delivery.user.application.EmailAlreadyRegisteredException;
+import com.victhor.delivery.user.application.InvalidCredentialsException;
 import com.victhor.delivery.user.application.UserAddressNotFoundException;
 import com.victhor.delivery.user.application.UserNotFoundException;
 
@@ -21,6 +22,14 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final String INTERNAL_ERROR_DETAIL = "Não foi possível processar a requisição.";
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    ResponseEntity<ProblemDetail> handleInvalidCredentials(InvalidCredentialsException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "E-mail ou senha inválidos."));
+    }
 
     @ExceptionHandler(UserNotFoundException.class)
     ProblemDetail handleUserNotFound(UserNotFoundException exception) {
