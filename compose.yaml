@@ -5,6 +5,9 @@ x-java-build: &java-build
 x-java-service: &java-service
   profiles: [demo]
 
+x-java-environment: &java-environment
+  JAVA_TOOL_OPTIONS: ${DEMO_JAVA_TOOL_OPTIONS:--Xms64m -Xmx384m -XX:ActiveProcessorCount=2}
+
 services:
   catalog-db:
     image: postgres:17-alpine
@@ -82,6 +85,7 @@ services:
       args:
         SERVICE_PATH: services/user-service
     environment:
+      <<: *java-environment
       SERVER_PORT: 8081
       USER_DB_URL: jdbc:postgresql://user-db:5432/users
       USER_DB_USERNAME: ${USER_DB_USERNAME:-users}
@@ -99,6 +103,7 @@ services:
       args:
         SERVICE_PATH: services/catalog-service
     environment:
+      <<: *java-environment
       SERVER_PORT: 8082
       CATALOG_DB_URL: jdbc:postgresql://catalog-db:5432/catalog
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-catalog}
@@ -115,6 +120,7 @@ services:
       args:
         SERVICE_PATH: services/order-service
     environment:
+      <<: *java-environment
       SERVER_PORT: 8083
       ORDER_DB_URL: jdbc:postgresql://order-db:5432/orders
       ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:-orders}
@@ -138,6 +144,7 @@ services:
       args:
         SERVICE_PATH: services/payment-service
     environment:
+      <<: *java-environment
       SERVER_PORT: 8084
 
   delivery-service:
@@ -148,6 +155,7 @@ services:
       args:
         SERVICE_PATH: services/delivery-service
     environment:
+      <<: *java-environment
       SERVER_PORT: 8085
       DELIVERY_DB_URL: jdbc:postgresql://delivery-db:5432/deliveries
       DELIVERY_DB_USERNAME: ${DELIVERY_DB_USERNAME:-deliveries}
@@ -167,6 +175,7 @@ services:
       args:
         SERVICE_PATH: api-gateway
     environment:
+      <<: *java-environment
       SERVER_PORT: 8080
       USER_SERVICE_URL: http://user-service:8081
       CATALOG_SERVICE_URL: http://catalog-service:8082
