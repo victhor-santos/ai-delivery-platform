@@ -1,6 +1,6 @@
 # Perfis e endereços de usuários
 
-O User Service mantém perfis e endereços em PostgreSQL próprio. O UUID identifica o perfil; nome e endereços podem ser atualizados, enquanto o e-mail permanece imutável nesta etapa. Não há senha, login, confirmação de e-mail ou vínculo automático com pedidos. O cadastro de um perfil não autentica quem faz a chamada.
+O User Service mantém perfis e endereços em PostgreSQL próprio. O UUID identifica o perfil; nome e endereços podem ser atualizados, enquanto o e-mail permanece imutável nesta etapa. O cadastro público de perfil permanece sem senha. O [contrato separado de autenticação](authentication.md) acrescenta cadastro com senha, login e identidade JWT; não há confirmação de e-mail ou vínculo automático com pedidos. O cadastro de um perfil não autentica quem faz a chamada.
 
 ## Contrato HTTP
 
@@ -40,7 +40,7 @@ UUIDs são gerados pelo servidor. Campos extras são ignorados, incluindo IDs en
 - Latitude entre -90 e 90 e longitude entre -180 e 180, ambas obrigatórias e finitas. Não há geocodificação: coordenadas são informadas explicitamente.
 - Textos exigem strings JSON; coordenadas exigem números. Coerções de números/booleanos para textos ou de strings/booleanos para coordenadas são rejeitadas.
 
-A validação de formato não comprova existência do e-mail nem sua propriedade. Não são aplicadas regras particulares de provedores, como remover pontos ou sufixos com `+`. O UUID será a referência estável para credenciais e recursos nas próximas etapas.
+A validação de formato não comprova existência do e-mail nem sua propriedade. Não são aplicadas regras particulares de provedores, como remover pontos ou sufixos com `+`. O UUID é a referência estável das credenciais e será usado no vínculo com recursos.
 
 | Status | Situação |
 | --- | --- |
@@ -49,13 +49,13 @@ A validação de formato não comprova existência do e-mail nem sua propriedade
 | `409` | E-mail normalizado já cadastrado |
 | `500` | Falha inesperada, sem detalhes internos na resposta |
 
-Erros usam `application/problem+json`. Consultar ou atualizar um endereço usa o par `userId + addressId`, e atualizar um UUID ausente não cria recurso. Essa associação protege a organização dos dados; sem autenticação, ela ainda não identifica quem está fazendo a requisição. Autenticação e autorização serão implementadas em features próprias antes de tratar esse fluxo como acesso protegido.
+Erros usam `application/problem+json`. Consultar ou atualizar um endereço usa o par `userId + addressId`, e atualizar um UUID ausente não cria recurso. Essa associação protege a organização dos dados; os endpoints de perfil/endereço ainda não exigem a identidade do Bearer token. A autenticação possui contrato separado e a autorização será a próxima feature, antes de tratar esse fluxo como acesso protegido.
 
 ## Organização e persistência
 
 `UserProfile`, `EmailAddress` e `UserAddress` são valores de domínio sem dependências de Spring/JPA. `UserProfileService` e `UserAddressService` coordenam os casos de uso por `UserRepository` e `UserAddressRepository`. `UserConfiguration` fornece os beans. Controllers convertem DTOs, sem expor entidades JPA ou consultar outro serviço.
 
-`V1__create_users_and_addresses.sql` cria `users` e `user_addresses`. A FK do endereço referencia apenas `users` no mesmo banco e exclui filhos em cascata se uma operação interna remover o perfil; não há exclusão pública. O índice por usuário, rótulo e UUID atende a paginação. Hibernate valida o schema e `open-in-view` fica desabilitado.
+`V1__create_users_and_addresses.sql` cria `users` e `user_addresses`. A FK do endereço referencia apenas `users` no mesmo banco e exclui filhos em cascata se uma operação interna remover o perfil; não há exclusão pública. O índice por usuário, rótulo e UUID atende a paginação. A V2 de autenticação adiciona `user_credentials`, mantendo perfis/endereços anteriores sem criar senhas para eles. Perfis criados por `POST /api/users` também ficam sem credenciais; registro com senha para o mesmo e-mail retorna conflito, evitando apropriação de conta. Hibernate valida o schema e `open-in-view` fica desabilitado.
 
 O banco impõe textos não vazios, normalização do e-mail, unicidade e intervalos geográficos. A constraint nomeada `users_email_unique` garante unicidade inclusive em cadastros simultâneos. O adaptador faz flush dentro da transação e traduz somente essa violação para conflito de e-mail; outras violações não são classificadas como duplicidade. A validação completa do formato fica no domínio.
 
@@ -66,6 +66,7 @@ Atualizações carregam o recurso existente e alteram somente seus campos editá
 Na raiz, complete as entradas `USER_DB_*` do seu `.env` a partir do `.env.example`, preservando os valores existentes. O `.env` não é versionado. Usuários usam banco `users`, volume `user_postgres_data` e porta local 5436; o serviço usa 8081. Se mudar a porta do banco, ajuste `USER_DB_PORT` e `USER_DB_URL`.
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/initialize-auth-secret.ps1
 docker compose up -d --wait user-db
 .\services\user-service\mvnw.cmd -f .\services\user-service\pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 ```
@@ -83,7 +84,7 @@ Invoke-RestMethod "$baseUrl/api/users/$($user.id)"
 Invoke-RestMethod "${addresses}?page=0&size=20"
 ```
 
-O smoke verifica criação, normalização/duplicidade de e-mail, atualização do perfil, cadastro/alteração de endereço, paginação e rejeição de consulta/alteração pelo usuário errado:
+O smoke verifica cadastro com senha, login, identidade JWT e recusas de credenciais/tokens, além de criação, normalização/duplicidade de e-mail, atualização do perfil, cadastro/alteração de endereço, paginação e rejeição de consulta/alteração pelo usuário errado:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -UsersOnly
@@ -105,4 +106,4 @@ A imagem de User também foi construída e os onze containers ficaram saudáveis
 
 ## Continuação
 
-A próxima etapa é autenticação; autorização de recursos e vínculo com pedidos virão depois, conforme o [roadmap](roadmap.md). Senhas e credenciais terão persistência e regras próprias, usando o UUID do perfil sem incorporar detalhes de autenticação ao domínio de endereço.
+A autenticação está implementada em [contrato próprio](authentication.md). A próxima etapa é autorização de recursos e vínculo com pedidos, conforme o [roadmap](roadmap.md). Senhas e credenciais usam o UUID do perfil sem incorporar detalhes de autenticação ao domínio de perfis.

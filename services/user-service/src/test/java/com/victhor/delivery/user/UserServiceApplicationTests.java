@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -14,6 +15,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @SpringBootTest(properties = "USER_DB_PASSWORD=testcontainers-only")
 @Testcontainers
+@ActiveProfiles("test")
 class UserServiceApplicationTests {
 
     @Container
@@ -31,10 +33,11 @@ class UserServiceApplicationTests {
         assertThat(jdbc.queryForObject("SELECT current_database()", String.class))
                 .isEqualTo(POSTGRES.getDatabaseName());
         assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM flyway_schema_history WHERE version = '1' AND success", Integer.class))
-                .isEqualTo(1);
+                "SELECT count(*) FROM flyway_schema_history WHERE version IN ('1', '2') AND success", Integer.class))
+                .isEqualTo(2);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users", Integer.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM user_addresses", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM user_credentials", Integer.class)).isZero();
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(environment.getProperty("spring.jpa.open-in-view")).isEqualTo("false");
     }

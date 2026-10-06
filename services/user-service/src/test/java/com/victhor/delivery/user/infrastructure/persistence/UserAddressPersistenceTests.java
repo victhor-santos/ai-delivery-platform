@@ -12,6 +12,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,6 +28,7 @@ import com.victhor.delivery.user.domain.UserProfile;
 
 @SpringBootTest(properties = "USER_DB_PASSWORD=testcontainers-only")
 @Testcontainers
+@ActiveProfiles("test")
 class UserAddressPersistenceTests {
 
     @Container

@@ -8,7 +8,7 @@ O monorepo também contém [Route Intelligence em Python](route-intelligence-fou
 
 O pacote `training` gera e valida o [dataset sintético de tempo por trecho](route-segment-dataset.md), compara modelos, seleciona na validação e avalia o artefato no teste reservado. Também importa e [avalia os CSVs de observações do Delivery](segment-observation-evaluation.md), comparando previsões armazenadas com durações simuladas e preservando a proveniência. A [preparação dessas observações](segment-observation-dataset.md) cria outro dataset, com manifesto próprio, partições por entrega e carregamento que reconstrói a política temporal. O [treino observacional](segment-observation-training.md) reutiliza candidatos, seleção, métricas e serialização, preservando a origem `simulated` em artefatos offline próprios. A API continua carregando exclusivamente os bundles sintéticos v1. `app/ml` contém features compartilhadas, pipelines, carregamento validado e predictor em lote. Geração e treinamento não são executados no startup ou em endpoints.
 
-O User Service mantém [perfis e endereços](user-profiles.md) em PostgreSQL próprio. O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O catálogo também gerencia [itens de cardápio](restaurant-menu.md), com nome, descrição opcional, preço em BRL e disponibilidade. O Order Service consulta esses dados por HTTP para criar pedidos com [itens e preços preservados](order-items.md) em outro PostgreSQL, além de consultar, confirmar e cancelar pedidos. Delivery cria e consulta entregas e entregadores por HTTP e executa o ciclo de entrega, com persistência em banco próprio. Pagamentos mantêm a base inicial, com endpoints de demonstração e Actuator.
+O User Service mantém [perfis e endereços](user-profiles.md) e [credenciais de autenticação](authentication.md) em PostgreSQL próprio. O Catalog Service cadastra e consulta restaurantes em seu próprio PostgreSQL, incluindo a localização de coleta opcional. Essa localização também pode ser atualizada por uma operação própria. O catálogo também gerencia [itens de cardápio](restaurant-menu.md), com nome, descrição opcional, preço em BRL e disponibilidade. O Order Service consulta esses dados por HTTP para criar pedidos com [itens e preços preservados](order-items.md) em outro PostgreSQL, além de consultar, confirmar e cancelar pedidos. Delivery cria e consulta entregas e entregadores por HTTP e executa o ciclo de entrega, com persistência em banco próprio. Pagamentos mantêm a base inicial, com endpoints de demonstração e Actuator.
 
 ```mermaid
 flowchart TD
@@ -27,7 +27,7 @@ flowchart TD
     Deliveries -->|HTTP: planejar rota| Routes[Route Intelligence :8000 - rotas e health]
 ```
 
-O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utilizam Spring MVC. As rotas são estáticas, com endereços configuráveis por ambiente e padrões `localhost` para execução nativa. O Compose mantém os quatro bancos com volumes separados e oferece o [perfil `demo`](route-intelligence-compose.md) para as sete aplicações, totalizando onze containers. Na rede Docker, HTTP e JDBC usam hostnames dos serviços; somente Gateway, Python e bancos publicam portas na máquina. O modelo é montado somente para leitura, e o treinamento permanece offline.
+O Gateway utiliza Spring Cloud Gateway Server WebFlux. Os cinco serviços utilizam Spring MVC. As rotas são estáticas, com endereços configuráveis por ambiente e padrões `localhost` para execução nativa. O Compose mantém os quatro bancos com volumes separados e oferece o [perfil `demo`](route-intelligence-compose.md) para as sete aplicações, totalizando onze containers. Na rede Docker, HTTP e JDBC usam hostnames dos serviços; somente Gateway, Python e bancos publicam portas na máquina. O modelo é montado somente para leitura, e o treinamento permanece offline. As seis JVMs do perfil usam parâmetros comuns de heap (64–384 MB) e dimensionamento para dois processadores, ajustáveis por `DEMO_JAVA_TOOL_OPTIONS`; isso não altera a execução nativa nem impõe cota de CPU.
 
 ## Responsabilidades e contratos
 
@@ -36,7 +36,7 @@ As responsabilidades abaixo definem os limites de cada aplicação. O catálogo 
 | Aplicação | Responsabilidade | Porta | Rota pelo Gateway | Pacote-base |
 | --- | --- | --- | --- | --- |
 | API Gateway | Encaminhar chamadas HTTP, sem regras de negócio | 8080 | — | `com.victhor.delivery.gateway` |
-| User Service | Perfis de usuários e endereços | 8081 | `/api/users/**` | `com.victhor.delivery.user` |
+| User Service | Perfis, endereços e autenticação | 8081 | `/api/users/**` | `com.victhor.delivery.user` |
 | Catalog Service | Restaurantes, cardápios, produtos, preços e disponibilidade | 8082 | `/api/catalog/**` | `com.victhor.delivery.catalog` |
 | Order Service | Pedidos, itens, totais, estados e coordenação da compra | 8083 | `/api/orders/**` | `com.victhor.delivery.order` |
 | Payment Service | Tentativas de pagamento, aprovação, recusa e estorno | 8084 | `/api/payments/**` | `com.victhor.delivery.payment` |
@@ -72,10 +72,11 @@ User segue a mesma separação de domínio, casos de uso, API e persistência, c
 
 | Pacote | Responsabilidade |
 | --- | --- |
-| `domain` | `UserProfile`, `EmailAddress` e `UserAddress` validam identidade, nomes, e-mail e coordenadas sem Spring/JPA |
-| `application` | `UserProfileService` e `UserAddressService` coordenam operações por `UserRepository` e `UserAddressRepository`; a página de endereços copia sua lista |
-| `api` | Controllers e DTOs de perfis/endereços, validação JSON e erros HTTP com `ProblemDetail` |
+| `domain` | `UserProfile`, `EmailAddress`, `UserAddress` e `PasswordPolicy` validam identidade, nomes, e-mail, coordenadas e senhas sem Spring/JPA |
+| `application` | `UserProfileService` e `UserAddressService` coordenam perfis/endereços por repositórios próprios; `AuthenticationService` usa portas de credenciais, hash e token; a página de endereços copia sua lista |
+| `api` | Controllers e DTOs de perfis/endereços/autenticação, validação JSON, configuração de segurança e erros HTTP com `ProblemDetail` |
 | `infrastructure.persistence` | Entidades, repositórios Spring Data e adaptadores JPA delimitam transações e preservam os campos de identidade |
+| `infrastructure.auth` | BCrypt, emissão/validação JWT, relógio e configuração dos beans de autenticação |
 
 `UserConfiguration` fornece os beans de aplicação. O cadastro gera UUID e normaliza o e-mail inteiro para minúsculas com `Locale.ROOT`; formato ASCII e limites são validados no domínio. Atualizar o perfil substitui somente o nome, preservando UUID e e-mail. E-mail imutável e UUID estável preparam o vínculo com credenciais futuras sem incluir autenticação no domínio dos endereços.
 
@@ -177,7 +178,13 @@ Na inicialização, Flyway aplica as migrations pendentes e Hibernate valida o m
 
 Dados do volume sobrevivem a reinícios. Credenciais definidas pelo container inicializam um banco vazio, mas não reconfiguram um volume já existente. Execução e testes não exigem remover volumes ou dados locais. Cada serviço continuará sendo dono de seus dados; serviços não consultarão tabelas de outros serviços.
 
-Pedidos seguem o mesmo processo de configuração, com `ORDER_DB_URL`, `ORDER_DB_USERNAME`, `ORDER_DB_PASSWORD` e `ORDER_DB_PORT`. A migration `V1__create_orders.sql` pertence ao Order Service; Flyway gerencia seu schema e Hibernate apenas valida. Usuários usam `USER_DB_URL`, `USER_DB_USERNAME`, `USER_DB_PASSWORD` e `USER_DB_PORT`, documentadas no `.env.example`; arquivos `.env` anteriores precisam receber essas entradas preservando sua configuração. O Compose exige as senhas dos quatro bancos para resolver o arquivo, mesmo que o comando selecione um serviço. Ao executar User nativamente, seu processo precisa somente da configuração do próprio banco, com diretório de trabalho na raiz ou variáveis de ambiente fornecidas explicitamente.
+Pedidos seguem o mesmo processo de configuração, com `ORDER_DB_URL`, `ORDER_DB_USERNAME`, `ORDER_DB_PASSWORD` e `ORDER_DB_PORT`. A migration `V1__create_orders.sql` pertence ao Order Service; Flyway gerencia seu schema e Hibernate apenas valida. Usuários usam `USER_DB_URL`, `USER_DB_USERNAME`, `USER_DB_PASSWORD` e `USER_DB_PORT`, documentadas no `.env.example`; arquivos `.env` anteriores precisam receber essas entradas preservando sua configuração. O Compose exige as senhas dos quatro bancos para resolver o arquivo, mesmo que o comando selecione um serviço. O Compose também exige `USER_AUTH_SECRET`, gerada por `scripts/initialize-auth-secret.ps1` sem sobrescrever uma chave existente. Ao executar User nativamente, seu processo precisa da chave JWT e da configuração do próprio banco, com diretório de trabalho na raiz ou variáveis de ambiente fornecidas explicitamente.
+
+## Autenticação
+
+`PasswordPolicy` mantém regras de senha no domínio puro. `AuthenticationService` coordena registro e login pelas portas `AuthAccountRepository`, `PasswordHasher` e `AccessTokenIssuer`. O adaptador JPA salva perfil e credencial BCrypt em uma transação; a V2 de User cria `user_credentials`, preservando perfis antigos sem inventar senhas. O e-mail continua no perfil, e a credencial referencia somente seu UUID.
+
+Spring Security processa Bearer JWT HS256, com assinatura, emissor, audiência, UUID e validade verificados. A chave obrigatória é fornecida somente ao User nesta etapa. A API oferece registro/login públicos e `/api/users/auth/me` autenticado, sem sessão/cookies. Os contratos anteriores de recursos continuam públicos; Gateway encaminha `Authorization` sem validar a identidade. Proteção dos demais endpoints, papéis, vínculo com pedidos e distribuição das chaves pertencem à próxima feature.
 
 ## Testes e validação
 
@@ -195,6 +202,6 @@ Delivery testa seu domínio sem banco: transições, chegada antes da conclusão
 
 ## Próximas etapas
 
-O Compose já oferece a demonstração integrada com hostnames da rede Docker e preservação dos volumes. Itens, quantidades e snapshots de preços estão integrados aos pedidos; perfis e endereços têm persistência própria, mantendo cada serviço dono de seus dados. A próxima etapa é autenticação, seguida de autorização de recursos e vínculo com pedidos. Pagamentos simulados e interface web seguirão em etapas próprias. O [roadmap](roadmap.md) define essa sequência.
+O Compose já oferece a demonstração integrada com hostnames da rede Docker e preservação dos volumes. Itens, quantidades e snapshots de preços estão integrados aos pedidos; perfis e endereços têm persistência própria, mantendo cada serviço dono de seus dados. Cadastro com senha e autenticação JWT estão implementados. A próxima etapa é autorização de recursos e vínculo com pedidos. Pagamentos simulados e interface web seguirão em etapas próprias. O [roadmap](roadmap.md) define essa sequência.
 
 Java continua responsável pelas transações; Python prevê tempos por trecho e calcula rotas por HTTP, com treinamento offline e dados explicitamente simulados. Mensageria, outbox e compensações serão avaliadas quando o fluxo precisar dessas garantias. Múltiplas entregas, mapas reais e cloud continuam em evoluções posteriores.
