@@ -1,14 +1,13 @@
 package com.victhor.delivery.user.api;
 
-import java.net.URI;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
 
-import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,20 +25,14 @@ public class UserProfileController {
         this.users = users;
     }
 
-    @PostMapping
-    public ResponseEntity<UserProfileResponse> create(@Valid @RequestBody CreateUserRequest request) {
-        var response = UserProfileResponse.from(users.create(request.name(), request.email()));
-        return ResponseEntity.created(URI.create("/api/users/" + response.id())).body(response);
-    }
-
     @GetMapping("/{id}")
-    public UserProfileResponse findById(@PathVariable UUID id) {
-        return UserProfileResponse.from(users.findById(id));
+    public UserProfileResponse findById(@AuthenticationPrincipal Jwt principal, @PathVariable UUID id) {
+        return UserProfileResponse.from(users.findById(CurrentUser.requireSelf(principal, id)));
     }
 
     @PutMapping("/{id}/profile")
-    public UserProfileResponse update(@PathVariable UUID id,
+    public UserProfileResponse update(@AuthenticationPrincipal Jwt principal, @PathVariable UUID id,
             @Valid @RequestBody UpdateUserProfileRequest request) {
-        return UserProfileResponse.from(users.updateName(id, request.name()));
+        return UserProfileResponse.from(users.updateName(CurrentUser.requireSelf(principal, id), request.name()));
     }
 }

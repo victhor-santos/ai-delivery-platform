@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -27,8 +28,13 @@ class SecurityConfiguration {
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/users/auth/me").authenticated()
-                        .anyRequest().permitAll())
+                        .requestMatchers(HttpMethod.POST, "/api/users/auth/register", "/api/users/auth/login")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/users/ping", "/actuator/health", "/actuator/health/**",
+                                "/actuator/info")
+                        .permitAll()
+                        .requestMatchers("/error").permitAll()
+                        .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, exception) -> unauthorized(response, mapper)))
                 .oauth2ResourceServer(resource -> resource
