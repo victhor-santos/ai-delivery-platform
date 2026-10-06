@@ -4,7 +4,7 @@ Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projet
 
 ## Estado atual
 
-O User Service cadastra e consulta perfis e endereços em PostgreSQL próprio. O nome e os endereços podem ser atualizados; o e-mail é normalizado, único e imutável nesta etapa. Os endereços são consultados pelo par usuário/endereço. Ainda não há login nem vínculo entre usuário e pedido. Veja [perfis, validação e persistência de usuários](docs/user-profiles.md).
+O User Service cadastra e consulta perfis e endereços em PostgreSQL próprio. O nome e os endereços podem ser atualizados; o e-mail é normalizado, único e imutável nesta etapa. Os endereços são consultados pelo par usuário/endereço. O cadastro com senha, login e consulta da identidade por JWT estão implementados; o vínculo entre usuário e pedido permanece pendente. Veja [perfis, validação e persistência de usuários](docs/user-profiles.md) e [autenticação e configuração da chave](docs/authentication.md).
 
 O Catalog Service cadastra e consulta restaurantes e seus itens de cardápio em PostgreSQL, com migrations Flyway, validação de entrada, paginação e testes de integração com Testcontainers. Um restaurante tem UUID, nome obrigatório e indicador `active`; o cadastro gera o UUID e inicia o restaurante ativo.
 
@@ -16,7 +16,7 @@ O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL pró
 
 O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Consulta Python, salva o último plano de rota e registra [travessias simuladas por trecho](docs/delivery-segment-observations.md), com snapshots da previsão e exportação CSV por disponibilidade temporal. Veja também o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
-Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. Pagamentos ainda têm apenas a estrutura inicial. RabbitMQ e autenticação permanecem em etapas posteriores.
+Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. Pagamentos ainda têm apenas a estrutura inicial. Autorização dos recursos e RabbitMQ permanecem em etapas posteriores.
 
 Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A [API de rotas previstas](docs/intelligent-routing-api.md) combina o modelo em lote com Dijkstra. Delivery já consulta essa API e persiste o plano por entrega. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
@@ -43,6 +43,7 @@ Se o `.env` já existe, complete as entradas `USER_DB_*` a partir do `.env.examp
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/initialize-auth-secret.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-route-model.ps1
 docker compose --profile demo up -d --build --wait --wait-timeout 240
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
@@ -50,11 +51,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 
 Gateway atende em `http://localhost:8080`; Python em `http://localhost:8000`. As portas Java 8081–8085 são internas neste perfil. Sem `demo`, o Compose continua iniciando somente bancos. Não é necessário instalar Java ou Python na máquina para esta demonstração. O script verifica um modelo existente e só treina se não houver bundle; a API nunca treina ao iniciar.
 
-O perfil utiliza quatro bancos e sete aplicações, totalizando onze containers.
+O perfil utiliza quatro bancos e sete aplicações, totalizando onze containers. Cada JVM usa heap entre 64 e 384 MB e dimensiona seus pools para dois processadores, evitando que as seis aplicações dimensionem memória/threads pelo total da VM Docker. `DEMO_JAVA_TOOL_OPTIONS` permite ajustar esses parâmetros somente no Compose; execução nativa permanece independente.
 
 Veja o [guia do Compose](docs/route-intelligence-compose.md) para configuração, compatibilidade do modelo, testes de queda/recuperação e preservação dos volumes. O smoke cria registros de demonstração no banco. Os comandos de execução nativa abaixo continuam disponíveis.
 
-Para verificar perfis e endereços, com User, seu banco e Gateway disponíveis, execute `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -UsersOnly`. Para verificar restaurantes e cardápios, use `-CatalogOnly`; para incluir criação, consulta, confirmação e preservação de preços dos pedidos, acrescente Order e seu banco e use `-OrderOnly`. Os três modos são exclusivos e não podem ser combinados com `-CheckRecovery` ou `-CheckPersistence`. O smoke completo verifica perfis e endereços, itens e preços dos pedidos e o fluxo de entrega/rota, incluindo sua preservação após recriar containers quando solicitado.
+Para verificar cadastro com senha, login, identidade autenticada, perfis e endereços, com User, seu banco e Gateway disponíveis, execute `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -UsersOnly`. Para verificar restaurantes e cardápios, use `-CatalogOnly`; para incluir criação, consulta, confirmação e preservação de preços dos pedidos, acrescente Order e seu banco e use `-OrderOnly`. Os três modos são exclusivos e não podem ser combinados com `-CheckRecovery` ou `-CheckPersistence`. O smoke completo verifica perfis e endereços, itens e preços dos pedidos e o fluxo de entrega/rota, incluindo sua preservação após recriar containers quando solicitado.
 
 ## Requisitos para desenvolvimento e execução nativa
 
@@ -116,6 +117,7 @@ Crie a configuração local sem sobrescrever um arquivo existente:
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/initialize-auth-secret.ps1
 ```
 
 O `.env.example` contém somente valores de desenvolvimento. Ajuste o `.env` antes de iniciar o banco; ele é ignorado pelo Git e não deve conter credenciais de produção. Use entradas simples `CHAVE=valor`, sem `export` ou aspas, pois o Compose e o Spring leem o mesmo arquivo.
@@ -138,8 +140,10 @@ O `.env.example` contém somente valores de desenvolvimento. Ajuste o `.env` ant
 | `USER_DB_USERNAME` | Usuário do banco de usuários; padrão `users` |
 | `USER_DB_PASSWORD` | Senha local obrigatória para iniciar o banco e o serviço de usuários |
 | `USER_DB_PORT` | Porta de usuários publicada pelo Compose; padrão `5436` |
+| `USER_AUTH_SECRET` | Chave JWT obrigatória, Base64 de pelo menos 32 bytes; gerada pelo script acima |
+| `DEMO_JAVA_TOOL_OPTIONS` | Opções opcionais das seis JVMs no perfil `demo`; padrão `-Xms64m -Xmx384m -XX:ActiveProcessorCount=2` |
 
-Se a porta 5432 já estiver ocupada, escolha outra porta em `CATALOG_DB_PORT` e ajuste também `CATALOG_DB_URL`. A mesma regra vale para pedidos, entregas e usuários. Se você já possui `.env`, acrescente as entradas `ORDER_DB_*`, `DELIVERY_DB_*` e `USER_DB_*` que faltarem em relação a `.env.example`, sem substituir os valores existentes. Variáveis de ambiente podem sobrescrever os valores do arquivo. O Compose exige as senhas dos quatro bancos ao resolver sua configuração, mesmo que o comando selecione somente um deles.
+Se a porta 5432 já estiver ocupada, escolha outra porta em `CATALOG_DB_PORT` e ajuste também `CATALOG_DB_URL`. A mesma regra vale para pedidos, entregas e usuários. Se você já possui `.env`, acrescente as entradas `ORDER_DB_*`, `DELIVERY_DB_*` e `USER_DB_*` que faltarem em relação a `.env.example`, sem substituir os valores existentes. Variáveis de ambiente podem sobrescrever os valores do arquivo. O Compose exige as senhas dos quatro bancos e `USER_AUTH_SECRET` ao resolver sua configuração, mesmo que o comando selecione somente um deles. O script de chave preserva um valor já configurado e nunca o exibe; mantenha a mesma chave entre reinícios.
 
 O Compose define `catalog-db`, `order-db`, `delivery-db` e `user-db`, com `postgres:17-alpine`, portas publicadas em `127.0.0.1` e health check `pg_isready`. Os volumes são separados: `catalog_postgres_data`, `order_postgres_data`, `delivery_postgres_data` e `user_postgres_data`. Para iniciar os quatro:
 
@@ -181,7 +185,7 @@ Os demais serviços continuam disponíveis, um comando por terminal:
 .\services\delivery-service\mvnw.cmd -f .\services\delivery-service\pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 ```
 
-O User Service exige `user-db` em execução, Order exige `order-db`, e Delivery exige `delivery-db`. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar usuários, catálogo, pedidos ou entregas pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
+O User Service exige `USER_AUTH_SECRET` e `user-db` em execução, Order exige `order-db`, e Delivery exige `delivery-db`. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar usuários, catálogo, pedidos ou entregas pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
 
 ## Cadastrar perfis e endereços
 
@@ -198,7 +202,7 @@ A API atende diretamente em `http://localhost:8081` ou pelo Gateway em `http://l
 
 O endereço recebe `label`, `address`, `latitude` e `longitude`. Nome, rótulo e endereço são obrigatórios, com limites de 120, 80 e 255 caracteres. E-mail é normalizado para minúsculas e deve seguir o formato ASCII definido no contrato; duplicidade retorna `409`. Formato válido não comprova propriedade do e-mail. O vínculo entre endereço e perfil ainda não autentica quem faz a chamada, e pedidos continuam recebendo seu próprio destino sem referência ao usuário.
 
-Veja [contrato, exemplos e testes de usuários](docs/user-profiles.md). Autenticação e autorização serão implementadas em etapas próprias.
+Veja [contrato, exemplos e testes de usuários](docs/user-profiles.md). Para criar uma conta com senha, use `POST /api/users/auth/register`; `POST /api/users/auth/login` retorna um Bearer JWT de 15 minutos e `GET /api/users/auth/me` consulta a identidade autenticada. Os endpoints anteriores de perfis/endereços e os outros serviços ainda são públicos: sua autorização será a próxima etapa. Perfis sem credenciais não recebem senha padrão nem podem ser assumidos por outro cadastro. Veja [autenticação](docs/authentication.md).
 
 ## Criar e acompanhar entregas
 
@@ -354,7 +358,7 @@ Com Docker funcionando, execute da raiz:
 .\services\user-service\mvnw.cmd -f .\services\user-service\pom.xml clean verify
 ```
 
-Os testes de domínio cobrem perfis, e-mails e endereços, além das regras de restaurantes, cardápios e composição dos pedidos, incluindo preços sem frações de centavo e cálculo exato dos totais. Os testes de integração inicializam Spring e PostgreSQL real via Testcontainers, aplicam Flyway e exercitam cadastro, dados persistidos, consulta, paginação, entrada inválida e recursos inexistentes. Usuários verificam unicidade de e-mail inclusive em cadastros simultâneos e isolamento dos endereços por perfil; catálogo verifica isolamento dos itens por restaurante. Pedidos usam servidores HTTP locais para testar a consulta ao catálogo, indisponibilidade e preservação dos valores após alterações remotas e transições. As migrations também são testadas sobre dados existentes, preservando pedidos antigos sem inventar preços. Os contextos com persistência usam o banco do Testcontainers. Não é necessário subir o Compose, criar `.env` ou fornecer credenciais locais para esses testes; eles não acessam o volume de desenvolvimento. A suíte completa exige Docker e falha quando ele está indisponível, em vez de ignorar a integração.
+Os testes de domínio cobrem perfis, e-mails e endereços, além das regras de restaurantes, cardápios e composição dos pedidos, incluindo preços sem frações de centavo e cálculo exato dos totais. Os testes de integração inicializam Spring e PostgreSQL real via Testcontainers, aplicam Flyway e exercitam cadastro, dados persistidos, consulta, paginação, entrada inválida e recursos inexistentes. Usuários verificam senhas BCrypt, claims/assinatura/expiração JWT, contratos de autenticação, rollback de perfil/credencial, migração dos legados, unicidade de e-mail inclusive em cadastros simultâneos e isolamento dos endereços por perfil; catálogo verifica isolamento dos itens por restaurante. Pedidos usam servidores HTTP locais para testar a consulta ao catálogo, indisponibilidade e preservação dos valores após alterações remotas e transições. As migrations também são testadas sobre dados existentes, preservando pedidos antigos sem inventar preços. Os contextos com persistência usam o banco do Testcontainers. Não é necessário subir o Compose, criar `.env` ou fornecer credenciais locais para esses testes; eles não acessam o volume de desenvolvimento. A suíte completa exige Docker e falha quando ele está indisponível, em vez de ignorar a integração.
 
 O JAR fica em `services/catalog-service/target/catalog-service-0.0.1-SNAPSHOT.jar`. Com o PostgreSQL local iniciado e `.env` configurado, ele também pode ser executado da raiz:
 

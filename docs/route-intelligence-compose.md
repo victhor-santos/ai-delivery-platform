@@ -1,6 +1,6 @@
 # Demonstração de rotas com Docker Compose
 
-O perfil `demo` executa as seis aplicações Java, Route Intelligence e os quatro PostgreSQL, totalizando onze containers. O smoke verifica perfis e endereços e executa o fluxo com um restaurante fictício, itens de cardápio com preços preservados no pedido e os nós do grafo `synthetic-city-v1`: catálogo → pedido confirmado → entrega → plano de rota. Pedidos ainda não referenciam usuários. Não há login, pagamento, interface web, ruas reais ou API de IA externa.
+O perfil `demo` executa as seis aplicações Java, Route Intelligence e os quatro PostgreSQL, totalizando onze containers. O smoke verifica perfis e endereços e executa o fluxo com um restaurante fictício, itens de cardápio com preços preservados no pedido e os nós do grafo `synthetic-city-v1`: catálogo → pedido confirmado → entrega → plano de rota. Pedidos ainda não referenciam usuários. O smoke também verifica registro/login e identidade JWT; não há autorização dos recursos, pagamento, interface web, ruas reais ou API de IA externa.
 
 Sem o perfil, `docker compose up` inicia somente os quatro bancos. Os volumes existentes foram preservados; `user-db` acrescenta banco `users`, volume `user_postgres_data` e porta padrão 5436. As migrations continuam sob responsabilidade de cada aplicação.
 
@@ -12,11 +12,14 @@ Se já houver `.env`, complete as entradas `USER_DB_*` a partir do `.env.example
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/initialize-auth-secret.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-route-model.ps1
 docker compose --profile demo config --quiet
 docker compose --profile demo up -d --build --wait --wait-timeout 240
 docker compose --profile demo ps
 ```
+
+Mantenha o computador ativo enquanto builds, testes e recriação de containers estiverem em andamento. Nesta máquina, eventos de espera moderna do Windows coincidiram com timeouts: uma suspensão de oito minutos excede o prazo de quatro minutos da demonstração, mesmo sem falha da aplicação. Não é necessário desativar recursos de segurança.
 
 Nesta máquina, a política do PowerShell bloqueia arquivos `.ps1`. `-ExecutionPolicy Bypass` vale somente para o processo que executa o script; não altera a política permanente nem exige desativar o antivírus.
 
@@ -42,6 +45,8 @@ O carregador exige plataforma, arquitetura, Python e bibliotecas iguais aos meta
 | Saúde Java | `curl` em `/actuator/health`, usando `SERVER_PORT`; os serviços com persistência verificam seu banco |
 | Saúde Python | `/health`; somente `200 UP` quando grafo, modelo e tráfego estão prontos |
 
+As seis aplicações Java recebem `JAVA_TOOL_OPTIONS` pelo mesmo bloco de ambiente do Compose. O padrão `-Xms64m -Xmx384m -XX:ActiveProcessorCount=2` limita o heap a 384 MB e dimensiona os pools da JVM para dois processadores. Isso reduz a pressão de memória/threads ao iniciar ou recriar todos os serviços juntos. Não é uma cota rígida de CPU nem um limite para toda a memória do processo. `DEMO_JAVA_TOOL_OPTIONS` no `.env` ou ambiente substitui essas opções para ajustar a demonstração; execução nativa e testes Maven não recebem esse valor automaticamente.
+
 O build Java compila e empacota com `-DskipTests`. Ele não tenta iniciar Testcontainers durante a construção da imagem. Execute os testes separadamente, conforme o README. Treinamento não acontece durante o build, startup ou chamadas HTTP.
 
 No build Python, as dependências usam cache, mas o wheel do próprio projeto é instalado com `--no-cache` após copiar `app` e `training`. Isso impede que uma alteração de código com a mesma versão no `pyproject.toml` reutilize um pacote antigo.
@@ -52,7 +57,7 @@ O perfil publica somente Gateway, Python e bancos em `127.0.0.1`. As portas 8081
 
 Os serviços com banco aguardam `service_healthy`. Order aguarda catálogo e Delivery, e Gateway aguarda os cinco backends Java. Delivery não depende da prontidão do Python: consultas e operações do ciclo continuam disponíveis durante uma falha de roteamento. `up --wait` aguarda a saúde de todos os serviços selecionados, inclusive Python. Um modelo inválido faz a demonstração falhar na prontidão; não há fallback silencioso.
 
-As senhas dos quatro bancos são obrigatórias. Preserve as credenciais correspondentes aos volumes existentes; mudar o `.env` não altera um banco já inicializado. O perfil usa os mesmos volumes de desenvolvimento quando executado com o mesmo nome de projeto Compose.
+As senhas dos quatro bancos e `USER_AUTH_SECRET` são obrigatórias. O script de inicialização gera uma chave aleatória quando ausente/vazia, preserva uma chave configurada e não a mostra. Somente User recebe essa chave nesta etapa; conserve-a entre reinícios para manter tokens ainda válidos. Veja [autenticação](authentication.md). Preserve as credenciais correspondentes aos volumes existentes; mudar o `.env` não altera um banco já inicializado. O perfil usa os mesmos volumes de desenvolvimento quando executado com o mesmo nome de projeto Compose.
 
 ## Verificar o fluxo
 
@@ -62,7 +67,7 @@ Com todos os serviços saudáveis:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 ```
 
-O script começa cadastrando um perfil, conferindo e-mail normalizado e conflito de duplicidade, atualizando o nome e cadastrando/substituindo um endereço. Confere paginação e rejeita consulta/alteração do endereço sob outro usuário. Esses dados são independentes do pedido criado depois; o cadastro ainda não autentica as chamadas.
+O script começa cadastrando uma conta com senha fictícia, verificando login, recusas de senha/token e identidade JWT. Em seguida confere e-mail normalizado e conflito de duplicidade, atualizando o nome e cadastrando/substituindo um endereço. Confere paginação e rejeita consulta/alteração do endereço sob outro usuário. Esses dados são independentes do pedido criado depois; apenas a consulta `/api/users/auth/me` exige identidade autenticada nesta etapa. As operações anteriores de perfil/endereço permanecem públicas até a feature de autorização.
 
 Em seguida cria um restaurante e verifica cadastro, atualização de preço/disponibilidade e consultas do cardápio. Ativa o item e cria um pedido com duas unidades a 29.90, totalizando 59.80 em BRL. Altera o cardápio após a compra e confirma que consulta e confirmação do pedido preservam os nomes e valores originais. Solicita entrega duas vezes e verifica a idempotência. Planeja a rota e compara a consulta persistida com a resposta original, incluindo a identificação dos dados sintéticos. Depois atribui entregador, registra partida, entrada/saída em cada trecho e conclusão da entrega, conferindo snapshots, idempotência e exportação CSV. As travessias são explicitamente simuladas; seus tempos curtos não representam medições reais. Ele usa apenas HTTP pelo Gateway e deixa os registros de demonstração no banco. Cada execução cria novos perfis com e-mails fictícios únicos e restaurantes identificados pelo nome `Compose Demo`.
 
@@ -72,7 +77,7 @@ Para conferir somente [perfis e endereços](user-profiles.md), com User, seu ban
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -UsersOnly
 ```
 
-Esse modo verifica cadastro, atualização, normalização/duplicidade de e-mail, paginação e associação do endereço ao perfil, consultando somente User pelo Gateway.
+Esse modo verifica registro/login, identidade JWT e recusa de senha/token, além de atualização do perfil, normalização/duplicidade de e-mail, paginação e associação do endereço ao perfil, consultando somente User pelo Gateway.
 
 Para conferir somente o [cardápio](restaurant-menu.md), com catálogo, seu banco e Gateway disponíveis:
 
@@ -97,7 +102,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
     -CheckRecovery -CheckPersistence
 ```
 
-`-CheckRecovery` interrompe Python antes da partida, espera `503 ROUTE_SERVICE_UNAVAILABLE` e confirma que entrega e plano anterior não mudaram. Restaura Python em `finally`, aguarda sua prontidão e verifica um novo planejamento. `-CheckPersistence` recria os containers com `--force-recreate`, reutilizando os volumes; depois consulta perfil, endereço, restaurante, item de cardápio, pedido, entrega, plano, observações e CSV, e repete a solicitação idempotente. Confere os dados atualizados do perfil/endereço e a moeda, total e composição preservada do pedido, mesmo com os dados atuais do cardápio diferentes dos snapshots. Essas opções interrompem temporariamente os serviços da demonstração; use-as quando não houver outras operações em andamento.
+`-CheckRecovery` interrompe Python antes da partida, espera `503 ROUTE_SERVICE_UNAVAILABLE` e confirma que entrega e plano anterior não mudaram. Restaura Python em `finally`, aguarda sua prontidão e verifica um novo planejamento. `-CheckPersistence` recria os containers com `--force-recreate`, reutilizando os volumes; depois consulta perfil, endereço, restaurante, item de cardápio, pedido, entrega, plano, observações e CSV, e repete a solicitação idempotente. Confere login após reiniciar, identidade do token anterior com a mesma chave, os dados atualizados do perfil/endereço e a moeda, total e composição preservada do pedido, mesmo com os dados atuais do cardápio diferentes dos snapshots. Essas opções interrompem temporariamente os serviços da demonstração; use-as quando não houver outras operações em andamento.
 
 Se alterar a porta do Gateway, informe `-GatewayUrl http://localhost:NOVA_PORTA`. Para um projeto Compose isolado, informe também `-ComposeProject` e `-EnvFile` com os mesmos valores usados ao iniciar o ambiente. Antes de criar dados ou interromper serviços, as verificações de recuperação/persistência exigem um Gateway local cuja porta corresponda à publicada pelo projeto selecionado. Só mudar o endereço HTTP não muda o projeto que os testes de recuperação operam.
 
@@ -157,5 +162,13 @@ A imagem de User foi construída e os demais serviços reutilizaram as imagens j
 - Recriação dos containers reutilizando volumes: perfil, endereço, cardápio, pedido, entrega, plano, observações/CSV e idempotência preservados.
 
 Ao final, o ambiente descartável e seus volumes próprios foram removidos. Os três bancos de desenvolvimento existentes permaneceram saudáveis; nenhum volume ou `.env` de desenvolvimento foi alterado.
+
+## Validação de autenticação em 06/10/2026
+
+User passou em `clean verify` com 329 testes e JAR executável, incluindo cadastro atômico, BCrypt, JWT, rollback, concorrência e preservação dos legados na V2. Somente sua imagem foi reconstruída; os demais serviços reutilizaram imagens existentes, sem repetir suas suítes Java/Python.
+
+O Compose final do repositório, sem override externo, iniciou onze containers saudáveis em projeto isolado, com portas, credenciais, chave aleatória e volumes próprios. Passaram `-UsersOnly`, `-OrderOnly` e o fluxo completo com recuperação/persistência: registro/login, recusas de senha/token, identidade JWT, perfis/endereços, snapshots de preço, entrega, rota e observações/CSV. Após recriar containers, o login e o token anterior continuaram resolvendo o mesmo perfil com a chave preservada. A recuperação do Python também passou.
+
+Durante tentativas anteriores, eventos de espera moderna do Windows coincidiram com os timeouts de startup. A execução final manteve o computador ativo somente durante o teste, sem alterar o plano de energia nem ampliar os timeouts. O ambiente descartável e seus volumes foram removidos; os três bancos locais permaneceram saudáveis e o `.env` não foi alterado.
 
 Referências: [profiles do Compose](https://docs.docker.com/compose/how-tos/profiles/), [ordem e saúde das dependências](https://docs.docker.com/compose/how-tos/startup-order/), [montagens do Compose](https://docs.docker.com/reference/compose-file/services/) e [instalação com uv em Docker](https://docs.astral.sh/uv/guides/integration/docker/).
