@@ -65,6 +65,29 @@ Para verificar cadastro com senha, login, identidade autenticada, perfis e ender
 - Acesso à internet na primeira execução para baixar Maven, dependências e a imagem PostgreSQL.
 - Para Route Intelligence: Python 3.12+ e `uv`; a versão de referência é 3.12. A preparação está no [guia do serviço Python](docs/route-intelligence-foundation.md).
 
+### Linux
+
+Os comandos PowerShell desta documentação têm equivalentes diretos em Bash. Use `./mvnw` no lugar de `mvnw.cmd` e `/` como separador; os wrappers são versionados como executáveis. O usuário precisa acessar o daemon Docker sem `sudo`, inclusive para os testes com Testcontainers (`docker info` deve funcionar no terminal da IDE). Para isso, adicione-o ao grupo `docker` uma vez e entre novamente na sessão; com o pacote snap, crie o grupo e reinicie o daemon:
+
+```bash
+sudo addgroup --system docker   # o pacote apt já cria o grupo
+sudo usermod -aG docker "$USER"
+sudo snap disable docker && sudo snap enable docker   # somente no Docker instalado por snap
+```
+
+`newgrp docker` aplica o grupo apenas ao terminal atual; depois de sair e entrar na sessão, ele vale para todos. Para o `.env` e a chave JWT:
+
+```bash
+[ -f .env ] || cp .env.example .env
+chmod 600 .env
+scripts/initialize-auth-secret.sh
+docker compose up -d --wait catalog-db order-db delivery-db user-db
+./services/user-service/mvnw -f services/user-service/pom.xml clean verify
+./services/user-service/mvnw -f services/user-service/pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
+```
+
+O script Bash segue as mesmas regras do `.ps1`: preserva uma chave existente, recusa entradas duplicadas e não exibe o valor. Um `.env` copiado do Windows pode manter finais de linha CRLF; Compose e Spring os aceitam, mas `sed -i 's/\r$//' .env` os normaliza. Os scripts de preparação do modelo e de smoke continuam em PowerShell e exigem `pwsh` (PowerShell 7) no Linux, por exemplo `sudo snap install powershell --classic`, chamado como `pwsh -NoProfile -File scripts/smoke-route-demo.ps1`. Em 06/10/2026 o smoke completo, com `-CheckRecovery -CheckPersistence`, passou no Ubuntu com PowerShell 7.6. O script de preparação do modelo não foi executado no Linux, porque o bundle Linux já existia; confira a propriedade dos arquivos gerados nos bind mounts do modelo.
+
 Cada aplicação Java inclui o Maven Wrapper; não é necessário instalar Maven separadamente. Versões da base: Spring Boot 4.1.1 e Spring Cloud 2025.1.3 no Gateway. Usuários, catálogo, pedidos e entregas usam as versões de Spring Data JPA, PostgreSQL JDBC, Flyway e Testcontainers geridas pelo Spring Boot; os bancos locais e os testes usam PostgreSQL 17.
 
 ## Estrutura
