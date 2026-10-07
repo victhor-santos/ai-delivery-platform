@@ -36,6 +36,12 @@ function Assert-Condition([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
 
+# PowerShell 7 parses ISO timestamps from JSON into DateTime; query strings need the ISO-8601 form back.
+function Format-Instant($Value) {
+    if ($Value -is [datetime]) { return $Value.ToUniversalTime().ToString('o') }
+    return [string]$Value
+}
+
 function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [int]$Status = 200, [switch]$Raw, [string]$AccessToken) {
     $request = [System.Net.Http.HttpRequestMessage]::new(
         [System.Net.Http.HttpMethod]::new($Method), "$baseUrl$Path")
@@ -239,7 +245,7 @@ try {
     }
     $observations = @(Invoke-Api 'GET' "$deliveryPath/segments")
     Assert-Condition ($observations.Count -eq $plan.segments.Count) 'Observation count does not match the route.'
-    $cutoff = [uri]::EscapeDataString($exit.labelAvailableAt)
+    $cutoff = [uri]::EscapeDataString((Format-Instant $exit.labelAvailableAt))
     $exportPath = "$deliveryPath/segments/export?availableAtCutoff=$cutoff"
     $csv = Invoke-Api 'GET' $exportPath -Raw
     $samples = @($csv | ConvertFrom-Csv)
