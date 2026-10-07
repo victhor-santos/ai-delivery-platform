@@ -167,6 +167,7 @@ services:
       PAYMENT_DB_URL: jdbc:postgresql://payment-db:5432/payments
       PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:-payments}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD in .env}
+      USER_AUTH_SECRET: ${USER_AUTH_SECRET:?Generate USER_AUTH_SECRET with scripts/initialize-auth-secret.ps1}
     depends_on:
       payment-db:
         condition: service_healthy

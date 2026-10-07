@@ -24,6 +24,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -40,6 +41,7 @@ import com.victhor.delivery.payment.domain.IdempotencyKey;
 import com.victhor.delivery.payment.domain.PaymentAttempt;
 import com.victhor.delivery.payment.domain.SimulatedPaymentMethod;
 
+@ActiveProfiles("test")
 @SpringBootTest(properties = "PAYMENT_DB_PASSWORD=testcontainers-only")
 @Testcontainers
 class PaymentPersistenceTests {
