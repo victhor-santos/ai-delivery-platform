@@ -1,4 +1,4 @@
-name: deliveryordersystem
+name: ai-delivery-platform
 
 x-java-build: &java-build
   context: .
