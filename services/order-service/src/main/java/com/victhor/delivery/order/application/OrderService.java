@@ -27,7 +27,9 @@ public class OrderService {
         this.clock = clock;
     }
 
-    public Order create(UUID restaurantId, DeliveryDestination destination, List<OrderItemSelection> selections) {
+    public Order create(UUID customerId, UUID restaurantId, DeliveryDestination destination,
+            List<OrderItemSelection> selections) {
+        Objects.requireNonNull(customerId, "Customer id is required");
         Objects.requireNonNull(restaurantId, "Restaurant id is required");
         Objects.requireNonNull(destination, "Destination is required");
         List<OrderItemSelection> requested = validateSelections(selections);
@@ -42,18 +44,22 @@ public class OrderService {
             }
             items.add(new OrderItem(selection.menuItemId(), menuItem.name(), selection.quantity(), menuItem.price()));
         }
-        return orders.save(Order.create(restaurantId, destination, new OrderPricing(items), now()));
+        return orders.save(Order.create(customerId, restaurantId, destination, new OrderPricing(items), now()));
     }
 
-    public Order findById(UUID id) {
-        return orders.findById(id).orElseThrow(OrderNotFoundException::new);
+    /** Another customer's order is reported as absent so its existence is not revealed. */
+    public Order findById(UUID id, UUID customerId) {
+        return orders.findById(id).filter(order -> order.isPlacedBy(customerId))
+                .orElseThrow(OrderNotFoundException::new);
     }
 
-    public Order confirm(UUID id) {
+    public Order confirm(UUID id, UUID customerId) {
+        findById(id, customerId);
         return orders.confirm(id, now()).orElseThrow(OrderNotFoundException::new);
     }
 
-    public Order cancel(UUID id) {
+    public Order cancel(UUID id, UUID customerId) {
+        findById(id, customerId);
         return orders.cancel(id, now()).orElseThrow(OrderNotFoundException::new);
     }
 

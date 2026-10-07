@@ -1,6 +1,6 @@
 # Perfis e endereços de usuários
 
-O User Service mantém perfis e endereços em PostgreSQL próprio. O UUID identifica o perfil; nome e endereços podem ser atualizados, enquanto o e-mail permanece imutável nesta etapa. O cadastro público de perfil permanece sem senha. O [contrato separado de autenticação](authentication.md) acrescenta cadastro com senha, login e identidade JWT; não há confirmação de e-mail ou vínculo automático com pedidos. O cadastro de um perfil não autentica quem faz a chamada.
+O User Service mantém perfis e endereços em PostgreSQL próprio. O UUID identifica o perfil; nome e endereços podem ser atualizados, enquanto o e-mail permanece imutável nesta etapa. O perfil é criado pelo [cadastro com senha](authentication.md), que também oferece login e identidade JWT; não há confirmação de e-mail. As operações abaixo exigem o Bearer token do próprio usuário, conforme a [autorização dos recursos](resource-authorization.md): sem token válido retornam `401`, e o perfil ou endereço de outra pessoa retorna `404`.
 
 ## Contrato HTTP
 
@@ -8,7 +8,6 @@ Os caminhos atendem diretamente na porta 8081 e pelo Gateway na porta 8080, sem 
 
 | Operação | Resultado |
 | --- | --- |
-| `POST /api/users` | Cadastra `{name,email}`; `201`, UUID e `Location` |
 | `GET /api/users/{id}` | Consulta perfil; `200` |
 | `PUT /api/users/{id}/profile` | Substitui `{name}`; `200`, preservando UUID e e-mail |
 | `POST /api/users/{userId}/addresses` | Cadastra endereço; `201`, UUID e `Location` |

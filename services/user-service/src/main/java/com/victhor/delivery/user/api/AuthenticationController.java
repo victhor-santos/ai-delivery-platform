@@ -1,8 +1,6 @@
 package com.victhor.delivery.user.api;
 
 import java.net.URI;
-import java.util.UUID;
-
 import jakarta.validation.Valid;
 
 import org.springframework.http.CacheControl;
@@ -46,7 +44,7 @@ public class AuthenticationController {
 
     @GetMapping("/me")
     public ResponseEntity<UserProfileResponse> me(@AuthenticationPrincipal Jwt principal) {
-        var user = users.findById(UUID.fromString(principal.getSubject()));
+        var user = users.findById(CurrentUser.id(principal));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(UserProfileResponse.from(user));
     }
 

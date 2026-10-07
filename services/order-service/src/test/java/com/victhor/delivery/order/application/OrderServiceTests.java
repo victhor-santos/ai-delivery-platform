@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -36,12 +37,14 @@ import com.victhor.delivery.order.domain.Order;
 import com.victhor.delivery.order.domain.OrderItem;
 import com.victhor.delivery.order.domain.OrderItemSelection;
 import com.victhor.delivery.order.domain.OrderPricing;
+import com.victhor.delivery.order.domain.OrderStatus;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTests {
 
     private static final Instant NOW = Instant.parse("2026-09-30T12:00:00.123456789Z");
     private static final Instant DATABASE_TIME = Instant.parse("2026-09-30T12:00:00.123456Z");
+    private static final UUID CUSTOMER_ID = UUID.randomUUID();
     private static final UUID RESTAURANT_ID = UUID.randomUUID();
     private static final UUID FIRST_ITEM = UUID.randomUUID();
     private static final UUID SECOND_ITEM = UUID.randomUUID();
@@ -69,9 +72,10 @@ class OrderServiceTests {
                 .thenReturn(new CatalogLookup.CatalogMenuItem("Suco", new BigDecimal("8.00"), true));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Order created = service.create(RESTAURANT_ID, DESTINATION,
+        Order created = service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION,
                 List.of(new OrderItemSelection(FIRST_ITEM, 2), new OrderItemSelection(SECOND_ITEM, 1)));
 
+        assertThat(created.customerId()).isEqualTo(CUSTOMER_ID);
         assertThat(created.restaurantId()).isEqualTo(RESTAURANT_ID);
         assertThat(created.destination()).isEqualTo(DESTINATION);
         assertThat(created.createdAt()).isEqualTo(DATABASE_TIME);
@@ -91,7 +95,7 @@ class OrderServiceTests {
     @MethodSource("invalidSelections")
     void validatesTheWholeSelectionBeforeAnyRemoteCall(List<OrderItemSelection> selections) {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> service.create(RESTAURANT_ID, DESTINATION, selections));
+                .isThrownBy(() -> service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION, selections));
 
         verifyNoInteractions(catalog, orders);
     }
@@ -106,17 +110,19 @@ class OrderServiceTests {
     }
 
     @Test
-    void requiresRestaurantAndDestinationBeforeRemoteCalls() {
+    void requiresCustomerRestaurantAndDestinationBeforeRemoteCalls() {
         var selections = List.of(new OrderItemSelection(FIRST_ITEM, 1));
 
-        assertThatNullPointerException().isThrownBy(() -> service.create(null, DESTINATION, selections));
-        assertThatNullPointerException().isThrownBy(() -> service.create(RESTAURANT_ID, null, selections));
+        assertThatNullPointerException().isThrownBy(() -> service.create(null, RESTAURANT_ID, DESTINATION, selections));
+
+        assertThatNullPointerException().isThrownBy(() -> service.create(CUSTOMER_ID, null, DESTINATION, selections));
+        assertThatNullPointerException().isThrownBy(() -> service.create(CUSTOMER_ID, RESTAURANT_ID, null, selections));
         verifyNoInteractions(catalog, orders);
     }
 
     @Test
     void rejectsAnInactiveRestaurantWithoutFetchingProductsOrSaving() {
-        assertThatThrownBy(() -> service.create(RESTAURANT_ID, DESTINATION,
+        assertThatThrownBy(() -> service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION,
                 List.of(new OrderItemSelection(FIRST_ITEM, 1))))
                 .isInstanceOf(CatalogSelectionConflictException.class);
 
@@ -130,7 +136,7 @@ class OrderServiceTests {
     void propagatesAMissingRestaurantWithoutPersisting() {
         when(catalog.isRestaurantActive(RESTAURANT_ID)).thenThrow(new CatalogSelectionConflictException());
 
-        assertThatThrownBy(() -> service.create(RESTAURANT_ID, DESTINATION,
+        assertThatThrownBy(() -> service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION,
                 List.of(new OrderItemSelection(FIRST_ITEM, 1))))
                 .isInstanceOf(CatalogSelectionConflictException.class);
 
@@ -148,7 +154,7 @@ class OrderServiceTests {
                     .thenReturn(new CatalogLookup.CatalogMenuItem("Suco", BigDecimal.ONE, false));
         }
 
-        assertThatThrownBy(() -> service.create(RESTAURANT_ID, DESTINATION,
+        assertThatThrownBy(() -> service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION,
                 List.of(new OrderItemSelection(FIRST_ITEM, 1), new OrderItemSelection(SECOND_ITEM, 1))))
                 .isInstanceOf(CatalogSelectionConflictException.class);
 
@@ -162,7 +168,7 @@ class OrderServiceTests {
                 .thenReturn(new CatalogLookup.CatalogMenuItem("Prato", BigDecimal.TEN, true));
         when(catalog.findMenuItem(RESTAURANT_ID, SECOND_ITEM)).thenThrow(new CatalogSelectionConflictException());
 
-        assertThatThrownBy(() -> service.create(RESTAURANT_ID, DESTINATION,
+        assertThatThrownBy(() -> service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION,
                 List.of(new OrderItemSelection(FIRST_ITEM, 1), new OrderItemSelection(SECOND_ITEM, 1))))
                 .isInstanceOf(CatalogSelectionConflictException.class);
 
@@ -173,7 +179,7 @@ class OrderServiceTests {
     void propagatesRestaurantLookupFailuresWithoutSaving() {
         when(catalog.isRestaurantActive(RESTAURANT_ID)).thenThrow(new RemoteServiceUnavailableException());
 
-        assertThatThrownBy(() -> service.create(RESTAURANT_ID, DESTINATION,
+        assertThatThrownBy(() -> service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION,
                 List.of(new OrderItemSelection(FIRST_ITEM, 1))))
                 .isInstanceOf(RemoteServiceUnavailableException.class);
 
@@ -187,7 +193,7 @@ class OrderServiceTests {
                 .thenReturn(new CatalogLookup.CatalogMenuItem("Prato", BigDecimal.TEN, true));
         when(catalog.findMenuItem(RESTAURANT_ID, SECOND_ITEM)).thenThrow(new RemoteServiceUnavailableException());
 
-        assertThatThrownBy(() -> service.create(RESTAURANT_ID, DESTINATION,
+        assertThatThrownBy(() -> service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION,
                 List.of(new OrderItemSelection(FIRST_ITEM, 1), new OrderItemSelection(SECOND_ITEM, 1))))
                 .isInstanceOf(RemoteServiceUnavailableException.class);
 
@@ -200,7 +206,7 @@ class OrderServiceTests {
         when(catalog.findMenuItem(RESTAURANT_ID, FIRST_ITEM))
                 .thenReturn(new CatalogLookup.CatalogMenuItem("Prato", new BigDecimal("12.345"), true));
 
-        assertThatIllegalArgumentException().isThrownBy(() -> service.create(RESTAURANT_ID, DESTINATION,
+        assertThatIllegalArgumentException().isThrownBy(() -> service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION,
                 List.of(new OrderItemSelection(FIRST_ITEM, 1))));
 
         verifyNoInteractions(orders);
@@ -215,7 +221,7 @@ class OrderServiceTests {
                 .thenReturn(new CatalogLookup.CatalogMenuItem("Prato", OrderItem.MAX_UNIT_PRICE, true));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var created = service.create(RESTAURANT_ID, DESTINATION, selections);
+        var created = service.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION, selections);
 
         assertThat(created.pricing().items()).hasSize(OrderPricing.MAX_ITEMS);
         assertThat(created.pricing().total()).isEqualTo(OrderPricing.MAX_TOTAL);
@@ -225,16 +231,35 @@ class OrderServiceTests {
     @Test
     void readsAndTransitionsPersistedSnapshotsWithoutFetchingCatalogAgain() {
         var pricing = new OrderPricing(List.of(new OrderItem(FIRST_ITEM, "Nome preservado", 2, BigDecimal.TEN)));
-        var original = Order.create(RESTAURANT_ID, DESTINATION, pricing, DATABASE_TIME.minusSeconds(60));
+        var original = Order.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION, pricing, DATABASE_TIME.minusSeconds(60));
         var confirmed = original.confirm(DATABASE_TIME);
         var cancelled = confirmed.cancel(DATABASE_TIME);
         when(orders.findById(original.id())).thenReturn(Optional.of(original));
         when(orders.confirm(original.id(), DATABASE_TIME)).thenReturn(Optional.of(confirmed));
         when(orders.cancel(original.id(), DATABASE_TIME)).thenReturn(Optional.of(cancelled));
 
-        assertThat(service.findById(original.id()).pricing()).isSameAs(pricing);
-        assertThat(service.confirm(original.id()).pricing()).isSameAs(pricing);
-        assertThat(service.cancel(original.id()).pricing()).isSameAs(pricing);
+        assertThat(service.findById(original.id(), CUSTOMER_ID).pricing()).isSameAs(pricing);
+        assertThat(service.confirm(original.id(), CUSTOMER_ID).pricing()).isSameAs(pricing);
+        assertThat(service.cancel(original.id(), CUSTOMER_ID).pricing()).isSameAs(pricing);
+        verifyNoInteractions(catalog);
+    }
+
+    @Test
+    void hidesOrdersOfOtherCustomersAndUnownedLegacyOrdersWithoutTransitioningThem() {
+        var pricing = new OrderPricing(List.of(new OrderItem(FIRST_ITEM, "Prato", 1, BigDecimal.TEN)));
+        var foreign = Order.create(UUID.randomUUID(), RESTAURANT_ID, DESTINATION, pricing, DATABASE_TIME);
+        var legacy = new Order(UUID.randomUUID(), RESTAURANT_ID, DESTINATION, OrderStatus.CREATED, DATABASE_TIME,
+                DATABASE_TIME, null, null);
+        when(orders.findById(foreign.id())).thenReturn(Optional.of(foreign));
+        when(orders.findById(legacy.id())).thenReturn(Optional.of(legacy));
+
+        for (UUID id : List.of(foreign.id(), legacy.id())) {
+            assertThatThrownBy(() -> service.findById(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+            assertThatThrownBy(() -> service.confirm(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+            assertThatThrownBy(() -> service.cancel(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+        }
+        verify(orders, never()).confirm(any(), any());
+        verify(orders, never()).cancel(any(), any());
         verifyNoInteractions(catalog);
     }
 
@@ -242,11 +267,11 @@ class OrderServiceTests {
     void reportsMissingOrdersOnAllOperations() {
         UUID id = UUID.randomUUID();
 
-        assertThatThrownBy(() -> service.findById(id)).isInstanceOf(OrderNotFoundException.class);
-        assertThatThrownBy(() -> service.confirm(id)).isInstanceOf(OrderNotFoundException.class);
-        assertThatThrownBy(() -> service.cancel(id)).isInstanceOf(OrderNotFoundException.class);
-        verify(orders).confirm(id, DATABASE_TIME);
-        verify(orders).cancel(id, DATABASE_TIME);
+        assertThatThrownBy(() -> service.findById(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+        assertThatThrownBy(() -> service.confirm(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+        assertThatThrownBy(() -> service.cancel(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
+        verify(orders, never()).confirm(any(), any());
+        verify(orders, never()).cancel(any(), any());
         verifyNoInteractions(catalog);
     }
 }

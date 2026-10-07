@@ -13,6 +13,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -30,6 +31,7 @@ import com.victhor.delivery.order.domain.OrderStatus;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@ActiveProfiles("test")
 @SpringBootTest(properties = "ORDER_DB_PASSWORD=testcontainers-only")
 @Testcontainers
 class OrderPersistenceTests {
@@ -52,7 +54,7 @@ class OrderPersistenceTests {
     @BeforeEach
     void createOrder() {
         jdbc.update("DELETE FROM orders");
-        order = orders.save(Order.create(UUID.randomUUID(),
+        order = orders.save(Order.create(UUID.randomUUID(), UUID.randomUUID(),
                 new DeliveryDestination("Rua das Flores, 42", -23.55, -46.63),
                 new OrderPricing(List.of(new OrderItem(UUID.randomUUID(), "Lasagna", 2, new BigDecimal("32.50")))),
                 Instant.parse("2026-10-05T12:00:00Z")));

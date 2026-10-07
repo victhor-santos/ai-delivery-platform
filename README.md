@@ -4,7 +4,7 @@ Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projet
 
 ## Estado atual
 
-O User Service cadastra e consulta perfis e endereços em PostgreSQL próprio. O nome e os endereços podem ser atualizados; o e-mail é normalizado, único e imutável nesta etapa. Os endereços são consultados pelo par usuário/endereço. O cadastro com senha, login e consulta da identidade por JWT estão implementados; o vínculo entre usuário e pedido permanece pendente. Veja [perfis, validação e persistência de usuários](docs/user-profiles.md) e [autenticação e configuração da chave](docs/authentication.md).
+O User Service cadastra e consulta perfis e endereços em PostgreSQL próprio. O nome e os endereços podem ser atualizados; o e-mail é normalizado, único e imutável nesta etapa. Os endereços são consultados pelo par usuário/endereço. O cadastro com senha, login e consulta da identidade por JWT estão implementados. Perfis, endereços e pedidos exigem Bearer token e só atendem o próprio dono. Veja [perfis, validação e persistência de usuários](docs/user-profiles.md), [autenticação e configuração da chave](docs/authentication.md) e [autorização dos recursos](docs/resource-authorization.md).
 
 O Catalog Service cadastra e consulta restaurantes e seus itens de cardápio em PostgreSQL, com migrations Flyway, validação de entrada, paginação e testes de integração com Testcontainers. Um restaurante tem UUID, nome obrigatório e indicador `active`; o cadastro gera o UUID e inicia o restaurante ativo.
 
@@ -12,7 +12,7 @@ A localização de coleta pode ser informada no cadastro ou atualizada depois. E
 
 Cada item do cardápio pertence a um restaurante e tem nome, descrição opcional, preço em BRL e disponibilidade. A API permite cadastrar, consultar, listar e substituir seus dados, com valores monetários exatos e isolamento por restaurante. Veja o [contrato do cardápio](docs/restaurant-menu.md).
 
-O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. Um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e criação idempotente no Delivery. Pagamento ainda não foi implementado. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
+O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Cada pedido pertence ao cliente do token usado na criação, e somente ele pode consultá-lo ou alterá-lo. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. Um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e criação idempotente no Delivery. Pagamento ainda não foi implementado. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
 O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Consulta Python, salva o último plano de rota e registra [travessias simuladas por trecho](docs/delivery-segment-observations.md), com snapshots da previsão e exportação CSV por disponibilidade temporal. Veja também o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
@@ -185,24 +185,23 @@ Os demais serviços continuam disponíveis, um comando por terminal:
 .\services\delivery-service\mvnw.cmd -f .\services\delivery-service\pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 ```
 
-O User Service exige `USER_AUTH_SECRET` e `user-db` em execução, Order exige `order-db`, e Delivery exige `delivery-db`. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar usuários, catálogo, pedidos ou entregas pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
+O User Service exige `USER_AUTH_SECRET` e `user-db` em execução, Order exige `USER_AUTH_SECRET` e `order-db`, e Delivery exige `delivery-db`. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar usuários, catálogo, pedidos ou entregas pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
 
 ## Cadastrar perfis e endereços
 
-A API atende diretamente em `http://localhost:8081` ou pelo Gateway em `http://localhost:8080`:
+A API atende diretamente em `http://localhost:8081` ou pelo Gateway em `http://localhost:8080`. O perfil é criado por `POST /api/users/auth/register`; as demais requisições exigem `Authorization: Bearer <token>` do próprio usuário, e recursos de outra pessoa retornam `404`:
 
 | Requisição | Resultado |
 | --- | --- |
-| `POST /api/users` com `{name,email}` | `201`, perfil criado e cabeçalho `Location` |
 | `GET /api/users/{id}` | `200` com perfil ou `404` |
 | `PUT /api/users/{id}/profile` com `{name}` | `200`, preservando UUID e e-mail |
 | `POST /api/users/{userId}/addresses` | `201`, endereço criado e cabeçalho `Location` |
 | `GET /api/users/{userId}/addresses?page=0&size=20` | `200` com página de endereços |
 | `GET/PUT /api/users/{userId}/addresses/{addressId}` | `200` com endereço consultado ou substituído; `404` se ausente ou de outro usuário |
 
-O endereço recebe `label`, `address`, `latitude` e `longitude`. Nome, rótulo e endereço são obrigatórios, com limites de 120, 80 e 255 caracteres. E-mail é normalizado para minúsculas e deve seguir o formato ASCII definido no contrato; duplicidade retorna `409`. Formato válido não comprova propriedade do e-mail. O vínculo entre endereço e perfil ainda não autentica quem faz a chamada, e pedidos continuam recebendo seu próprio destino sem referência ao usuário.
+O endereço recebe `label`, `address`, `latitude` e `longitude`. Nome, rótulo e endereço são obrigatórios, com limites de 120, 80 e 255 caracteres. E-mail é normalizado para minúsculas e deve seguir o formato ASCII definido no contrato; duplicidade retorna `409`. Formato válido não comprova propriedade do e-mail. Pedidos continuam recebendo seu próprio destino, sem referência a um endereço salvo.
 
-Veja [contrato, exemplos e testes de usuários](docs/user-profiles.md). Para criar uma conta com senha, use `POST /api/users/auth/register`; `POST /api/users/auth/login` retorna um Bearer JWT de 15 minutos e `GET /api/users/auth/me` consulta a identidade autenticada. Os endpoints anteriores de perfis/endereços e os outros serviços ainda são públicos: sua autorização será a próxima etapa. Perfis sem credenciais não recebem senha padrão nem podem ser assumidos por outro cadastro. Veja [autenticação](docs/authentication.md).
+Veja [contrato, exemplos e testes de usuários](docs/user-profiles.md). Para criar uma conta com senha, use `POST /api/users/auth/register`; `POST /api/users/auth/login` retorna um Bearer JWT de 15 minutos e `GET /api/users/auth/me` consulta a identidade autenticada. Perfis sem credenciais não recebem senha padrão nem podem ser assumidos por outro cadastro. Catálogo e entregas ainda são públicos. Veja [autenticação](docs/authentication.md) e [autorização](docs/resource-authorization.md).
 
 ## Criar e acompanhar entregas
 

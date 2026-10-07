@@ -2,6 +2,8 @@ package com.victhor.delivery.order.api;
 
 import java.util.UUID;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,8 +20,8 @@ public class OrderDeliveryController {
     }
 
     @PostMapping("/api/orders/{id}/delivery")
-    public OrderDeliveryResponse requestDelivery(@PathVariable UUID id) {
-        var receipt = deliveries.requestDelivery(id);
+    public OrderDeliveryResponse requestDelivery(@AuthenticationPrincipal Jwt principal, @PathVariable UUID id) {
+        var receipt = deliveries.requestDelivery(id, CurrentCustomer.id(principal));
         return new OrderDeliveryResponse(receipt.orderId(), receipt.deliveryId(), receipt.status());
     }
 

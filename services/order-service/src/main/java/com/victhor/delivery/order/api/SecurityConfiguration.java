@@ -1,4 +1,4 @@
-package com.victhor.delivery.user.api;
+package com.victhor.delivery.order.api;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,15 +22,13 @@ import tools.jackson.databind.ObjectMapper;
 class SecurityConfiguration {
 
     @Bean
-    SecurityFilterChain userSecurity(HttpSecurity http, ObjectMapper mapper) throws Exception {
+    SecurityFilterChain orderSecurity(HttpSecurity http, ObjectMapper mapper) throws Exception {
         return http.csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable).formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers(HttpMethod.POST, "/api/users/auth/register", "/api/users/auth/login")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/users/ping", "/actuator/health", "/actuator/health/**",
+                        .requestMatchers(HttpMethod.GET, "/api/orders/ping", "/actuator/health", "/actuator/health/**",
                                 "/actuator/info")
                         .permitAll()
                         .requestMatchers("/error").permitAll()

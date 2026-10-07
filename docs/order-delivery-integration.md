@@ -45,10 +45,17 @@ A primeira versão não remove intenções, coordena cancelamentos entre serviç
 
 Order usa `CATALOG_SERVICE_URL` (padrão `http://localhost:8082`), `DELIVERY_SERVICE_URL` (padrão `http://localhost:8085`) e `ORDER_REMOTE_TIMEOUT_MS` (padrão `5000`). O cliente limita conexão a dois segundos e cada requisição ao timeout configurado. As URLs podem ser fornecidas no `.env` da raiz ou no ambiente. Nenhum serviço consulta tabelas do banco de outro serviço.
 
-Inicie os três bancos e as aplicações Catalog, Order, Delivery e Gateway conforme o README. O exemplo cria dados locais:
+Inicie os bancos e as aplicações User, Catalog, Order, Delivery e Gateway conforme o README. A solicitação exige o token do cliente que criou o pedido; outra conta recebe `404`. O exemplo cria dados locais:
 
 ```powershell
 $baseUrl = 'http://localhost:8080'
+$email = "demo-$([guid]::NewGuid().ToString('N'))@example.test"
+$account = @{ name = 'Cliente Demo'; email = $email; password = 'demonstration-password-123' }
+Invoke-RestMethod -Method Post "$baseUrl/api/users/auth/register" -ContentType 'application/json' `
+    -Body ($account | ConvertTo-Json) | Out-Null
+$login = Invoke-RestMethod -Method Post "$baseUrl/api/users/auth/login" -ContentType 'application/json' `
+    -Body (@{ email = $email; password = $account.password } | ConvertTo-Json)
+$auth = @{ Authorization = "Bearer $($login.accessToken)" }
 $restaurant = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/catalog/restaurants" `
     -ContentType 'application/json' `
     -Body '{"name":"Restaurante Central","pickupLocation":{"latitude":-23.55,"longitude":-46.63}}'
@@ -60,14 +67,14 @@ $body = @{
     destination = @{ address = 'Rua Central, 42'; latitude = -23.56; longitude = -46.64 }
     items = @(@{ menuItemId = $item.id; quantity = 2 })
 } | ConvertTo-Json -Depth 10
-$order = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders" -ContentType 'application/json' -Body $body
+$order = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders" -Headers $auth -ContentType 'application/json' -Body $body
 $order.total # 59.80, calculado a partir dos preços do catálogo
 $path = "$baseUrl/api/orders/$($order.id)"
-Invoke-RestMethod -Method Post -Uri "$path/confirm"
-$receipt = Invoke-RestMethod -Method Post -Uri "$path/delivery"
+Invoke-RestMethod -Method Post -Uri "$path/confirm" -Headers $auth
+$receipt = Invoke-RestMethod -Method Post -Uri "$path/delivery" -Headers $auth
 Invoke-RestMethod "$baseUrl/api/deliveries/$($receipt.deliveryId)"
-Invoke-RestMethod -Method Post -Uri "$path/delivery" # recupera a mesma entrega
-Invoke-RestMethod $path # inclui deliveryRequestedAt e os itens/valores preservados
+Invoke-RestMethod -Method Post -Uri "$path/delivery" -Headers $auth # recupera a mesma entrega
+Invoke-RestMethod $path -Headers $auth # inclui deliveryRequestedAt e os itens/valores preservados
 ```
 
 Depois, use a [API do ciclo de entregas](delivery-lifecycle.md) para atribuir um entregador e registrar coleta, partida, chegada e conclusão.

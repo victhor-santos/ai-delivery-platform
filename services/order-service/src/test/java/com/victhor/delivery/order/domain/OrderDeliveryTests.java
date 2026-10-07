@@ -17,7 +17,7 @@ class OrderDeliveryTests {
             new OrderItem(UUID.randomUUID(), "Prato executivo", 2, new BigDecimal("25.00"))));
 
     private Order created() {
-        return Order.create(UUID.randomUUID(), new DeliveryDestination("Rua Central", 0, 0), PRICING, TIME);
+        return Order.create(UUID.randomUUID(), UUID.randomUUID(), new DeliveryDestination("Rua Central", 0, 0), PRICING, TIME);
     }
 
     @Test

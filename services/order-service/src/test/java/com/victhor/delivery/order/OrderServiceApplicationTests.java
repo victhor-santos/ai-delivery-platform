@@ -16,6 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.core.env.Environment;
@@ -30,12 +31,14 @@ import tools.jackson.databind.ObjectMapper;
 import com.victhor.delivery.order.application.CatalogLookup;
 import com.victhor.delivery.order.application.CatalogSelectionConflictException;
 import com.victhor.delivery.order.application.RemoteServiceUnavailableException;
+import com.victhor.delivery.order.infrastructure.auth.TestAccessTokens;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+@ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "ORDER_DB_PASSWORD=testcontainers-only")
 @Testcontainers
@@ -43,6 +46,7 @@ class OrderServiceApplicationTests {
 
     private static final UUID RESTAURANT_ID = UUID.randomUUID();
     private static final UUID MENU_ITEM_ID = UUID.randomUUID();
+    private static final UUID CUSTOMER_ID = UUID.randomUUID();
     private static final String VALID_REQUEST = """
             {"restaurantId":"%s","items":[{"menuItemId":"%s","quantity":2}],"destination":{
               "address":"  Rua das Flores, 42  ","latitude":-23.55,"longitude":-46.63}}
@@ -81,7 +85,7 @@ class OrderServiceApplicationTests {
     void loadsContextWithFlywayAndHibernateValidation() {
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class))
-                .isEqualTo(3);
+                .isEqualTo(4);
     }
 
     @Test
@@ -92,6 +96,7 @@ class OrderServiceApplicationTests {
         var id = UUID.fromString(order.path("id").asString());
         String location = "/api/orders/" + id;
         assertThat(response.headers().firstValue("Location")).contains(location);
+        assertThat(order.path("customerId").asString()).isEqualTo(CUSTOMER_ID.toString());
         assertThat(order.path("restaurantId").asString()).isEqualTo(RESTAURANT_ID.toString());
         assertThat(order.path("destination").path("address").asString()).isEqualTo("Rua das Flores, 42");
         assertThat(order.path("destination").path("latitude").asDouble()).isEqualTo(-23.55);
@@ -114,19 +119,24 @@ class OrderServiceApplicationTests {
         assertThat(json(retrieved)).isEqualTo(order);
         assertThat(jdbc.queryForObject("SELECT restaurant_id FROM orders WHERE id = ?", UUID.class, id))
                 .isEqualTo(RESTAURANT_ID);
+        assertThat(jdbc.queryForObject("SELECT customer_id FROM orders WHERE id = ?", UUID.class, id))
+                .isEqualTo(CUSTOMER_ID);
         assertThat(jdbc.queryForObject("SELECT destination_address FROM orders WHERE id = ?", String.class, id))
                 .isEqualTo("Rua das Flores, 42");
     }
 
     @Test
-    void ignoresClientSuppliedIdentityStatusAndTimestamps() throws Exception {
+    void ignoresClientSuppliedIdentityCustomerStatusAndTimestamps() throws Exception {
         UUID suppliedId = UUID.randomUUID();
+        UUID suppliedCustomer = UUID.randomUUID();
         String request = VALID_REQUEST.strip().replaceFirst("\\{", """
-                {"id":"%s","status":"CONFIRMED","createdAt":"2000-01-01T00:00:00Z","total":0.01,"currency":"USD",
-                """.formatted(suppliedId)).replace("\"quantity\":2", "\"quantity\":2,\"name\":\"Falso\",\"unitPrice\":0.01");
+                {"id":"%s","customerId":"%s","status":"CONFIRMED","createdAt":"2000-01-01T00:00:00Z","total":0.01,
+                "currency":"USD",
+                """.formatted(suppliedId, suppliedCustomer)).replace("\"quantity\":2", "\"quantity\":2,\"name\":\"Falso\",\"unitPrice\":0.01");
         var response = send("POST", "/api/orders", request);
         assertThat(response.statusCode()).isEqualTo(201);
         assertThat(json(response).path("id").asString()).isNotEqualTo(suppliedId.toString());
+        assertThat(json(response).path("customerId").asString()).isEqualTo(CUSTOMER_ID.toString());
         assertThat(json(response).path("status").asString()).isEqualTo("CREATED");
         assertThat(json(response).path("createdAt").asString()).doesNotStartWith("2000-");
         assertThat(json(response).path("total").asDouble()).isEqualTo(51.80);
@@ -253,12 +263,13 @@ class OrderServiceApplicationTests {
     }
 
     @Test
-    void readsAndTransitionsAnExistingLegacyOrderWithoutInventingPrices() throws Exception {
+    void readsAndTransitionsAPricelessLegacyOrderAssignedToTheCustomerWithoutInventingPrices() throws Exception {
         UUID id = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO orders (id,restaurant_id,destination_address,destination_latitude,destination_longitude,
-                    status,created_at,updated_at) VALUES (?,?,'Legacy',0,0,'CREATED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-                """, id, RESTAURANT_ID);
+                INSERT INTO orders (id,customer_id,restaurant_id,destination_address,destination_latitude,
+                    destination_longitude,status,created_at,updated_at)
+                VALUES (?,?,?,'Legacy',0,0,'CREATED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """, id, CUSTOMER_ID, RESTAURANT_ID);
 
         for (String suffix : new String[] { "", "/confirm", "/cancel" }) {
             var response = send(suffix.isEmpty() ? "GET" : "POST", "/api/orders/" + id + suffix, null);
@@ -267,6 +278,42 @@ class OrderServiceApplicationTests {
             assertThat(json(response).path("total").isNull()).isTrue();
             assertThat(json(response).path("currency").isNull()).isTrue();
         }
+        verifyNoInteractions(catalog);
+    }
+
+    @Test
+    void hidesUnownedLegacyOrdersFromEveryCustomerWithoutChangingThem() throws Exception {
+        UUID id = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO orders (id,restaurant_id,destination_address,destination_latitude,destination_longitude,
+                    status,created_at,updated_at) VALUES (?,?,'Legacy',0,0,'CREATED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """, id, RESTAURANT_ID);
+
+        for (String suffix : new String[] { "", "/confirm", "/cancel", "/delivery" }) {
+            assertProblem(send(suffix.isEmpty() ? "GET" : "POST", "/api/orders/" + id + suffix, null), 404);
+        }
+        assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, id)).isEqualTo("CREATED");
+        assertThat(jdbc.queryForObject("SELECT customer_id FROM orders WHERE id = ?", UUID.class, id)).isNull();
+    }
+
+    @Test
+    void reportsAnotherCustomersOrderAsMissingAndLeavesItUnchanged() throws Exception {
+        String location = send("POST", "/api/orders", VALID_REQUEST).headers().firstValue("Location").orElseThrow();
+        var original = json(send("GET", location, null));
+        String intruder = TestAccessTokens.issue(UUID.randomUUID());
+        clearInvocations(catalog);
+
+        for (String suffix : new String[] { "", "/confirm", "/cancel", "/delivery" }) {
+            var response = send(suffix.isEmpty() ? "GET" : "POST", location + suffix, null, intruder);
+            assertProblem(response, 404);
+            assertThat(json(response).path("detail").asString()).isEqualTo("Pedido não encontrado.");
+            assertThat(response.body()).doesNotContain(CUSTOMER_ID.toString(), RESTAURANT_ID.toString());
+        }
+
+        assertThat(json(send("GET", location, null))).isEqualTo(original);
+        UUID id = UUID.fromString(original.path("id").asString());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM order_delivery_requests WHERE order_id = ?",
+                Integer.class, id)).isZero();
         verifyNoInteractions(catalog);
     }
 
@@ -280,19 +327,51 @@ class OrderServiceApplicationTests {
     }
 
     @Test
-    void preservesPingAndActuator() throws Exception {
-        assertThat(send("GET", "/api/orders/ping", null).statusCode()).isEqualTo(200);
-        var health = send("GET", "/actuator/health", null);
+    void preservesPingAndActuatorWithoutCredentials() throws Exception {
+        assertThat(send("GET", "/api/orders/ping", null, null).statusCode()).isEqualTo(200);
+        var health = send("GET", "/actuator/health", null, null);
         assertThat(health.statusCode()).isEqualTo(200);
         assertThat(json(health).path("status").asString()).isEqualTo("UP");
+        assertThat(send("GET", "/actuator/info", null, null).statusCode()).isEqualTo(200);
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidCredentials")
+    void rejectsOrderRequestsWithoutAValidAccessTokenBeforeTouchingData(String token) throws Exception {
+        String location = send("POST", "/api/orders", VALID_REQUEST).headers().firstValue("Location").orElseThrow();
+        clearInvocations(catalog);
+
+        for (String[] call : new String[][] { { "POST", "/api/orders" }, { "GET", location },
+                { "POST", location + "/confirm" }, { "POST", location + "/cancel" },
+                { "POST", location + "/delivery" } }) {
+            var response = send(call[0], call[1], call[1].equals("/api/orders") ? VALID_REQUEST : null, token);
+            assertProblem(response, 401);
+            assertThat(response.headers().firstValue("WWW-Authenticate")).hasValueSatisfying(
+                    challenge -> assertThat(challenge).startsWith("Bearer"));
+        }
+        verifyNoInteractions(catalog);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM orders", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT status FROM orders", String.class)).isEqualTo("CREATED");
+    }
+
+    static Stream<String> invalidCredentials() {
+        return Stream.of(null, "not-a-token", TestAccessTokens.issue(
+                "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=", Instant.now(), claims -> { }),
+                TestAccessTokens.issue(TestAccessTokens.SECRET, Instant.now().minusSeconds(1000), claims -> { }));
     }
 
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
+        return send(method, path, body, TestAccessTokens.issue(CUSTOMER_ID));
+    }
+
+    private HttpResponse<String> send(String method, String path, String body, String token) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
-                .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return client.send(request, HttpResponse.BodyHandlers.ofString());
+                .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
+        if (token != null) {
+            request.header("Authorization", "Bearer " + token);
+        }
+        return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private JsonNode json(HttpResponse<String> response) {

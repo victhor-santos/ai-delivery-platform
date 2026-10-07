@@ -1,6 +1,6 @@
 # Cadastro com senha e autenticação
 
-User mantém credenciais no seu próprio PostgreSQL. A API permite criar um perfil com senha, fazer login e consultar a identidade do Bearer token. Os endpoints atendem diretamente em 8081 ou pelo Gateway em 8080, que encaminha o cabeçalho `Authorization` sem validar tokens nesta etapa.
+User mantém credenciais no seu próprio PostgreSQL. A API permite criar um perfil com senha, fazer login e consultar a identidade do Bearer token. Os endpoints atendem diretamente em 8081 ou pelo Gateway em 8080, que encaminha o cabeçalho `Authorization` sem validar tokens.
 
 | Operação | Contrato |
 | --- | --- |
@@ -10,7 +10,7 @@ User mantém credenciais no seu próprio PostgreSQL. A API permite criar um perf
 
 Cadastro/login são públicos. `/auth/me` exige autenticação e deriva o UUID do token, sem aceitar identidade informada pelo cliente. Erros usam `application/problem+json`: entrada inválida `400`, e-mail já utilizado `409`, login incorreto/token ausente ou inválido `401`. Uma identidade de token válido sem perfil existente recebe `404`. Respostas de token/identidade usam `Cache-Control: no-store`; não há cookie de sessão, HTTP Basic ou formulário de login. `401` inclui `WWW-Authenticate: Bearer` sem explicar se um e-mail existe.
 
-Os endpoints anteriores de perfis/endereços e os outros serviços continuam com o contrato público anterior. Esta entrega não protege pedidos alheios, perfis ou operações administrativas. A próxima feature implementará autorização, identidade nos recursos e regras de acesso. A V1 não deve ser tratada como acesso protegido antes dessa etapa.
+A [autorização dos recursos](resource-authorization.md) usa este token: perfis, endereços e pedidos só atendem o próprio dono. Catálogo, entregas e operações administrativas continuam sem papéis nem proteção.
 
 ## Senhas e cadastro atômico
 
@@ -22,15 +22,15 @@ Senhas exigem pelo menos 12 caracteres Unicode e no máximo 72 bytes em UTF-8. N
 
 O login consulta e-mail normalizado e verifica o hash. E-mail desconhecido e perfil sem credencial também executam uma verificação BCrypt com hash fictício, retornando o mesmo erro genérico. Isso reduz a diferença de trabalho nesses casos; não promete tempos idênticos nem substitui limitação de tentativas.
 
-Perfis anteriores à V2 e criados pelo `POST /api/users` ficam sem credenciais; seus dados e endereços são preservados. Não recebem senha padrão e não podem ser assumidos por cadastro público com o mesmo e-mail. Para a demonstração, cadastre uma conta nova por `/auth/register`. Conversão de perfis antigos, confirmação de e-mail e recuperação de senha precisam de prova de propriedade e não foram implementadas.
+Perfis anteriores à V2 e os criados pelo antigo `POST /api/users`, removido na autorização, ficam sem credenciais; seus dados e endereços são preservados. Não recebem senha padrão e não podem ser assumidos por cadastro público com o mesmo e-mail. Para a demonstração, cadastre uma conta nova por `/auth/register`. Conversão de perfis antigos, confirmação de e-mail e recuperação de senha precisam de prova de propriedade e não foram implementadas.
 
 ## Tokens e configuração
 
 `JwtAccessTokens` emite JWT HS256 com UUID em `sub`, `jti` único, `iss`, `aud`, `iat`, `nbf` e `exp`. O emissor é `https://delivery-order-system.local` e a audiência é `delivery-order-system`. O emissor é um identificador, sem descoberta OIDC nem consulta a esse domínio. O token dura 15 minutos. O decoder exige assinatura HS256, emissor, audiência, subject UUID canônico, emissão/vencimento e duração permitida; valida datas com tolerância de 30 segundos. O `Clock` é injetado para testar essas regras.
 
-O Spring Security Resource Server processa o Bearer header; não há filtro JWT escrito manualmente. A configuração de segurança é stateless. CSRF está desativado para este contrato sem autenticação por cookies. A política dos endpoints existentes será revista junto à autorização. Esta API de login não é uma implementação completa de servidor OAuth/OIDC.
+O Spring Security Resource Server processa o Bearer header; não há filtro JWT escrito manualmente. A configuração de segurança é stateless. CSRF está desativado para este contrato sem autenticação por cookies. A política dos endpoints está descrita na [autorização](resource-authorization.md). Esta API de login não é uma implementação completa de servidor OAuth/OIDC.
 
-User exige `USER_AUTH_SECRET`, Base64 de pelo menos 32 bytes aleatórios, sem valor padrão no runtime. A chave local não entra no Git. A fixture em `src/test/resources/application-test.properties` é pública e carregada somente pelo perfil `test`; nunca deve ser usada fora dos testes. Outros serviços não recebem a chave nesta entrega.
+User exige `USER_AUTH_SECRET`, Base64 de pelo menos 32 bytes aleatórios, sem valor padrão no runtime. A chave local não entra no Git. A fixture em `src/test/resources/application-test.properties` é pública e carregada somente pelo perfil `test`; nunca deve ser usada fora dos testes. Order também recebe a chave para validar tokens, sem emiti-los.
 
 Na raiz, crie/complete o `.env` a partir do `.env.example` e gere a chave:
 

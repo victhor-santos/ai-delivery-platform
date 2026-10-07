@@ -8,6 +8,8 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,30 +32,31 @@ public class UserAddressController {
     }
 
     @PostMapping
-    public ResponseEntity<UserAddressResponse> create(@PathVariable UUID userId,
-            @Valid @RequestBody UserAddressRequest request) {
-        var response = UserAddressResponse.from(addresses.create(userId, request.label(), request.address(),
-                request.latitude(), request.longitude()));
+    public ResponseEntity<UserAddressResponse> create(@AuthenticationPrincipal Jwt principal,
+            @PathVariable UUID userId, @Valid @RequestBody UserAddressRequest request) {
+        var response = UserAddressResponse.from(addresses.create(CurrentUser.requireSelf(principal, userId),
+                request.label(), request.address(), request.latitude(), request.longitude()));
         var location = URI.create("/api/users/" + userId + "/addresses/" + response.id());
         return ResponseEntity.created(location).body(response);
     }
 
     @GetMapping("/{addressId}")
-    public UserAddressResponse findById(@PathVariable UUID userId, @PathVariable UUID addressId) {
-        return UserAddressResponse.from(addresses.findById(userId, addressId));
+    public UserAddressResponse findById(@AuthenticationPrincipal Jwt principal, @PathVariable UUID userId,
+            @PathVariable UUID addressId) {
+        return UserAddressResponse.from(addresses.findById(CurrentUser.requireSelf(principal, userId), addressId));
     }
 
     @PutMapping("/{addressId}")
-    public UserAddressResponse update(@PathVariable UUID userId, @PathVariable UUID addressId,
-            @Valid @RequestBody UserAddressRequest request) {
-        return UserAddressResponse.from(addresses.update(userId, addressId, request.label(), request.address(),
-                request.latitude(), request.longitude()));
+    public UserAddressResponse update(@AuthenticationPrincipal Jwt principal, @PathVariable UUID userId,
+            @PathVariable UUID addressId, @Valid @RequestBody UserAddressRequest request) {
+        return UserAddressResponse.from(addresses.update(CurrentUser.requireSelf(principal, userId), addressId,
+                request.label(), request.address(), request.latitude(), request.longitude()));
     }
 
     @GetMapping
-    public UserAddressPageResponse findAll(@PathVariable UUID userId,
+    public UserAddressPageResponse findAll(@AuthenticationPrincipal Jwt principal, @PathVariable UUID userId,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(UserAddressService.MAX_PAGE_SIZE) int size) {
-        return UserAddressPageResponse.from(addresses.findAll(userId, page, size));
+        return UserAddressPageResponse.from(addresses.findAll(CurrentUser.requireSelf(principal, userId), page, size));
     }
 }
