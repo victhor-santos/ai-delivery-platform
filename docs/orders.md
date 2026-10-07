@@ -4,7 +4,7 @@ O Order Service registra criação, consulta, confirmação e cancelamento de pe
 
 Novos pedidos exigem itens e quantidades. O cadastro consulta o catálogo por HTTP, exige restaurante ativo e itens disponíveis e salva nomes, preços unitários e total em BRL. Alterações posteriores no cardápio não recalculam o pedido. O [contrato de itens e valores](order-items.md) descreve limites, erros e preservação dos pedidos antigos.
 
-Todas as operações exigem o Bearer token do cliente; o pedido registra o `customerId` do token e só atende esse cliente, retornando `404` para outra conta. Veja a [autorização dos recursos](resource-authorization.md). Pagamento permanece pendente. Confirmar um pedido é uma ação manual; depois dela, `POST /api/orders/{id}/delivery` solicita a entrega e verifica a localização de coleta. A confirmação não indica pagamento aprovado.
+Todas as operações exigem o Bearer token do cliente; o pedido registra o `customerId` do token e só atende esse cliente, retornando `404` para outra conta. Veja a [autorização dos recursos](resource-authorization.md). O [pagamento simulado](simulated-payments.md) existe, mas ainda não é exigido nem conferido pelo pedido. Confirmar um pedido é uma ação manual; depois dela, `POST /api/orders/{id}/delivery` solicita a entrega e verifica a localização de coleta. A confirmação não indica pagamento aprovado.
 
 ## Estados e dados
 
