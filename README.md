@@ -372,6 +372,8 @@ O campo `service` deve identificar o serviço correspondente. Os pings são demo
 
 ## Testes e build
 
+O GitHub Actions executa os builds e testes Java e Python em cada pull request e em cada push na `main`. Veja a [integração contínua](docs/ci-validation.md).
+
 Com Docker funcionando, execute da raiz:
 
 ```powershell
