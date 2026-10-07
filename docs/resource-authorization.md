@@ -1,6 +1,6 @@
 # Autorização de perfis, endereços e pedidos
 
-Esta etapa vincula os recursos do cliente à identidade do [token de acesso](authentication.md). User e Order validam o mesmo Bearer JWT HS256 e só atendem o dono do recurso. Catálogo, entregas e pagamentos continuam públicos; papéis operacionais pertencem a etapas próprias.
+Esta etapa vincula os recursos do cliente à identidade do [token de acesso](authentication.md). User e Order validam o mesmo Bearer JWT HS256 e só atendem o dono do recurso. Catálogo e entregas continuam públicos; papéis operacionais pertencem a etapas próprias. Os [pagamentos simulados](simulated-payments.md), criados depois, seguem as mesmas regras de token e dono.
 
 ## Regras de acesso
 
@@ -32,8 +32,8 @@ Não há papéis de restaurante, entregador ou administrador. Por isso a confirm
 ## Validação
 
 ```bash
-(cd services/user-service && bash mvnw verify)
-(cd services/order-service && bash mvnw verify)
+(cd services/user-service && ./mvnw verify)
+(cd services/order-service && ./mvnw verify)
 docker compose --profile demo up -d --build --wait --wait-timeout 240
 pwsh -NoProfile -File scripts/smoke-route-demo.ps1 -CheckRecovery -CheckPersistence
 ```

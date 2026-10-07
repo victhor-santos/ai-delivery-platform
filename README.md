@@ -12,11 +12,11 @@ A localização de coleta pode ser informada no cadastro ou atualizada depois. E
 
 Cada item do cardápio pertence a um restaurante e tem nome, descrição opcional, preço em BRL e disponibilidade. A API permite cadastrar, consultar, listar e substituir seus dados, com valores monetários exatos e isolamento por restaurante. Veja o [contrato do cardápio](docs/restaurant-menu.md).
 
-O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Cada pedido pertence ao cliente do token usado na criação, e somente ele pode consultá-lo ou alterá-lo. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. Um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e criação idempotente no Delivery. Pagamento ainda não foi implementado. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
+O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Cada pedido pertence ao cliente do token usado na criação, e somente ele pode consultá-lo ou alterá-lo. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. Um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e criação idempotente no Delivery. O [pagamento simulado](docs/simulated-payments.md) ainda não é exigido pelo pedido. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
 O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Consulta Python, salva o último plano de rota e registra [travessias simuladas por trecho](docs/delivery-segment-observations.md), com snapshots da previsão e exportação CSV por disponibilidade temporal. Veja também o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
-Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. Pagamentos ainda têm apenas a estrutura inicial. Autorização dos recursos e RabbitMQ permanecem em etapas posteriores.
+Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. O Payment Service registra [tentativas de pagamento simuladas](docs/simulated-payments.md), com aprovação ou recusa fixadas pelo método, idempotência e PostgreSQL próprio; ainda não confere o pedido. RabbitMQ permanece em etapa posterior.
 
 Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A [API de rotas previstas](docs/intelligent-routing-api.md) combina o modelo em lote com Dijkstra. Delivery já consulta essa API e persiste o plano por entrega. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
@@ -51,7 +51,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 
 Gateway atende em `http://localhost:8080`; Python em `http://localhost:8000`. As portas Java 8081–8085 são internas neste perfil. Sem `demo`, o Compose continua iniciando somente bancos. Não é necessário instalar Java ou Python na máquina para esta demonstração. O script verifica um modelo existente e só treina se não houver bundle; a API nunca treina ao iniciar.
 
-O perfil utiliza quatro bancos e sete aplicações, totalizando onze containers. Cada JVM usa heap entre 64 e 384 MB e dimensiona seus pools para dois processadores, evitando que as seis aplicações dimensionem memória/threads pelo total da VM Docker. `DEMO_JAVA_TOOL_OPTIONS` permite ajustar esses parâmetros somente no Compose; execução nativa permanece independente.
+O perfil utiliza cinco bancos e sete aplicações, totalizando doze containers. Cada JVM usa heap entre 64 e 384 MB e dimensiona seus pools para dois processadores, evitando que as seis aplicações dimensionem memória/threads pelo total da VM Docker. `DEMO_JAVA_TOOL_OPTIONS` permite ajustar esses parâmetros somente no Compose; execução nativa permanece independente.
 
 Veja o [guia do Compose](docs/route-intelligence-compose.md) para configuração, compatibilidade do modelo, testes de queda/recuperação e preservação dos volumes. O smoke cria registros de demonstração no banco. Os comandos de execução nativa abaixo continuam disponíveis.
 
@@ -81,7 +81,7 @@ sudo snap disable docker && sudo snap enable docker   # somente no Docker instal
 [ -f .env ] || cp .env.example .env
 chmod 600 .env
 scripts/initialize-auth-secret.sh
-docker compose up -d --wait catalog-db order-db delivery-db user-db
+docker compose up -d --wait catalog-db order-db delivery-db user-db payment-db
 ./services/user-service/mvnw -f services/user-service/pom.xml clean verify
 ./services/user-service/mvnw -f services/user-service/pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 ```
@@ -163,19 +163,23 @@ O `.env.example` contém somente valores de desenvolvimento. Ajuste o `.env` ant
 | `USER_DB_USERNAME` | Usuário do banco de usuários; padrão `users` |
 | `USER_DB_PASSWORD` | Senha local obrigatória para iniciar o banco e o serviço de usuários |
 | `USER_DB_PORT` | Porta de usuários publicada pelo Compose; padrão `5436` |
+| `PAYMENT_DB_URL` | JDBC de pagamentos; padrão `jdbc:postgresql://localhost:5437/payments` |
+| `PAYMENT_DB_USERNAME` | Usuário do banco de pagamentos; padrão `payments` |
+| `PAYMENT_DB_PASSWORD` | Senha local obrigatória para iniciar o banco e o serviço de pagamentos |
+| `PAYMENT_DB_PORT` | Porta de pagamentos publicada pelo Compose; padrão `5437` |
 | `USER_AUTH_SECRET` | Chave JWT obrigatória, Base64 de pelo menos 32 bytes; gerada pelo script acima |
 | `DEMO_JAVA_TOOL_OPTIONS` | Opções opcionais das seis JVMs no perfil `demo`; padrão `-Xms64m -Xmx384m -XX:ActiveProcessorCount=2` |
 
-Se a porta 5432 já estiver ocupada, escolha outra porta em `CATALOG_DB_PORT` e ajuste também `CATALOG_DB_URL`. A mesma regra vale para pedidos, entregas e usuários. Se você já possui `.env`, acrescente as entradas `ORDER_DB_*`, `DELIVERY_DB_*` e `USER_DB_*` que faltarem em relação a `.env.example`, sem substituir os valores existentes. Variáveis de ambiente podem sobrescrever os valores do arquivo. O Compose exige as senhas dos quatro bancos e `USER_AUTH_SECRET` ao resolver sua configuração, mesmo que o comando selecione somente um deles. O script de chave preserva um valor já configurado e nunca o exibe; mantenha a mesma chave entre reinícios.
+Se a porta 5432 já estiver ocupada, escolha outra porta em `CATALOG_DB_PORT` e ajuste também `CATALOG_DB_URL`. A mesma regra vale para pedidos, entregas, usuários e pagamentos. Se você já possui `.env`, acrescente as entradas `ORDER_DB_*`, `DELIVERY_DB_*`, `USER_DB_*` e `PAYMENT_DB_*` que faltarem em relação a `.env.example`, sem substituir os valores existentes. Variáveis de ambiente podem sobrescrever os valores do arquivo. O Compose exige as senhas dos cinco bancos e `USER_AUTH_SECRET` ao resolver sua configuração, mesmo que o comando selecione somente um deles. O script de chave preserva um valor já configurado e nunca o exibe; mantenha a mesma chave entre reinícios.
 
-O Compose define `catalog-db`, `order-db`, `delivery-db` e `user-db`, com `postgres:17-alpine`, portas publicadas em `127.0.0.1` e health check `pg_isready`. Os volumes são separados: `catalog_postgres_data`, `order_postgres_data`, `delivery_postgres_data` e `user_postgres_data`. Para iniciar os quatro:
+O Compose define `catalog-db`, `order-db`, `delivery-db`, `user-db` e `payment-db`, com `postgres:17-alpine`, portas publicadas em `127.0.0.1` e health check `pg_isready`. Os volumes são separados: `catalog_postgres_data`, `order_postgres_data`, `delivery_postgres_data`, `user_postgres_data` e `payment_postgres_data`. Para iniciar os cinco:
 
 ```powershell
-docker compose up -d --wait catalog-db order-db delivery-db user-db
+docker compose up -d --wait catalog-db order-db delivery-db user-db payment-db
 docker compose ps
 ```
 
-Os bancos se chamam `catalog`, `orders`, `deliveries` e `users`. Cada aplicação com persistência importa opcionalmente `.env` do diretório de execução e exige sua senha para se conectar. Ao iniciar cada serviço, Flyway aplica as migrations em seu `src/main/resources/db/migration`; Hibernate apenas valida o schema (`ddl-auto=validate`). `open-in-view` fica desabilitado.
+Os bancos se chamam `catalog`, `orders`, `deliveries`, `users` e `payments`. Cada aplicação com persistência importa opcionalmente `.env` do diretório de execução e exige sua senha para se conectar. Ao iniciar cada serviço, Flyway aplica as migrations em seu `src/main/resources/db/migration`; Hibernate apenas valida o schema (`ddl-auto=validate`). `open-in-view` fica desabilitado.
 
 O volume preserva os dados entre reinícios. Alterar usuário ou senha no `.env` não altera as credenciais de um banco já inicializado; use os valores correspondentes ao volume existente. Para interromper o banco preservando seus dados:
 
@@ -184,6 +188,7 @@ docker compose stop catalog-db
 docker compose stop order-db
 docker compose stop delivery-db
 docker compose stop user-db
+docker compose stop payment-db
 ```
 
 Não remova o volume para executar ou testar esta etapa. Os testes usam um banco descartável separado, criado pelo Testcontainers.
@@ -204,11 +209,11 @@ Os demais serviços continuam disponíveis, um comando por terminal:
 ```powershell
 .\services\user-service\mvnw.cmd -f .\services\user-service\pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 .\services\order-service\mvnw.cmd -f .\services\order-service\pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
-.\services\payment-service\mvnw.cmd -f .\services\payment-service\pom.xml spring-boot:run
+.\services\payment-service\mvnw.cmd -f .\services\payment-service\pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 .\services\delivery-service\mvnw.cmd -f .\services\delivery-service\pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 ```
 
-O User Service exige `USER_AUTH_SECRET` e `user-db` em execução, Order exige `USER_AUTH_SECRET` e `order-db`, e Delivery exige `delivery-db`. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar usuários, catálogo, pedidos ou entregas pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
+O User Service exige `USER_AUTH_SECRET` e `user-db` em execução, Order exige `USER_AUTH_SECRET` e `order-db`, Payment exige `USER_AUTH_SECRET` e `payment-db`, e Delivery exige `delivery-db`. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar usuários, catálogo, pedidos ou entregas pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
 
 ## Cadastrar perfis e endereços
 
@@ -405,6 +410,6 @@ foreach ($project in $projects) {
 }
 ```
 
-Substitua `clean test` por `clean verify` para também gerar os JARs em `target/` de cada aplicação. Usuários e pedidos têm testes de domínio, HTTP, persistência e concorrência, também com PostgreSQL descartável. Entregas têm testes de domínio, casos de uso, HTTP, erros, persistência e concorrência; a suíte completa exige Docker e usa Testcontainers. Gateway e pagamentos mantêm os testes de inicialização de contexto. As integrações HTTP automatizadas de usuários, catálogo, pedidos e entregas testam diretamente os serviços; confira também o encaminhamento real pelo Gateway usando os exemplos documentados.
+Substitua `clean test` por `clean verify` para também gerar os JARs em `target/` de cada aplicação. Usuários e pedidos têm testes de domínio, HTTP, persistência e concorrência, também com PostgreSQL descartável. Entregas têm testes de domínio, casos de uso, HTTP, erros, persistência e concorrência; a suíte completa exige Docker e usa Testcontainers. Pagamentos têm testes de domínio, persistência, concorrência e HTTP com PostgreSQL descartável. Gateway mantém os testes de inicialização de contexto. As integrações HTTP automatizadas de usuários, catálogo, pedidos e entregas testam diretamente os serviços; confira também o encaminhamento real pelo Gateway usando os exemplos documentados.
 
 Veja o fluxo e as responsabilidades em [docs/architecture.md](docs/architecture.md), os detalhes de persistência em [docs/catalog-postgresql.md](docs/catalog-postgresql.md) e o [registro de validação do catálogo](docs/catalog-validation.md).
