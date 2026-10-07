@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java:
+    name: Java (${{ matrix.app }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - api-gateway
+          - services/user-service
+          - services/catalog-service
+          - services/order-service
+          - services/payment-service
+          - services/delivery-service
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: ${{ matrix.app }}/pom.xml
+
+
+      - name: Build and test
+        run: ./mvnw -B -ntp verify
+
+  python:
+    name: Python (route-intelligence-service)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/route-intelligence-service
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: '0.12.23'
+          enable-cache: true
+          cache-dependency-glob: services/route-intelligence-service/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run --locked python -m ruff check .
+
+      - name: Check formatting
+        run: uv run --locked python -m ruff format --check .
+
+      - name: Test
+        run: uv run --locked python -m pytest
