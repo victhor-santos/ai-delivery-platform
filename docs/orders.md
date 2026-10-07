@@ -4,7 +4,7 @@ O Order Service registra criação, consulta, confirmação e cancelamento de pe
 
 Novos pedidos exigem itens e quantidades. O cadastro consulta o catálogo por HTTP, exige restaurante ativo e itens disponíveis e salva nomes, preços unitários e total em BRL. Alterações posteriores no cardápio não recalculam o pedido. O [contrato de itens e valores](order-items.md) descreve limites, erros e preservação dos pedidos antigos.
 
-Cliente autenticado e pagamento permanecem pendentes. Confirmar um pedido é uma ação manual; depois dela, `POST /api/orders/{id}/delivery` solicita a entrega e verifica a localização de coleta. A confirmação não indica pagamento aprovado.
+Todas as operações exigem o Bearer token do cliente; o pedido registra o `customerId` do token e só atende esse cliente, retornando `404` para outra conta. Veja a [autorização dos recursos](resource-authorization.md). Pagamento permanece pendente. Confirmar um pedido é uma ação manual; depois dela, `POST /api/orders/{id}/delivery` solicita a entrega e verifica a localização de coleta. A confirmação não indica pagamento aprovado.
 
 ## Estados e dados
 
@@ -63,10 +63,17 @@ Use `http://localhost:8083` para acessar o serviço ou `http://localhost:8080` p
 .\api-gateway\mvnw.cmd -f .\api-gateway\pom.xml spring-boot:run
 ```
 
-Para criar um pedido, inicie também o catálogo e seu banco conforme o [README](../README.md). O exemplo cadastra restaurante e item pelo Gateway:
+Para criar um pedido, inicie também o catálogo, User e seus bancos conforme o [README](../README.md). O exemplo cria uma conta, faz login e cadastra restaurante e item pelo Gateway:
 
 ```powershell
 $baseUrl = 'http://localhost:8080'
+$email = "demo-$([guid]::NewGuid().ToString('N'))@example.test"
+$account = @{ name = 'Cliente Demo'; email = $email; password = 'demonstration-password-123' }
+Invoke-RestMethod -Method Post "$baseUrl/api/users/auth/register" -ContentType 'application/json' `
+    -Body ($account | ConvertTo-Json) | Out-Null
+$login = Invoke-RestMethod -Method Post "$baseUrl/api/users/auth/login" -ContentType 'application/json' `
+    -Body (@{ email = $email; password = $account.password } | ConvertTo-Json)
+$auth = @{ Authorization = "Bearer $($login.accessToken)" }
 $restaurant = Invoke-RestMethod -Method Post "$baseUrl/api/catalog/restaurants" `
     -ContentType 'application/json' -Body '{"name":"Cantina Demo"}'
 $menuUrl = "$baseUrl/api/catalog/restaurants/$($restaurant.id)/menu-items"
@@ -82,13 +89,14 @@ $body = @{
     }
 } | ConvertTo-Json -Depth 10
 
-$response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$baseUrl/api/orders" -ContentType 'application/json' -Body $body
+$response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$baseUrl/api/orders" -Headers $auth `
+    -ContentType 'application/json' -Body $body
 $response.StatusCode
 $response.Headers['Location']
 $order = $response.Content | ConvertFrom-Json
-Invoke-RestMethod "$baseUrl/api/orders/$($order.id)"
-Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders/$($order.id)/confirm"
-Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders/$($order.id)/cancel"
+Invoke-RestMethod "$baseUrl/api/orders/$($order.id)" -Headers $auth
+Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders/$($order.id)/confirm" -Headers $auth
+Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders/$($order.id)/cancel" -Headers $auth
 ```
 
 O cadastro retorna `201` e `Location: /api/orders/{id}`. Consulta, confirmação e cancelamento retornam `200` com o mesmo formato:
@@ -96,6 +104,7 @@ O cadastro retorna `201` e `Location: /api/orders/{id}`. Consulta, confirmação
 ```json
 {
   "id": "eebf0950-c061-4ba9-9daf-97f68e732f5f",
+  "customerId": "5c0f9a4e-2a4f-4c5b-9d7e-0e6b1a2c3d4e",
   "restaurantId": "9d6c1458-0c80-45cd-a9c0-b420f25c8246",
   "destination": {
     "address": "Rua das Flores, 42",

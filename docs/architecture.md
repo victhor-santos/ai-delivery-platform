@@ -184,7 +184,7 @@ Pedidos seguem o mesmo processo de configuração, com `ORDER_DB_URL`, `ORDER_DB
 
 `PasswordPolicy` mantém regras de senha no domínio puro. `AuthenticationService` coordena registro e login pelas portas `AuthAccountRepository`, `PasswordHasher` e `AccessTokenIssuer`. O adaptador JPA salva perfil e credencial BCrypt em uma transação; a V2 de User cria `user_credentials`, preservando perfis antigos sem inventar senhas. O e-mail continua no perfil, e a credencial referencia somente seu UUID.
 
-Spring Security processa Bearer JWT HS256, com assinatura, emissor, audiência, UUID e validade verificados. A chave obrigatória é fornecida somente ao User nesta etapa. A API oferece registro/login públicos e `/api/users/auth/me` autenticado, sem sessão/cookies. Os contratos anteriores de recursos continuam públicos; Gateway encaminha `Authorization` sem validar a identidade. Proteção dos demais endpoints, papéis, vínculo com pedidos e distribuição das chaves pertencem à próxima feature.
+Spring Security processa Bearer JWT HS256, com assinatura, emissor, audiência, UUID e validade verificados. A API oferece registro/login públicos; os demais endpoints de User exigem o token, sem sessão/cookies. Order recebe a mesma chave somente para validar tokens e grava o `sub` como cliente do pedido (V4). Perfis, endereços e pedidos só atendem o dono; recursos alheios retornam `404`. Gateway encaminha `Authorization` sem validar a identidade. Papéis operacionais, proteção de catálogo/entregas e chaves assimétricas continuam pendentes. Veja [autorização dos recursos](resource-authorization.md).
 
 ## Testes e validação
 
