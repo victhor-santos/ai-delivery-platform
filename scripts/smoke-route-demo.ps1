@@ -85,7 +85,7 @@ try {
     foreach ($service in $services) {
         Invoke-Api 'GET' "/api/$service/ping" | Out-Null
     }
-    if (-not $CatalogOnly -and -not $OrderOnly) {
+    if (-not $CatalogOnly) {
         $demoEmail = "demo-$([guid]::NewGuid().ToString('N'))@example.test"
         $demoPassword = 'demonstration-password-123'
         $user = Invoke-Api 'POST' '/api/users/auth/register' @{
@@ -99,35 +99,51 @@ try {
         Assert-Condition ($authentication.tokenType -eq 'Bearer' -and $authentication.expiresIn -eq 900) 'Invalid access token metadata.'
         $identity = Invoke-Api 'GET' '/api/users/auth/me' -AccessToken $authentication.accessToken
         Assert-Condition ($identity.id -eq $user.id -and $identity.email -eq $user.email) 'Token resolved to another user.'
-        Invoke-Api 'POST' '/api/users' @{ name = 'Duplicado'; email = $demoEmail } 409 | Out-Null
+        $accessToken = $authentication.accessToken
+        $otherEmail = "other-$([guid]::NewGuid().ToString('N'))@example.test"
+        $otherUser = Invoke-Api 'POST' '/api/users/auth/register' @{
+            name = 'Outro Cliente'; email = $otherEmail; password = $demoPassword
+        } 201
+        $otherToken = (Invoke-Api 'POST' '/api/users/auth/login' @{ email = $otherEmail; password = $demoPassword }).accessToken
+        Write-Output "Authentication passed: user=$($user.id)."
+    }
+    if (-not $CatalogOnly -and -not $OrderOnly) {
+        Invoke-Api 'POST' '/api/users/auth/register' @{
+            name = 'Duplicado'; email = $demoEmail; password = 'another-password-123'
+        } 409 | Out-Null
         $userPath = "/api/users/$($user.id)"
-        $updatedUser = Invoke-Api 'PUT' "$userPath/profile" @{ name = 'Cliente Atualizado' }
+        Invoke-Api 'GET' $userPath -Status 401 | Out-Null
+        Invoke-Api 'GET' $userPath -AccessToken $otherToken -Status 404 | Out-Null
+        Invoke-Api 'PUT' "$userPath/profile" @{ name = 'Invasor' } 404 -AccessToken $otherToken | Out-Null
+        Invoke-Api 'POST' '/api/users' @{ name = 'Sem senha'; email = $otherEmail } 404 -AccessToken $accessToken -Raw | Out-Null
+        $updatedUser = Invoke-Api 'PUT' "$userPath/profile" @{ name = 'Cliente Atualizado' } -AccessToken $accessToken
         Assert-Condition ($updatedUser.id -eq $user.id -and $updatedUser.email -eq $user.email) 'Profile update changed identity or email.'
         Assert-Condition ($updatedUser.name -eq 'Cliente Atualizado') 'Profile name was not updated.'
         $addressPath = "$userPath/addresses"
         $address = Invoke-Api 'POST' $addressPath @{
             label = 'Casa'; address = 'Destino sintetico C'; latitude = -23.561; longitude = -46.656
-        } 201
+        } 201 -AccessToken $accessToken
         Assert-Condition ($address.userId -eq $user.id) 'Address belongs to another user.'
         $savedAddressPath = "$addressPath/$($address.id)"
         $updatedAddress = Invoke-Api 'PUT' $savedAddressPath @{
             label = 'Entrega'; address = 'Destino sintetico atualizado'; latitude = -23.562; longitude = -46.657
-        }
+        } -AccessToken $accessToken
         Assert-Condition ($updatedAddress.id -eq $address.id -and $updatedAddress.userId -eq $user.id) 'Address update changed identity or owner.'
         Assert-Condition ($updatedAddress.label -eq 'Entrega' -and $updatedAddress.address -eq 'Destino sintetico atualizado' -and
             $updatedAddress.latitude -eq -23.562 -and $updatedAddress.longitude -eq -46.657) 'Address details were not updated.'
-        $addressPage = Invoke-Api 'GET' "${addressPath}?page=0&size=1"
+        $addressPage = Invoke-Api 'GET' "${addressPath}?page=0&size=1" -AccessToken $accessToken
         Assert-Condition ($addressPage.totalElements -eq 1 -and $addressPage.items[0].id -eq $address.id) 'Address pagination lost the saved address.'
-        $otherUser = Invoke-Api 'POST' '/api/users' @{
-            name = 'Outro Cliente'; email = "other-$([guid]::NewGuid().ToString('N'))@example.test"
-        } 201
         $otherAddressPath = "/api/users/$($otherUser.id)/addresses/$($address.id)"
-        Invoke-Api 'GET' $otherAddressPath -Status 404 | Out-Null
+        Invoke-Api 'GET' $otherAddressPath -AccessToken $otherToken -Status 404 | Out-Null
         Invoke-Api 'PUT' $otherAddressPath @{
             label = 'Alterado'; address = 'Outro destino'; latitude = 0; longitude = 0
-        } 404 | Out-Null
-        $storedUser = Invoke-Api 'GET' $userPath
-        $storedAddress = Invoke-Api 'GET' $savedAddressPath
+        } 404 -AccessToken $otherToken | Out-Null
+        Invoke-Api 'GET' $savedAddressPath -AccessToken $otherToken -Status 404 | Out-Null
+        Invoke-Api 'PUT' $savedAddressPath @{
+            label = 'Alterado'; address = 'Outro destino'; latitude = 0; longitude = 0
+        } 404 -AccessToken $otherToken | Out-Null
+        $storedUser = Invoke-Api 'GET' $userPath -AccessToken $accessToken
+        $storedAddress = Invoke-Api 'GET' $savedAddressPath -AccessToken $accessToken
         Assert-Condition (($storedUser | ConvertTo-Json -Compress) -eq ($updatedUser | ConvertTo-Json -Compress)) 'Stored profile differs from the update.'
         Assert-Condition (($storedAddress | ConvertTo-Json -Compress) -eq ($updatedAddress | ConvertTo-Json -Compress)) 'Another user changed the address.'
         Write-Output "Users passed: user=$($user.id), address=$($address.id)."
@@ -168,28 +184,36 @@ try {
     Invoke-Api 'PUT' $itemPath @{
         name = 'Prato especial'; price = [decimal]29.90; available = $true
     } | Out-Null
-    $order = Invoke-Api 'POST' '/api/orders' @{
+    $orderRequest = @{
         restaurantId = $restaurant.id
         items = @(@{ menuItemId = $menuItem.id; quantity = 2 })
         destination = @{ address = 'Destino sintetico C'; latitude = -23.561; longitude = -46.656 }
-    } 201
+    }
+    Invoke-Api 'POST' '/api/orders' $orderRequest 401 | Out-Null
+    $order = Invoke-Api 'POST' '/api/orders' $orderRequest 201 -AccessToken $accessToken
+    Assert-Condition ($order.customerId -eq $user.id) 'Order was not linked to the authenticated customer.'
     Assert-Condition ($order.currency -eq 'BRL' -and $order.total -eq [decimal]59.80) 'Order total was not calculated from the menu.'
     Assert-Condition ($order.items.Count -eq 1 -and $order.items[0].unitPrice -eq [decimal]29.90) 'Order item snapshot is invalid.'
     $updatedItem = Invoke-Api 'PUT' $itemPath @{
         name = 'Prato com novo preco'; price = [decimal]39.90; available = $false
     }
     $orderPath = "/api/orders/$($order.id)"
-    $storedOrder = Invoke-Api 'GET' $orderPath
+    Invoke-Api 'GET' $orderPath -Status 401 | Out-Null
+    foreach ($foreignCall in @(@('GET', ''), @('POST', '/confirm'), @('POST', '/cancel'), @('POST', '/delivery'))) {
+        Invoke-Api $foreignCall[0] "$orderPath$($foreignCall[1])" -AccessToken $otherToken -Status 404 | Out-Null
+    }
+    $storedOrder = Invoke-Api 'GET' $orderPath -AccessToken $accessToken
+    Assert-Condition ($storedOrder.status -eq 'CREATED') 'Another customer changed the order.'
     Assert-Condition ($storedOrder.total -eq $order.total -and $storedOrder.currency -eq $order.currency) 'Menu changes altered the stored order total or currency.'
     Assert-Condition (($storedOrder.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Menu changes altered the stored item snapshots.'
-    $confirmed = Invoke-Api 'POST' "$orderPath/confirm"
+    $confirmed = Invoke-Api 'POST' "$orderPath/confirm" -AccessToken $accessToken
     Assert-Condition ($confirmed.status -eq 'CONFIRMED') 'Order was not confirmed.'
     Assert-Condition ($confirmed.total -eq $order.total) 'Menu changes repriced the order.'
     Assert-Condition (($confirmed.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Confirmation changed the item snapshots.'
     Write-Output "Orders passed: order=$($order.id), total=$($order.total) BRL."
     if ($OrderOnly) { return }
-    $receipt = Invoke-Api 'POST' "$orderPath/delivery"
-    $repeated = Invoke-Api 'POST' "$orderPath/delivery"
+    $receipt = Invoke-Api 'POST' "$orderPath/delivery" -AccessToken $accessToken
+    $repeated = Invoke-Api 'POST' "$orderPath/delivery" -AccessToken $accessToken
     Assert-Condition ($receipt.deliveryId -eq $repeated.deliveryId) 'Delivery creation was not idempotent.'
 
     $deliveryPath = "/api/deliveries/$($receipt.deliveryId)"
@@ -259,18 +283,19 @@ try {
     if ($CheckPersistence) {
         Invoke-Compose -CommandArguments @('up', '-d', '--no-build', '--force-recreate',
             '--wait', '--wait-timeout', '240')
-        $persistedUser = Invoke-Api 'GET' $userPath
         $persistedIdentity = Invoke-Api 'GET' '/api/users/auth/me' -AccessToken $authentication.accessToken
         Assert-Condition ($persistedIdentity.id -eq $user.id) 'The existing token stopped resolving after restart.'
         $newAuthentication = Invoke-Api 'POST' '/api/users/auth/login' @{ email = $demoEmail; password = $demoPassword }
         $newIdentity = Invoke-Api 'GET' '/api/users/auth/me' -AccessToken $newAuthentication.accessToken
         Assert-Condition ($newIdentity.id -eq $user.id) 'Persisted credentials did not allow login after restart.'
-        $persistedAddress = Invoke-Api 'GET' $savedAddressPath
+        $accessToken = $newAuthentication.accessToken
+        $persistedUser = Invoke-Api 'GET' $userPath -AccessToken $accessToken
+        $persistedAddress = Invoke-Api 'GET' $savedAddressPath -AccessToken $accessToken
         Assert-Condition (($persistedUser | ConvertTo-Json -Compress) -eq ($updatedUser | ConvertTo-Json -Compress)) 'User profile changed after restart.'
         Assert-Condition (($persistedAddress | ConvertTo-Json -Compress) -eq ($updatedAddress | ConvertTo-Json -Compress)) 'User address changed after restart.'
         $persistedRestaurant = Invoke-Api 'GET' "/api/catalog/restaurants/$($restaurant.id)"
         $persistedMenuItem = Invoke-Api 'GET' $itemPath
-        $persistedOrder = Invoke-Api 'GET' $orderPath
+        $persistedOrder = Invoke-Api 'GET' $orderPath -AccessToken $accessToken
         $persistedDelivery = Invoke-Api 'GET' $deliveryPath
         $persistedPlan = Invoke-Api 'GET' "$deliveryPath/route"
         Assert-Condition ($persistedRestaurant.id -eq $restaurant.id) 'Restaurant was lost after restart.'
@@ -284,7 +309,7 @@ try {
         $persistedObservations = @(Invoke-Api 'GET' "$deliveryPath/segments")
         Assert-Condition (($persistedObservations | ConvertTo-Json -Depth 10 -Compress) -eq ($observations | ConvertTo-Json -Depth 10 -Compress)) 'Observation snapshots changed after restart.'
         Assert-Condition ((Invoke-Api 'GET' $exportPath -Raw) -eq $csv) 'CSV changed after restart for the same cutoff.'
-        $recoveredReceipt = Invoke-Api 'POST' "$orderPath/delivery"
+        $recoveredReceipt = Invoke-Api 'POST' "$orderPath/delivery" -AccessToken $accessToken
         Assert-Condition ($recoveredReceipt.deliveryId -eq $receipt.deliveryId) 'Restart caused a duplicate delivery.'
         Write-Output 'Persistence passed after recreating containers; no volumes were removed.'
     }
