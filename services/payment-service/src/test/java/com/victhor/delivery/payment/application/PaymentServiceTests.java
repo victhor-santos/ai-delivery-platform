@@ -41,15 +41,22 @@ class PaymentServiceTests {
     private static final UUID ORDER = UUID.randomUUID();
     private static final IdempotencyKey KEY = new IdempotencyKey("checkout-0001");
     private static final BigDecimal AMOUNT = new BigDecimal("59.80");
+    private static final String TOKEN = "access-token";
+    private static final OrderLookup.OrderSnapshot AWAITING = new OrderLookup.OrderSnapshot("CREATED", AMOUNT, true);
 
     @Mock
     private PaymentRepository payments;
+
+    /** Lenient: replays and validation failures never reach Order, which some tests assert explicitly. */
+    @Mock(strictness = Mock.Strictness.LENIENT)
+    private OrderLookup orders;
 
     private PaymentService service;
 
     @BeforeEach
     void setUp() {
-        service = new PaymentService(payments, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new PaymentService(payments, orders, Clock.fixed(NOW, ZoneOffset.UTC));
+        when(orders.findById(ORDER, TOKEN)).thenReturn(AWAITING);
     }
 
     @Test
@@ -58,7 +65,7 @@ class PaymentServiceTests {
         when(payments.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         var result = service.attempt(CUSTOMER, KEY, ORDER, new BigDecimal("59.8"),
-                SimulatedPaymentMethod.APPROVED_CARD);
+                SimulatedPaymentMethod.APPROVED_CARD, TOKEN);
 
         assertThat(result.replayed()).isFalse();
         assertThat(result.attempt().status()).isEqualTo(PaymentStatus.APPROVED);
@@ -72,7 +79,7 @@ class PaymentServiceTests {
         when(payments.findByIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.empty());
         when(payments.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var result = service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.INSUFFICIENT_FUNDS_CARD);
+        var result = service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.INSUFFICIENT_FUNDS_CARD, TOKEN);
 
         assertThat(result.attempt().status()).isEqualTo(PaymentStatus.DECLINED);
         verify(payments).hasApprovedPayment(CUSTOMER, ORDER);
@@ -83,12 +90,13 @@ class PaymentServiceTests {
         var stored = attempt(SimulatedPaymentMethod.DECLINED_CARD);
         when(payments.findByIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.of(stored));
 
-        var result = service.attempt(CUSTOMER, KEY, ORDER, new BigDecimal("59.8"), SimulatedPaymentMethod.DECLINED_CARD);
+        var result = service.attempt(CUSTOMER, KEY, ORDER, new BigDecimal("59.8"), SimulatedPaymentMethod.DECLINED_CARD, TOKEN);
 
         assertThat(result.replayed()).isTrue();
         assertThat(result.attempt()).isSameAs(stored);
         verify(payments, never()).save(any());
         verify(payments, never()).hasApprovedPayment(any(), any());
+        verifyNoInteractions(orders);
     }
 
     @ParameterizedTest
@@ -100,7 +108,7 @@ class PaymentServiceTests {
         UUID orderId = order.equals("same-order") ? ORDER : UUID.randomUUID();
 
         assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, orderId, new BigDecimal(amount),
-                SimulatedPaymentMethod.fromCode(method))).isInstanceOf(IdempotencyKeyReusedException.class);
+                SimulatedPaymentMethod.fromCode(method), TOKEN)).isInstanceOf(IdempotencyKeyReusedException.class);
         verify(payments, never()).save(any());
     }
 
@@ -109,9 +117,46 @@ class PaymentServiceTests {
         when(payments.findByIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.empty());
         when(payments.hasApprovedPayment(CUSTOMER, ORDER)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.DECLINED_CARD))
+        assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.DECLINED_CARD, TOKEN))
                 .isInstanceOf(OrderAlreadyPaidException.class);
         verify(payments, never()).save(any());
+        verifyNoInteractions(orders);
+    }
+
+    @ParameterizedTest
+    @CsvSource(nullValues = "null", value = { "CREATED, 59.80, false", "CONFIRMED, 59.80, false",
+            "CANCELLED, 59.80, false", "CREATED, 59.81, true", "CREATED, 59.79, true", "CREATED, null, true" })
+    void chargesOnlyAnOrderAwaitingExactlyThisAmount(String status, BigDecimal total, boolean awaiting) {
+        when(payments.findByIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.empty());
+        when(orders.findById(ORDER, TOKEN)).thenReturn(new OrderLookup.OrderSnapshot(status, total, awaiting));
+
+        assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD,
+                TOKEN)).isInstanceOf(OrderNotPayableException.class);
+        verify(payments, never()).save(any());
+    }
+
+    @Test
+    void chargesNothingWhenTheOrderIsMissingOrUnreadable() {
+        when(payments.findByIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.empty());
+        when(orders.findById(ORDER, TOKEN)).thenThrow(new PaymentOrderNotFoundException())
+                .thenThrow(new RemoteServiceUnavailableException());
+
+        assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD,
+                TOKEN)).isInstanceOf(PaymentOrderNotFoundException.class);
+        assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD,
+                TOKEN)).isInstanceOf(RemoteServiceUnavailableException.class);
+        verify(payments, never()).save(any());
+    }
+
+    @Test
+    void comparesTheOrderTotalIgnoringScale() {
+        when(payments.findByIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.empty());
+        when(orders.findById(ORDER, TOKEN)).thenReturn(new OrderLookup.OrderSnapshot("CREATED",
+                new BigDecimal("59.8"), true));
+        when(payments.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD, TOKEN)
+                .replayed()).isFalse();
     }
 
     @Test
@@ -119,7 +164,7 @@ class PaymentServiceTests {
         when(payments.findByIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.empty());
         when(payments.save(any())).thenThrow(new OrderAlreadyPaidException());
 
-        assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD))
+        assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD, TOKEN))
                 .isInstanceOf(OrderAlreadyPaidException.class);
     }
 
@@ -129,7 +174,7 @@ class PaymentServiceTests {
         when(payments.findByIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.empty(), Optional.of(winner));
         when(payments.save(any())).thenThrow(new IdempotencyKeyAlreadyUsedException());
 
-        var result = service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD);
+        var result = service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD, TOKEN);
 
         assertThat(result.replayed()).isTrue();
         assertThat(result.attempt()).isSameAs(winner);
@@ -141,7 +186,7 @@ class PaymentServiceTests {
         when(payments.findByIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.empty(), Optional.of(winner));
         when(payments.hasApprovedPayment(CUSTOMER, ORDER)).thenReturn(true);
 
-        var result = service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD);
+        var result = service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD, TOKEN);
 
         assertThat(result.replayed()).isTrue();
         assertThat(result.attempt()).isSameAs(winner);
@@ -154,20 +199,21 @@ class PaymentServiceTests {
                 .thenReturn(Optional.empty(), Optional.of(attempt(SimulatedPaymentMethod.DECLINED_CARD)));
         when(payments.save(any())).thenThrow(new IdempotencyKeyAlreadyUsedException());
 
-        assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD))
+        assertThatThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD, TOKEN))
                 .isInstanceOf(IdempotencyKeyReusedException.class);
     }
 
     @Test
     void validatesTheRequestBeforeTouchingTheRepository() {
         var method = SimulatedPaymentMethod.APPROVED_CARD;
-        assertThatNullPointerException().isThrownBy(() -> service.attempt(null, KEY, ORDER, AMOUNT, method));
-        assertThatNullPointerException().isThrownBy(() -> service.attempt(CUSTOMER, null, ORDER, AMOUNT, method));
-        assertThatNullPointerException().isThrownBy(() -> service.attempt(CUSTOMER, KEY, null, AMOUNT, method));
-        assertThatNullPointerException().isThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, null));
+        assertThatNullPointerException().isThrownBy(() -> service.attempt(null, KEY, ORDER, AMOUNT, method, TOKEN));
+        assertThatNullPointerException().isThrownBy(() -> service.attempt(CUSTOMER, null, ORDER, AMOUNT, method, TOKEN));
+        assertThatNullPointerException().isThrownBy(() -> service.attempt(CUSTOMER, KEY, null, AMOUNT, method, TOKEN));
+        assertThatNullPointerException().isThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, null, TOKEN));
+        assertThatNullPointerException().isThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, AMOUNT, method, null));
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, new BigDecimal("0.001"), method));
-        verifyNoInteractions(payments);
+                .isThrownBy(() -> service.attempt(CUSTOMER, KEY, ORDER, new BigDecimal("0.001"), method, TOKEN));
+        verifyNoInteractions(payments, orders);
     }
 
     @Test

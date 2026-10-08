@@ -42,7 +42,8 @@ public class PaymentController {
             @RequestHeader(IDEMPOTENCY_KEY_HEADER) String idempotencyKey,
             @Valid @RequestBody CreatePaymentRequest request) {
         var result = payments.attempt(CurrentCustomer.id(principal), new IdempotencyKey(idempotencyKey),
-                request.orderId(), request.amount(), SimulatedPaymentMethod.fromCode(request.method()));
+                request.orderId(), request.amount(), SimulatedPaymentMethod.fromCode(request.method()),
+                principal.getTokenValue());
         var response = PaymentResponse.from(result.attempt());
         var location = URI.create("/api/payments/" + response.id());
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED).location(location)

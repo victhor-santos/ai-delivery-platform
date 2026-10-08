@@ -14,7 +14,10 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 import com.victhor.delivery.payment.application.IdempotencyKeyReusedException;
 import com.victhor.delivery.payment.application.OrderAlreadyPaidException;
+import com.victhor.delivery.payment.application.OrderNotPayableException;
 import com.victhor.delivery.payment.application.PaymentNotFoundException;
+import com.victhor.delivery.payment.application.PaymentOrderNotFoundException;
+import com.victhor.delivery.payment.application.RemoteServiceUnavailableException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
@@ -30,6 +33,23 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(OrderAlreadyPaidException.class)
     ProblemDetail handleAlreadyPaid(OrderAlreadyPaidException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "O pedido já possui um pagamento aprovado.");
+    }
+
+    @ExceptionHandler(PaymentOrderNotFoundException.class)
+    ProblemDetail handleOrderNotFound(PaymentOrderNotFoundException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Pedido não encontrado.");
+    }
+
+    @ExceptionHandler(OrderNotPayableException.class)
+    ProblemDetail handleOrderNotPayable(OrderNotPayableException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "O pedido não aguarda um pagamento com este valor. Pague-o por POST /api/orders/{id}/payment.");
+    }
+
+    @ExceptionHandler(RemoteServiceUnavailableException.class)
+    ProblemDetail handleRemoteServiceUnavailable(RemoteServiceUnavailableException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "Não foi possível consultar um serviço necessário. Tente novamente mais tarde.");
     }
 
     /** Follows the IETF Idempotency-Key draft: reusing a key for another payload is 422, not a replay. */
