@@ -78,17 +78,6 @@ public record Order(UUID id, UUID restaurantId, DeliveryDestination destination,
         return customerId != null && customerId.equals(customer);
     }
 
-    public Order confirm(Instant now) {
-        if (status == OrderStatus.CANCELLED) {
-            throw new OrderStateConflictException();
-        }
-        if (status == OrderStatus.CONFIRMED) {
-            return this;
-        }
-        return new Order(id, restaurantId, destination, OrderStatus.CONFIRMED, createdAt, now, now, null, null, pricing,
-                customerId, null, paymentId);
-    }
-
     /**
      * Marks the order as awaiting a simulated charge. While the payment is pending the order cannot be cancelled,
      * so an approval never lands on a cancelled order.

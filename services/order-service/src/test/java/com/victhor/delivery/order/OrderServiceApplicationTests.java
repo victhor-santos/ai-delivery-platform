@@ -145,23 +145,20 @@ class OrderServiceApplicationTests {
     }
 
     @Test
-    void confirmsAndCancelsWithoutChangingTimestampsOnRepeatedCommands() throws Exception {
+    void cancelsWithoutChangingTimestampsOnRepeatedCommandsAndOffersNoManualConfirmation() throws Exception {
         String location = send("POST", "/api/orders", VALID_REQUEST).headers().firstValue("Location").orElseThrow();
-        var confirmation = send("POST", location + "/confirm", null);
-        assertThat(confirmation.statusCode()).isEqualTo(200);
-        var confirmed = json(confirmation);
-        assertThat(confirmed.path("status").asString()).isEqualTo("CONFIRMED");
-        assertThat(confirmed.path("confirmedAt").isString()).isTrue();
-        assertThat(json(send("POST", location + "/confirm", null))).isEqualTo(confirmed);
-        assertThat(json(send("GET", location, null))).isEqualTo(confirmed);
+        var created = json(send("GET", location, null));
+        assertThat(created.path("paymentRequestedAt").isNull()).isTrue();
+        assertThat(created.path("paymentId").isNull()).isTrue();
+        assertProblem(send("POST", location + "/confirm", null), 404);
+        assertThat(json(send("GET", location, null))).isEqualTo(created);
         var cancellation = send("POST", location + "/cancel", null);
         assertThat(cancellation.statusCode()).isEqualTo(200);
         var cancelled = json(cancellation);
         assertThat(cancelled.path("status").asString()).isEqualTo("CANCELLED");
-        assertThat(cancelled.path("confirmedAt")).isEqualTo(confirmed.path("confirmedAt"));
+        assertThat(cancelled.path("confirmedAt").isNull()).isTrue();
         assertThat(cancelled.path("cancelledAt").isString()).isTrue();
         assertThat(json(send("POST", location + "/cancel", null))).isEqualTo(cancelled);
-        assertProblem(send("POST", location + "/confirm", null), 409);
         assertThat(json(send("GET", location, null))).isEqualTo(cancelled);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM orders", Integer.class)).isEqualTo(1);
     }
@@ -236,8 +233,7 @@ class OrderServiceApplicationTests {
         when(catalog.isRestaurantActive(RESTAURANT_ID)).thenThrow(new RemoteServiceUnavailableException());
         clearInvocations(catalog);
 
-        for (var response : new HttpResponse<?>[] { send("GET", path, null), send("POST", path + "/confirm", null),
-                send("POST", path + "/cancel", null) }) {
+        for (var response : new HttpResponse<?>[] { send("GET", path, null), send("POST", path + "/cancel", null) }) {
             assertThat(response.statusCode()).isEqualTo(200);
             JsonNode order = mapper.readTree((String) response.body());
             assertThat(order.path("items")).isEqualTo(original.path("items"));
@@ -271,7 +267,7 @@ class OrderServiceApplicationTests {
                 VALUES (?,?,?,'Legacy',0,0,'CREATED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
                 """, id, CUSTOMER_ID, RESTAURANT_ID);
 
-        for (String suffix : new String[] { "", "/confirm", "/cancel" }) {
+        for (String suffix : new String[] { "", "/cancel" }) {
             var response = send(suffix.isEmpty() ? "GET" : "POST", "/api/orders/" + id + suffix, null);
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(json(response).path("items").size()).isZero();
@@ -289,7 +285,7 @@ class OrderServiceApplicationTests {
                     status,created_at,updated_at) VALUES (?,?,'Legacy',0,0,'CREATED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
                 """, id, RESTAURANT_ID);
 
-        for (String suffix : new String[] { "", "/confirm", "/cancel", "/delivery" }) {
+        for (String suffix : new String[] { "", "/cancel", "/delivery" }) {
             assertProblem(send(suffix.isEmpty() ? "GET" : "POST", "/api/orders/" + id + suffix, null), 404);
         }
         assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, id)).isEqualTo("CREATED");
@@ -303,7 +299,7 @@ class OrderServiceApplicationTests {
         String intruder = TestAccessTokens.issue(UUID.randomUUID());
         clearInvocations(catalog);
 
-        for (String suffix : new String[] { "", "/confirm", "/cancel", "/delivery" }) {
+        for (String suffix : new String[] { "", "/cancel", "/delivery" }) {
             var response = send(suffix.isEmpty() ? "GET" : "POST", location + suffix, null, intruder);
             assertProblem(response, 404);
             assertThat(json(response).path("detail").asString()).isEqualTo("Pedido não encontrado.");
@@ -319,7 +315,7 @@ class OrderServiceApplicationTests {
 
     @Test
     void handlesMissingOrdersAndMalformedIdentifiers() throws Exception {
-        for (String suffix : new String[] {"", "/confirm", "/cancel"}) {
+        for (String suffix : new String[] {"", "/cancel"}) {
             String method = suffix.isEmpty() ? "GET" : "POST";
             assertProblem(send(method, "/api/orders/" + UUID.randomUUID() + suffix, null), 404);
             assertProblem(send(method, "/api/orders/invalid" + suffix, null), 400);
@@ -342,7 +338,7 @@ class OrderServiceApplicationTests {
         clearInvocations(catalog);
 
         for (String[] call : new String[][] { { "POST", "/api/orders" }, { "GET", location },
-                { "POST", location + "/confirm" }, { "POST", location + "/cancel" },
+                { "POST", location + "/payment" }, { "POST", location + "/cancel" },
                 { "POST", location + "/delivery" } }) {
             var response = send(call[0], call[1], call[1].equals("/api/orders") ? VALID_REQUEST : null, token);
             assertProblem(response, 401);

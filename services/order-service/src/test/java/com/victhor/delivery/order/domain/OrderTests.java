@@ -19,6 +19,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 class OrderTests {
 
     private static final UUID CUSTOMER_ID = UUID.randomUUID();
+    private static final UUID PAYMENT_ID = UUID.randomUUID();
     private static final Instant CREATED = Instant.parse("2026-09-30T12:00:00Z");
     private static final DeliveryDestination DESTINATION = new DeliveryDestination("Rua Central, 10", -23.55, -46.63);
     private static final OrderPricing PRICING = new OrderPricing(List.of(
@@ -44,7 +45,7 @@ class OrderTests {
     @Test
     void confirmsWithoutChangingTheOrderOrDestinationIdentity() {
         Order original = Order.create(CUSTOMER_ID, UUID.randomUUID(), DESTINATION, PRICING, CREATED);
-        Order confirmed = original.confirm(CREATED.plusSeconds(30));
+        Order confirmed = original.requestPayment(CREATED.plusSeconds(10)).confirmPayment(PAYMENT_ID, CREATED.plusSeconds(30));
 
         assertThat(confirmed.id()).isEqualTo(original.id());
         assertThat(confirmed.customerId()).isEqualTo(CUSTOMER_ID);
@@ -55,7 +56,7 @@ class OrderTests {
         assertThat(confirmed.createdAt()).isEqualTo(CREATED);
         assertThat(confirmed.confirmedAt()).isEqualTo(CREATED.plusSeconds(30));
         assertThat(confirmed.updatedAt()).isEqualTo(confirmed.confirmedAt());
-        assertThat(confirmed.confirm(CREATED.plusSeconds(60))).isEqualTo(confirmed);
+        assertThat(confirmed.confirmPayment(PAYMENT_ID, CREATED.plusSeconds(60))).isEqualTo(confirmed);
         assertThat(original.status()).isEqualTo(OrderStatus.CREATED);
     }
 
@@ -72,14 +73,14 @@ class OrderTests {
     }
 
     @Test
-    void cancelsAfterConfirmationPreservingBothEvents() {
-        Order confirmed = Order.create(CUSTOMER_ID, UUID.randomUUID(), DESTINATION, PRICING, CREATED).confirm(CREATED.plusSeconds(10));
+    void cancelsAnUnpaidConfirmationFromBeforePaymentsPreservingBothEvents() {
+        Order confirmed = confirmedWithoutPayment(CREATED.plusSeconds(10));
         Order cancelled = confirmed.cancel(CREATED.plusSeconds(20));
 
         assertThat(cancelled.confirmedAt()).isEqualTo(confirmed.confirmedAt());
         assertThat(cancelled.cancelledAt()).isEqualTo(CREATED.plusSeconds(20));
         assertThat(cancelled.pricing()).isSameAs(confirmed.pricing());
-        assertThatThrownBy(() -> cancelled.confirm(CREATED.plusSeconds(30)))
+        assertThatThrownBy(() -> cancelled.requestPayment(CREATED.plusSeconds(30)))
                 .isInstanceOf(OrderStateConflictException.class);
     }
 
@@ -87,9 +88,11 @@ class OrderTests {
     void rejectsEventsBeforeThePreviousState() {
         Order order = Order.create(CUSTOMER_ID, UUID.randomUUID(), DESTINATION, PRICING, CREATED);
 
-        assertThatIllegalArgumentException().isThrownBy(() -> order.confirm(CREATED.minusSeconds(1)));
+        assertThatIllegalArgumentException().isThrownBy(() -> order.requestPayment(CREATED.minusSeconds(1)));
+        Order awaiting = order.requestPayment(CREATED);
+        assertThatIllegalArgumentException().isThrownBy(() -> awaiting.confirmPayment(PAYMENT_ID, CREATED.minusSeconds(1)));
         assertThatIllegalArgumentException().isThrownBy(() -> order.cancel(CREATED.minusSeconds(1)));
-        Order confirmed = order.confirm(CREATED.plusSeconds(20));
+        Order confirmed = confirmedWithoutPayment(CREATED.plusSeconds(20));
         assertThatIllegalArgumentException().isThrownBy(() -> confirmed.cancel(CREATED.plusSeconds(10)));
     }
 
@@ -127,7 +130,10 @@ class OrderTests {
 
         assertThat(legacy.pricing()).isNull();
         assertThat(legacy.customerId()).isNull();
-        Order confirmed = legacy.confirm(CREATED.plusSeconds(1));
+        assertThatThrownBy(() -> legacy.requestPayment(CREATED.plusSeconds(1)))
+                .isInstanceOf(OrderStateConflictException.class);
+        Order confirmed = new Order(legacy.id(), legacy.restaurantId(), DESTINATION, OrderStatus.CONFIRMED,
+                CREATED, CREATED.plusSeconds(1), CREATED.plusSeconds(1), null);
         assertThat(confirmed.pricing()).isNull();
         assertThat(confirmed.cancel(CREATED.plusSeconds(2)).pricing()).isNull();
         assertThat(confirmed.requestDelivery(CREATED.plusSeconds(2)).pricing()).isNull();
@@ -161,10 +167,20 @@ class OrderTests {
 
     @Test
     void keepsTheCustomerThroughEveryTransition() {
-        Order confirmed = Order.create(CUSTOMER_ID, UUID.randomUUID(), DESTINATION, PRICING, CREATED)
-                .confirm(CREATED.plusSeconds(1));
+        Order created = Order.create(CUSTOMER_ID, UUID.randomUUID(), DESTINATION, PRICING, CREATED);
+        Order awaiting = created.requestPayment(CREATED.plusSeconds(1));
+        Order confirmed = awaiting.confirmPayment(PAYMENT_ID, CREATED.plusSeconds(1));
 
+        assertThat(awaiting.customerId()).isEqualTo(CUSTOMER_ID);
+        assertThat(awaiting.releasePayment().customerId()).isEqualTo(CUSTOMER_ID);
+        assertThat(confirmed.customerId()).isEqualTo(CUSTOMER_ID);
         assertThat(confirmed.requestDelivery(CREATED.plusSeconds(2)).customerId()).isEqualTo(CUSTOMER_ID);
-        assertThat(confirmed.cancel(CREATED.plusSeconds(2)).customerId()).isEqualTo(CUSTOMER_ID);
+        assertThat(created.cancel(CREATED.plusSeconds(2)).customerId()).isEqualTo(CUSTOMER_ID);
+    }
+
+    /** Before payments were linked, an order could be confirmed manually; such orders remain cancellable. */
+    private static Order confirmedWithoutPayment(Instant confirmedAt) {
+        return new Order(UUID.randomUUID(), UUID.randomUUID(), DESTINATION, OrderStatus.CONFIRMED, CREATED,
+                confirmedAt, confirmedAt, null, null, PRICING, CUSTOMER_ID);
     }
 }

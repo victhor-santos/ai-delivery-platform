@@ -34,12 +34,6 @@ public class JpaOrderRepository implements OrderRepository {
 
     @Override
     @Transactional
-    public Optional<Order> confirm(UUID id, Instant confirmedAt) {
-        return update(id, order -> order.confirm(confirmedAt));
-    }
-
-    @Override
-    @Transactional
     public Optional<Order> cancel(UUID id, Instant cancelledAt) {
         return update(id, order -> order.cancel(cancelledAt));
     }

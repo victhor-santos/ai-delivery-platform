@@ -41,8 +41,8 @@ class ApiExceptionHandlerTests {
     @Test
     void hidesInternalDetailsOfUnexpectedErrors() throws Exception {
         UUID id = UUID.randomUUID();
-        when(orders.confirm(id, CUSTOMER)).thenThrow(new IllegalStateException("internal database detail"));
-        var response = mvc.perform(post("/api/orders/{id}/confirm", id).with(customer()))
+        when(orders.cancel(id, CUSTOMER)).thenThrow(new IllegalStateException("internal database detail"));
+        var response = mvc.perform(post("/api/orders/{id}/cancel", id).with(customer()))
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(500))
@@ -54,8 +54,8 @@ class ApiExceptionHandlerTests {
     @Test
     void returnsConflictForConcurrentUpdates() throws Exception {
         UUID id = UUID.randomUUID();
-        when(orders.confirm(id, CUSTOMER)).thenThrow(new OptimisticLockingFailureException("internal version detail"));
-        var response = mvc.perform(post("/api/orders/{id}/confirm", id).with(customer()))
+        when(orders.cancel(id, CUSTOMER)).thenThrow(new OptimisticLockingFailureException("internal version detail"));
+        var response = mvc.perform(post("/api/orders/{id}/cancel", id).with(customer()))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(409))

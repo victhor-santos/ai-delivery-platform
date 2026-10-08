@@ -12,7 +12,5 @@ public interface OrderRepository {
 
     Optional<Order> findById(UUID id);
 
-    Optional<Order> confirm(UUID id, Instant confirmedAt);
-
     Optional<Order> cancel(UUID id, Instant cancelledAt);
 }
