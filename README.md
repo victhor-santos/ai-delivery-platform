@@ -12,11 +12,11 @@ A localização de coleta pode ser informada no cadastro ou atualizada depois. E
 
 Cada item do cardápio pertence a um restaurante e tem nome, descrição opcional, preço em BRL e disponibilidade. A API permite cadastrar, consultar, listar e substituir seus dados, com valores monetários exatos e isolamento por restaurante. Veja o [contrato do cardápio](docs/restaurant-menu.md).
 
-O Order Service cria, consulta, confirma e cancela pedidos em um PostgreSQL próprio. Cada pedido pertence ao cliente do token usado na criação, e somente ele pode consultá-lo ou alterá-lo. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. Um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e criação idempotente no Delivery. O [pagamento simulado](docs/simulated-payments.md) ainda não é exigido pelo pedido. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
+O Order Service cria, consulta, paga e cancela pedidos em um PostgreSQL próprio. Cada pedido pertence ao cliente do token usado na criação, e somente ele pode consultá-lo ou alterá-lo. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. O pedido é confirmado por um [pagamento simulado aprovado](docs/order-payment-integration.md), cobrado pelo total sem duplicar a cobrança; um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e criação idempotente no Delivery. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
 O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Consulta Python, salva o último plano de rota e registra [travessias simuladas por trecho](docs/delivery-segment-observations.md), com snapshots da previsão e exportação CSV por disponibilidade temporal. Veja também o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
-Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. O Payment Service registra [tentativas de pagamento simuladas](docs/simulated-payments.md), com aprovação ou recusa fixadas pelo método, idempotência e PostgreSQL próprio; ainda não confere o pedido. RabbitMQ permanece em etapa posterior.
+Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. O Payment Service registra [tentativas de pagamento simuladas](docs/simulated-payments.md), com aprovação ou recusa fixadas pelo método, idempotência e PostgreSQL próprio; antes de cobrar, confere o pedido no Order Service. RabbitMQ permanece em etapa posterior.
 
 Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A [API de rotas previstas](docs/intelligent-routing-api.md) combina o modelo em lote com Dijkstra. Delivery já consulta essa API e persiste o plano por entrega. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
@@ -247,13 +247,13 @@ Diretamente em `http://localhost:8083` ou pelo Gateway em `http://localhost:8080
 | --- | --- |
 | `POST /api/orders` | `201`, pedido criado e cabeçalho `Location` |
 | `GET /api/orders/{id}` | `200` com o pedido ou `404` |
-| `POST /api/orders/{id}/confirm` | `200` com estado `CONFIRMED`; `409` se cancelado |
-| `POST /api/orders/{id}/cancel` | `200` com estado `CANCELLED` |
+| `POST /api/orders/{id}/payment` com `Idempotency-Key` e `{method}` | `200` com o pagamento simulado; aprovação confirma o pedido |
+| `POST /api/orders/{id}/cancel` | `200` com estado `CANCELLED`; `409` com pagamento em andamento ou aprovado |
 | `POST /api/orders/{id}/delivery` | `200` com `orderId`, `deliveryId` e estado da entrega; exige pedido confirmado |
 
 O cadastro recebe `restaurantId`, `destination` com `address`, `latitude` e `longitude`, e `items` com `menuItemId` e `quantity`. São aceitos de 1 a 50 itens distintos, com quantidades inteiras de 1 a 99. O servidor consulta o catálogo e calcula os valores; preços enviados pelo cliente não definem o total. Ausência de restaurante ou item, restaurante inativo ou item de outro restaurante/indisponível resulta em `409`; falhas do catálogo retornam `503` sem detalhes internos. A resposta inclui os itens com nomes e preços preservados, `lineTotal`, `total` e `currency: "BRL"`. Pedidos anteriores à migração mantêm `items: []`, `total: null` e `currency: null`.
 
-A confirmação é manual e não representa aprovação de pagamento. Repetir uma confirmação ou cancelamento já aplicado preserva os timestamps e a composição do pedido. Conflitos de atualização retornam `409`; consulte o pedido antes de tentar novamente.
+O pedido só é confirmado por um pagamento simulado aprovado; o valor cobrado é o total do pedido, e repetir a mesma `Idempotency-Key` não cobra de novo. Veja [pagamento de pedidos](docs/order-payment-integration.md). Repetir um cancelamento já aplicado preserva os timestamps e a composição do pedido. Conflitos de atualização retornam `409`; consulte o pedido antes de tentar novamente.
 
 Veja [o fluxo, exemplos completos e testes de pedidos](docs/orders.md).
 

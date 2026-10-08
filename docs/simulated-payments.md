@@ -1,6 +1,6 @@
 # Pagamentos simulados
 
-O Payment Service registra tentativas de pagamento explicitamente simuladas em PostgreSQL próprio. Não aceita dados de cartão, não chama adquirentes e não movimenta dinheiro: o resultado é fixado pelo código do método escolhido. Esta etapa ainda não consulta o Order Service; a conferência do valor e do dono do pedido pertence a `feature/order-payment-integration`.
+O Payment Service registra tentativas de pagamento explicitamente simuladas em PostgreSQL próprio. Não aceita dados de cartão, não chama adquirentes e não movimenta dinheiro: o resultado é fixado pelo código do método escolhido. Os clientes pagam pelo [Order Service](order-payment-integration.md); antes de gravar uma tentativa nova, Payment confere com o Order que o pedido é do cliente, aguarda pagamento e tem exatamente esse total.
 
 ## Contrato HTTP
 
@@ -40,17 +40,13 @@ O serviço valida tokens com `payment.auth.secret=${USER_AUTH_SECRET}`, com as m
 
 ## Limites
 
-O valor e o pedido informados não são conferidos com o Order Service nesta etapa; como `orderId` não é validado, a regra de cobrança única é por cliente. Não há estorno, captura separada, expiração, vínculo do pagamento ao estado do pedido nem bloqueio de entrega sem pagamento. Essas regras e a recuperação de falhas entre pedido, pagamento e entrega ficam para `feature/order-payment-integration`.
+Desde `feature/order-payment-integration`, uma tentativa nova só é gravada se o Order Service confirmar o pedido do cliente em `CREATED`, aguardando pagamento e pelo total exato; caso contrário, `404` ou `409`, e `503` se Order não responder. Repetições de uma chave já gravada não consultam Order. O vínculo com o estado do pedido, a recuperação de falhas e o bloqueio da entrega estão em [pagamento de pedidos](order-payment-integration.md). Não há estorno, captura separada nem expiração.
 
 ## Exemplo e validação
 
 ```powershell
 $baseUrl = 'http://localhost:8080'
-# $auth e $order como no exemplo de pedidos
-$body = @{ orderId = $order.id; amount = $order.total; method = 'sim-card-approved' } | ConvertTo-Json
-$key = [guid]::NewGuid().ToString()
-$payment = Invoke-RestMethod -Method Post "$baseUrl/api/payments" -Headers ($auth + @{ 'Idempotency-Key' = $key }) `
-    -ContentType 'application/json' -Body $body
+# $auth e $order como no exemplo de pedidos, já pago pelo Order Service
 Invoke-RestMethod "$baseUrl/api/payments?orderId=$($order.id)" -Headers $auth
 ```
 
