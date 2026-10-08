@@ -1,34 +1,15 @@
-import { useEffect, useState } from 'react'
-import { currentUser, type UserProfile } from '../api/auth'
-import { ApiError } from '../api/client'
+import { useCallback } from 'react'
+import { Link } from 'react-router'
+import { currentUser } from '../api/auth'
+import { useLoad } from '../api/useLoad'
 import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
 
 export function HomePage() {
-  const { session, signOut } = useAuth()
-  const token = session?.token
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!token) {
-      return
-    }
-    const controller = new AbortController()
-    currentUser(token, controller.signal)
-      .then(setProfile)
-      .catch((failure: unknown) => {
-        if (controller.signal.aborted) {
-          return
-        }
-        if (failure instanceof ApiError && failure.status === 401) {
-          signOut('expired')
-          return
-        }
-        setError(failure instanceof ApiError ? failure.message : 'Não foi possível carregar o perfil.')
-      })
-    return () => controller.abort()
-  }, [token, signOut])
+  const { session } = useAuth()
+  const token = session?.token ?? ''
+  const load = useCallback((signal: AbortSignal) => currentUser(token, signal), [token])
+  const { data: profile, error } = useLoad(load, 'Não foi possível carregar o perfil.')
 
   if (error) {
     return <Alert>{error}</Alert>
@@ -41,6 +22,9 @@ export function HomePage() {
       <h1>Olá, {profile.name}</h1>
       <p>
         Conectado como <strong>{profile.email}</strong>.
+      </p>
+      <p>
+        <Link to="/restaurants">Escolher um restaurante</Link>
       </p>
     </section>
   )

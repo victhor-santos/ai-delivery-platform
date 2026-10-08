@@ -171,3 +171,169 @@ button:disabled {
   color: var(--info-text);
   background: var(--info-bg);
 }
+
+.muted {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.list {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.list > .card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.badge {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.menu-item-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.menu-item.unavailable {
+  opacity: 0.65;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+h2 {
+  margin-top: 0;
+  font-size: 1.2rem;
+}
+
+select {
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+button.secondary {
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.link-button.accent {
+  justify-self: start;
+  color: var(--accent);
+}
+
+.checkout {
+  display: grid;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 800px) {
+  .checkout {
+    grid-template-columns: 3fr 2fr;
+  }
+
+  .checkout .summary {
+    position: sticky;
+    top: 1rem;
+  }
+}
+
+.summary,
+.destination {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.card.nested {
+  padding: 1rem;
+  background: var(--bg);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.row > label {
+  flex: 1 1 8rem;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stepper button {
+  width: 2rem;
+  padding: 0.2rem 0;
+}
+
+.stepper output {
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.lines {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lines li,
+.total {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.total {
+  margin: 0.75rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1rem;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.payment {
+  margin: 1rem 0 0.75rem;
+}

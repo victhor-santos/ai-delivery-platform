@@ -15,6 +15,7 @@ export function Layout() {
               <NavLink to="/" end>
                 Início
               </NavLink>
+              <NavLink to="/restaurants">Restaurantes</NavLink>
               <button type="button" className="link-button" onClick={() => signOut()}>
                 Sair
               </button>
