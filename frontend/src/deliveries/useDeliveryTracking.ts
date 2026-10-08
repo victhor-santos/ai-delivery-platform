@@ -31,7 +31,12 @@ export function useDeliveryTracking(orderId: string, enabled: boolean) {
     async function poll() {
       try {
         const delivery = await getDeliveryByOrder(orderId, controller.signal)
-        setTracking({ delivery, missing: false, error: null })
+        // Uma consulta iniciada antes de um comando não pode desfazer o resultado dele na tela.
+        setTracking((current) =>
+          current.delivery && Date.parse(current.delivery.updatedAt) > Date.parse(delivery.updatedAt)
+            ? { ...current, error: null }
+            : { delivery, missing: false, error: null },
+        )
         if (!isFinished(delivery)) {
           timer = setTimeout(poll, POLL_INTERVAL_MS)
         }

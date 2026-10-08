@@ -86,9 +86,28 @@ function server(
     'GET /api/deliveries/d1/route': () =>
       state.plan ? json(200, state.plan) : problem(404, 'A entrega ainda não possui um plano de rota.'),
     'POST /api/deliveries/d1/route': () => plan(state),
+    'POST /api/deliveries/couriers': () => json(201, { id: 'c1', active: true }),
+    'POST /api/deliveries/d1/assign': () =>
+      state.delivery?.status === 'CREATED'
+        ? advance(state, { status: 'ASSIGNED', courierId: 'c1', assignedAt: at(3) })
+        : problem(409, 'A entrega já tem entregador.'),
+    'POST /api/deliveries/d1/pick-up': () => advance(state, { status: 'PICKED_UP', pickedUpAt: at(4) }),
+    'POST /api/deliveries/d1/start-transit': () => advance(state, { status: 'IN_TRANSIT', departedAt: at(5) }),
+    'POST /api/deliveries/d1/arrive': () => advance(state, { arrivedAt: at(6) }),
+    'POST /api/deliveries/d1/complete': () => advance(state, { status: 'DELIVERED', deliveredAt: at(7) }),
+    'POST /api/deliveries/d1/cancel': () => advance(state, { status: 'CANCELLED', cancelledAt: at(3) }),
   })
   const calls = (path: string) => fetchMock.mock.calls.filter(([url]) => url === path)
   return { state, calls }
+}
+
+function at(minute: number): string {
+  return `2026-10-08T12:0${minute}:00Z`
+}
+
+function advance(state: State, changes: Partial<Delivery>) {
+  state.delivery = { ...state.delivery!, ...changes, updatedAt: at(9) }
+  return json(200, state.delivery)
 }
 
 function created(state: State) {
@@ -240,5 +259,56 @@ describe('delivery route', () => {
     expect(await screen.findByText(/fora da cidade sintética/)).toBeInTheDocument()
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /rota/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('delivery operations', () => {
+  it('drives the simulated delivery from assignment to completion', async () => {
+    const { calls } = server({ order: REQUESTED, delivery: DELIVERY }, created)
+    const user = await openOrder()
+    const panel = await screen.findByRole('group', { name: 'Simulação operacional' })
+
+    const steps = [
+      ['Atribuir entregador', 'Entregador a caminho do restaurante'],
+      ['Registrar coleta', 'Pedido coletado'],
+      ['Sair para entrega', 'A caminho'],
+      ['Registrar chegada', 'Entregador no destino'],
+      ['Concluir entrega', 'Entregue'],
+    ]
+    for (const [button, status] of steps) {
+      await user.click(within(panel).getByRole('button', { name: button }))
+      expect(await screen.findByText(status, { selector: '.badge' })).toBeInTheDocument()
+    }
+
+    expect(screen.queryByRole('group', { name: 'Simulação operacional' })).not.toBeInTheDocument()
+    const timeline = screen.getByRole('list', { name: 'Andamento da entrega' })
+    expect(within(timeline).getAllByRole('listitem').every((step) => step.classList.contains('done'))).toBe(true)
+    const assignment = calls('/api/deliveries/d1/assign')[0][1]!
+    expect(JSON.parse(assignment.body as string)).toEqual({ courierId: 'c1' })
+  })
+
+  it('cancels a delivery before pickup', async () => {
+    server({ order: REQUESTED, delivery: DELIVERY }, created)
+    const user = await openOrder()
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar entrega' }))
+
+    expect(await screen.findByText('Entrega cancelada', { selector: '.badge' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Simulação operacional' })).not.toBeInTheDocument()
+  })
+
+  it('reloads the delivery after a conflicting command', async () => {
+    const { state, calls } = server({ order: REQUESTED, delivery: DELIVERY }, created)
+    const user = await openOrder()
+    await screen.findByRole('group', { name: 'Simulação operacional' })
+    const lookups = calls('/api/deliveries/by-order/o1').length
+
+    // Outra aba já atribuiu um entregador; o comando desta página fica fora de ordem.
+    state.delivery = { ...DELIVERY, status: 'ASSIGNED', courierId: 'c0', assignedAt: at(3), updatedAt: at(3) }
+    await user.click(screen.getByRole('button', { name: 'Atribuir entregador' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('A entrega já tem entregador.')
+    expect(await screen.findByText('Entregador a caminho do restaurante', { selector: '.badge' })).toBeInTheDocument()
+    expect(calls('/api/deliveries/by-order/o1').length).toBeGreaterThan(lookups)
   })
 })

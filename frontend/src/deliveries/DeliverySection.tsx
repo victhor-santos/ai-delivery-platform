@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
 import { DeliveryTimeline } from './DeliveryTimeline'
 import { deliveryStatusLabel } from './deliveryStatus'
+import { OperationsPanel } from './OperationsPanel'
 import { RouteSection } from './RouteSection'
 import { useDeliveryTracking } from './useDeliveryTracking'
 
@@ -80,6 +81,7 @@ export function DeliverySection({ order, onOrderChange }: { order: Order; onOrde
       {tracking.delivery && (
         <>
           <DeliveryTimeline delivery={tracking.delivery} />
+          <OperationsPanel delivery={tracking.delivery} onChange={tracking.setDelivery} onConflict={tracking.reload} />
           <RouteSection delivery={tracking.delivery} />
         </>
       )}

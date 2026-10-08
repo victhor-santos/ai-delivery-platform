@@ -495,3 +495,13 @@ button.secondary {
   background: var(--accent);
   border-radius: 2px;
 }
+
+.operations {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.operations h3 {
+  margin: 0;
+  font-size: 1rem;
+}

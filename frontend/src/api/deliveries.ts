@@ -97,3 +97,24 @@ export function planRoute(deliveryId: string, departureAt: Date): Promise<RouteP
 export function canPlanRoute(delivery: Delivery): boolean {
   return delivery.status === 'CREATED' || delivery.status === 'ASSIGNED' || delivery.status === 'PICKED_UP'
 }
+
+export type Courier = {
+  id: string
+  active: boolean
+}
+
+// Comandos operacionais do ciclo. Repetir um comando já aplicado responde 409; consulte a entrega antes de tentar
+// de novo. Ainda não há papéis de entregador ou operador: o servidor aceita os comandos sem token.
+export function createCourier(): Promise<Courier> {
+  return request('/api/deliveries/couriers', { method: 'POST' })
+}
+
+export function assignCourier(deliveryId: string, courierId: string): Promise<Delivery> {
+  return request(`/api/deliveries/${encodeURIComponent(deliveryId)}/assign`, { method: 'POST', body: { courierId } })
+}
+
+export type DeliveryCommand = 'pick-up' | 'start-transit' | 'arrive' | 'complete' | 'cancel'
+
+export function runDeliveryCommand(deliveryId: string, command: DeliveryCommand): Promise<Delivery> {
+  return request(`/api/deliveries/${encodeURIComponent(deliveryId)}/${command}`, { method: 'POST' })
+}
