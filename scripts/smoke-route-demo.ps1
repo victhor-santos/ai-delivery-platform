@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [uri]$GatewayUrl = 'http://localhost:8080',
+    [uri]$WebUrl = 'http://localhost:3000',
     [switch]$CatalogOnly,
     [switch]$OrderOnly,
     [switch]$UsersOnly,
@@ -313,6 +314,27 @@ try {
     $delivery = Invoke-Api 'POST' "$deliveryPath/complete"
     Assert-Condition ($delivery.status -eq 'DELIVERED') 'Delivery lifecycle was not completed.'
     Write-Output "Segment observations passed: $($samples.Count) simulated traversals, prediction snapshots and CSV export."
+
+    # The web container serves the SPA and forwards /api to the Gateway on the same origin.
+    $webBaseUrl = $WebUrl.AbsoluteUri.TrimEnd('/')
+    $page = $http.GetAsync("$webBaseUrl/orders/unknown-route").GetAwaiter().GetResult()
+    try {
+        $html = $page.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        Assert-Condition ([int]$page.StatusCode -eq 200 -and $html.Contains('<div id="root">')) 'Web app did not serve the SPA fallback.'
+    } finally {
+        $page.Dispose()
+    }
+    $webRequest = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get, "$webBaseUrl/api/users/auth/me")
+    $webRequest.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $accessToken)
+    $webResponse = $http.SendAsync($webRequest).GetAwaiter().GetResult()
+    try {
+        $webIdentity = $webResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
+        Assert-Condition ([int]$webResponse.StatusCode -eq 200 -and $webIdentity.id -eq $user.id) 'Web proxy did not reach the Gateway.'
+    } finally {
+        $webResponse.Dispose()
+        $webRequest.Dispose()
+    }
+    Write-Output 'Web passed: SPA fallback and /api proxy to the Gateway.'
 
     if ($CheckPersistence) {
         Invoke-Compose -CommandArguments @('up', '-d', '--no-build', '--force-recreate',
