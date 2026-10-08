@@ -81,7 +81,7 @@ try {
         }
     }
 
-    $services = if ($CatalogOnly) { @('catalog') } elseif ($OrderOnly) { @('catalog', 'orders') }
+    $services = if ($CatalogOnly) { @('catalog') } elseif ($OrderOnly) { @('catalog', 'orders', 'payments') }
         elseif ($UsersOnly) { @('users') }
         else { @('users', 'catalog', 'orders', 'payments', 'deliveries') }
     foreach ($service in $services) {
@@ -201,38 +201,51 @@ try {
     }
     $orderPath = "/api/orders/$($order.id)"
     Invoke-Api 'GET' $orderPath -Status 401 | Out-Null
-    foreach ($foreignCall in @(@('GET', ''), @('POST', '/confirm'), @('POST', '/cancel'), @('POST', '/delivery'))) {
+    foreach ($foreignCall in @(@('GET', ''), @('POST', '/cancel'), @('POST', '/delivery'))) {
         Invoke-Api $foreignCall[0] "$orderPath$($foreignCall[1])" -AccessToken $otherToken -Status 404 | Out-Null
     }
     $storedOrder = Invoke-Api 'GET' $orderPath -AccessToken $accessToken
     Assert-Condition ($storedOrder.status -eq 'CREATED') 'Another customer changed the order.'
     Assert-Condition ($storedOrder.total -eq $order.total -and $storedOrder.currency -eq $order.currency) 'Menu changes altered the stored order total or currency.'
     Assert-Condition (($storedOrder.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Menu changes altered the stored item snapshots.'
-    $confirmed = Invoke-Api 'POST' "$orderPath/confirm" -AccessToken $accessToken
-    Assert-Condition ($confirmed.status -eq 'CONFIRMED') 'Order was not confirmed.'
-    Assert-Condition ($confirmed.total -eq $order.total) 'Menu changes repriced the order.'
-    Assert-Condition (($confirmed.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Confirmation changed the item snapshots.'
+    Assert-Condition ($null -eq $storedOrder.paymentRequestedAt -and $null -eq $storedOrder.paymentId) 'A new order already has a payment.'
+    Invoke-Api 'POST' "$orderPath/confirm" -AccessToken $accessToken -Status 404 | Out-Null
+    Invoke-Api 'POST' "$orderPath/delivery" -AccessToken $accessToken -Status 409 | Out-Null
     Write-Output "Orders passed: order=$($order.id), total=$($order.total) BRL."
+
+    $paymentPath = "$orderPath/payment"
+    $declinedKey = "smoke-$([guid]::NewGuid().ToString('N'))"
+    $declinedRequest = @{ method = 'sim-card-insufficient-funds'; amount = [decimal]0.01 }
+    Invoke-Api 'POST' $paymentPath $declinedRequest 401 -IdempotencyKey $declinedKey | Out-Null
+    Invoke-Api 'POST' $paymentPath $declinedRequest 404 -AccessToken $otherToken -IdempotencyKey $declinedKey | Out-Null
+    $declined = Invoke-Api 'POST' $paymentPath $declinedRequest -AccessToken $accessToken -IdempotencyKey $declinedKey
+    Assert-Condition ($declined.status -eq 'DECLINED' -and $declined.declineReason -eq 'INSUFFICIENT_FUNDS') 'Simulated decline was not recorded.'
+    Assert-Condition ($declined.amount -eq $order.total) 'The payment amount did not come from the order total.'
+    $replayedDecline = Invoke-Api 'POST' $paymentPath $declinedRequest -AccessToken $accessToken -IdempotencyKey $declinedKey
+    Assert-Condition ($replayedDecline.paymentId -eq $declined.paymentId) 'Payment retry with the same key created another attempt.'
+    Invoke-Api 'POST' $paymentPath @{ method = 'sim-card-approved' } 422 -AccessToken $accessToken -IdempotencyKey $declinedKey | Out-Null
+    Assert-Condition ($null -eq (Invoke-Api 'GET' $orderPath -AccessToken $accessToken).paymentRequestedAt) 'A decline left the order awaiting payment.'
+    $directCharge = @{ orderId = $order.id; amount = $order.total; method = 'sim-card-approved' }
+    Invoke-Api 'POST' '/api/payments' $directCharge 409 -AccessToken $accessToken -IdempotencyKey "smoke-$([guid]::NewGuid().ToString('N'))" | Out-Null
+    $approvedKey = "smoke-$([guid]::NewGuid().ToString('N'))"
+    $approvedRequest = @{ method = 'sim-card-approved' }
+    $payment = Invoke-Api 'POST' $paymentPath $approvedRequest -AccessToken $accessToken -IdempotencyKey $approvedKey
+    Assert-Condition ($payment.status -eq 'APPROVED' -and $payment.amount -eq $order.total -and $payment.currency -eq 'BRL') 'Simulated approval is invalid.'
+    $confirmed = Invoke-Api 'GET' $orderPath -AccessToken $accessToken
+    Assert-Condition ($confirmed.status -eq 'CONFIRMED' -and $confirmed.paymentId -eq $payment.paymentId) 'The approval did not confirm the order.'
+    Assert-Condition ($confirmed.total -eq $order.total) 'Menu changes repriced the order.'
+    Assert-Condition (($confirmed.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Payment changed the item snapshots.'
+    Invoke-Api 'POST' $paymentPath $approvedRequest 409 -AccessToken $accessToken -IdempotencyKey "smoke-$([guid]::NewGuid().ToString('N'))" | Out-Null
+    Invoke-Api 'POST' "$orderPath/cancel" -AccessToken $accessToken -Status 409 | Out-Null
+    $attemptPath = "/api/payments/$($payment.paymentId)"
+    $attempt = Invoke-Api 'GET' $attemptPath -AccessToken $accessToken
+    Assert-Condition ($attempt.status -eq 'APPROVED' -and $attempt.orderId -eq $order.id -and $attempt.simulated) 'Payment Service lost the approved attempt.'
+    Invoke-Api 'GET' $attemptPath -AccessToken $otherToken -Status 404 | Out-Null
+    $orderPayments = Invoke-Api 'GET' "/api/payments?orderId=$($order.id)" -AccessToken $accessToken
+    Assert-Condition ($orderPayments.totalElements -eq 2 -and $orderPayments.items[1].id -eq $payment.paymentId) 'Payment history for the order is invalid.'
+    Write-Output "Payments passed: declined=$($declined.paymentId), approved=$($payment.paymentId), order confirmed."
     if ($OrderOnly) { return }
 
-    $declinedKey = "smoke-$([guid]::NewGuid().ToString('N'))"
-    $paymentRequest = @{ orderId = $order.id; amount = $order.total; method = 'sim-card-insufficient-funds' }
-    Invoke-Api 'POST' '/api/payments' $paymentRequest 401 -IdempotencyKey $declinedKey | Out-Null
-    $declined = Invoke-Api 'POST' '/api/payments' $paymentRequest 201 -AccessToken $accessToken -IdempotencyKey $declinedKey
-    Assert-Condition ($declined.status -eq 'DECLINED' -and $declined.declineReason -eq 'INSUFFICIENT_FUNDS' -and $declined.simulated) 'Simulated decline was not recorded.'
-    $replayedDecline = Invoke-Api 'POST' '/api/payments' $paymentRequest 200 -AccessToken $accessToken -IdempotencyKey $declinedKey
-    Assert-Condition ($replayedDecline.id -eq $declined.id) 'Payment retry with the same key created another attempt.'
-    $paymentRequest.method = 'sim-card-approved'
-    Invoke-Api 'POST' '/api/payments' $paymentRequest 422 -AccessToken $accessToken -IdempotencyKey $declinedKey | Out-Null
-    $approvedKey = "smoke-$([guid]::NewGuid().ToString('N'))"
-    $payment = Invoke-Api 'POST' '/api/payments' $paymentRequest 201 -AccessToken $accessToken -IdempotencyKey $approvedKey
-    Assert-Condition ($payment.status -eq 'APPROVED' -and $payment.amount -eq $order.total -and $payment.currency -eq 'BRL') 'Simulated approval is invalid.'
-    Invoke-Api 'POST' '/api/payments' $paymentRequest 409 -AccessToken $accessToken -IdempotencyKey "smoke-$([guid]::NewGuid().ToString('N'))" | Out-Null
-    $paymentPath = "/api/payments/$($payment.id)"
-    Invoke-Api 'GET' $paymentPath -AccessToken $otherToken -Status 404 | Out-Null
-    $orderPayments = Invoke-Api 'GET' "/api/payments?orderId=$($order.id)" -AccessToken $accessToken
-    Assert-Condition ($orderPayments.totalElements -eq 2 -and $orderPayments.items[1].id -eq $payment.id) 'Payment history for the order is invalid.'
-    Write-Output "Payments passed: declined=$($declined.id), approved=$($payment.id)."
     $receipt = Invoke-Api 'POST' "$orderPath/delivery" -AccessToken $accessToken
     $repeated = Invoke-Api 'POST' "$orderPath/delivery" -AccessToken $accessToken
     Assert-Condition ($receipt.deliveryId -eq $repeated.deliveryId) 'Delivery creation was not idempotent.'
@@ -317,14 +330,15 @@ try {
         $persistedRestaurant = Invoke-Api 'GET' "/api/catalog/restaurants/$($restaurant.id)"
         $persistedMenuItem = Invoke-Api 'GET' $itemPath
         $persistedOrder = Invoke-Api 'GET' $orderPath -AccessToken $accessToken
-        $persistedPayment = Invoke-Api 'GET' $paymentPath -AccessToken $accessToken
-        Assert-Condition (($persistedPayment | ConvertTo-Json -Compress) -eq ($payment | ConvertTo-Json -Compress)) 'Payment changed after restart.'
-        Invoke-Api 'POST' '/api/payments' $paymentRequest 200 -AccessToken $accessToken -IdempotencyKey $approvedKey | Out-Null
+        $persistedAttempt = Invoke-Api 'GET' $attemptPath -AccessToken $accessToken
+        Assert-Condition (($persistedAttempt | ConvertTo-Json -Compress) -eq ($attempt | ConvertTo-Json -Compress)) 'Payment changed after restart.'
+        $replayedPayment = Invoke-Api 'POST' $paymentPath $approvedRequest -AccessToken $accessToken -IdempotencyKey $approvedKey
+        Assert-Condition (($replayedPayment | ConvertTo-Json -Compress) -eq ($payment | ConvertTo-Json -Compress)) 'Order payment changed after restart.'
         $persistedDelivery = Invoke-Api 'GET' $deliveryPath
         $persistedPlan = Invoke-Api 'GET' "$deliveryPath/route"
         Assert-Condition ($persistedRestaurant.id -eq $restaurant.id) 'Restaurant was lost after restart.'
         Assert-Condition (($persistedMenuItem | ConvertTo-Json -Compress) -eq ($updatedItem | ConvertTo-Json -Compress)) 'Menu item changed after restart.'
-        Assert-Condition ($persistedOrder.status -eq 'CONFIRMED') 'Order was lost after restart.'
+        Assert-Condition ($persistedOrder.status -eq 'CONFIRMED' -and $persistedOrder.paymentId -eq $payment.paymentId) 'Order was lost after restart.'
         Assert-Condition ($persistedOrder.total -eq $order.total) 'Order total changed after restart.'
         Assert-Condition ($persistedOrder.currency -eq $order.currency) 'Order currency changed after restart.'
         Assert-Condition (($persistedOrder.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Item snapshots changed after restart.'

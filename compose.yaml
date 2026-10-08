@@ -146,6 +146,7 @@ services:
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
       CATALOG_SERVICE_URL: http://catalog-service:8082
       DELIVERY_SERVICE_URL: http://delivery-service:8085
+      PAYMENT_SERVICE_URL: http://payment-service:8084
       ORDER_REMOTE_TIMEOUT_MS: ${ORDER_REMOTE_TIMEOUT_MS:-5000}
       USER_AUTH_SECRET: ${USER_AUTH_SECRET:?Generate USER_AUTH_SECRET with scripts/initialize-auth-secret.ps1}
     depends_on:
@@ -154,6 +155,9 @@ services:
       catalog-service:
         condition: service_healthy
       delivery-service:
+        condition: service_healthy
+      # Payment calls Order back only per request, so it starts first and the dependency stays one-way.
+      payment-service:
         condition: service_healthy
 
   payment-service:
@@ -169,6 +173,8 @@ services:
       PAYMENT_DB_URL: jdbc:postgresql://payment-db:5432/payments
       PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:-payments}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD in .env}
+      ORDER_SERVICE_URL: http://order-service:8083
+      PAYMENT_REMOTE_TIMEOUT_MS: ${PAYMENT_REMOTE_TIMEOUT_MS:-3000}
       USER_AUTH_SECRET: ${USER_AUTH_SECRET:?Generate USER_AUTH_SECRET with scripts/initialize-auth-secret.ps1}
     depends_on:
       payment-db:
