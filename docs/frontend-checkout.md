@@ -1,6 +1,6 @@
 # Checkout na interface web
 
-Esta etapa leva a [interface web](frontend-foundation.md) do login até o pedido pago: restaurantes, cardápio, quantidades, resumo de valores, destino, criação do pedido e [pagamento simulado](order-payment-integration.md). O acompanhamento da entrega fica para `feature/frontend-deliveries`.
+Esta etapa leva a [interface web](frontend-foundation.md) do login até o pedido pago: restaurantes, cardápio, quantidades, resumo de valores, destino, criação do pedido e [pagamento simulado](order-payment-integration.md). O acompanhamento da entrega está nas [entregas na interface web](frontend-deliveries.md).
 
 ## Fluxo
 
