@@ -5,7 +5,15 @@ import { renderAt, signIn } from '../test/render'
 
 const RESTAURANT = { id: 'r1', name: 'Cantina da Praça', active: true, pickupLocation: null }
 const MENU = [
-  { id: 'i1', restaurantId: 'r1', name: 'Prato do dia', description: 'Arroz e feijão', price: 25.9, currency: 'BRL', available: true },
+  {
+    id: 'i1',
+    restaurantId: 'r1',
+    name: 'Prato do dia',
+    description: 'Arroz e feijão',
+    price: 25.9,
+    currency: 'BRL',
+    available: true,
+  },
   { id: 'i2', restaurantId: 'r1', name: 'Sobremesa', description: null, price: 8, currency: 'BRL', available: false },
 ]
 

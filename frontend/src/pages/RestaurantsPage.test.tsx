@@ -20,7 +20,10 @@ describe('RestaurantsPage', () => {
 
     const items = await screen.findAllByRole('listitem')
     expect(items).toHaveLength(2)
-    expect(within(items[0]).getByRole('link', { name: 'Cantina da Praça' })).toHaveAttribute('href', '/restaurants/r-open')
+    expect(within(items[0]).getByRole('link', { name: 'Cantina da Praça' })).toHaveAttribute(
+      'href',
+      '/restaurants/r-open',
+    )
     expect(within(items[0]).queryByText('Fechado')).not.toBeInTheDocument()
     expect(within(items[1]).getByText('Fechado')).toBeInTheDocument()
   })
