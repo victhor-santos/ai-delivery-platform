@@ -70,7 +70,9 @@ $body = @{
 $order = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders" -Headers $auth -ContentType 'application/json' -Body $body
 $order.total # 59.80, calculado a partir dos preços do catálogo
 $path = "$baseUrl/api/orders/$($order.id)"
-Invoke-RestMethod -Method Post -Uri "$path/confirm" -Headers $auth
+$pay = $auth + @{ 'Idempotency-Key' = [guid]::NewGuid().ToString() }
+Invoke-RestMethod -Method Post -Uri "$path/payment" -Headers $pay -ContentType 'application/json' `
+    -Body '{"method":"sim-card-approved"}' # confirma o pedido
 $receipt = Invoke-RestMethod -Method Post -Uri "$path/delivery" -Headers $auth
 Invoke-RestMethod "$baseUrl/api/deliveries/$($receipt.deliveryId)"
 Invoke-RestMethod -Method Post -Uri "$path/delivery" -Headers $auth # recupera a mesma entrega

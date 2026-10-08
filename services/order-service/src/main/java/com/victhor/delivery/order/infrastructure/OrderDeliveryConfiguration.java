@@ -11,6 +11,8 @@ import org.springframework.context.annotation.Configuration;
 import com.victhor.delivery.order.application.DeliveryGateway;
 import com.victhor.delivery.order.application.DeliveryRequestRepository;
 import com.victhor.delivery.order.application.OrderDeliveryService;
+import com.victhor.delivery.order.application.OrderPaymentRepository;
+import com.victhor.delivery.order.application.OrderPaymentService;
 import com.victhor.delivery.order.application.OrderRepository;
 import com.victhor.delivery.order.application.RestaurantLookup;
 import tools.jackson.databind.ObjectMapper;
@@ -29,6 +31,19 @@ class OrderDeliveryConfiguration {
             @Value("${order.integration.delivery-url}") String deliveryUrl,
             @Value("${order.integration.timeout-ms}") long timeoutMs) {
         return new HttpDeliveryIntegration(client, mapper, catalogUrl, deliveryUrl, Duration.ofMillis(timeoutMs));
+    }
+
+    @Bean
+    HttpPaymentGateway httpPaymentGateway(HttpClient client, ObjectMapper mapper,
+            @Value("${order.integration.payment-url}") String paymentUrl,
+            @Value("${order.integration.timeout-ms}") long timeoutMs) {
+        return new HttpPaymentGateway(client, mapper, paymentUrl, Duration.ofMillis(timeoutMs));
+    }
+
+    @Bean
+    OrderPaymentService orderPaymentService(OrderRepository orders, OrderPaymentRepository payments,
+            HttpPaymentGateway gateway, Clock clock) {
+        return new OrderPaymentService(orders, payments, gateway, clock);
     }
 
     @Bean

@@ -2,15 +2,24 @@ package com.victhor.delivery.payment.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,6 +31,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -30,6 +41,7 @@ import com.victhor.delivery.payment.infrastructure.auth.TestAccessTokens;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -40,6 +52,12 @@ class PaymentApiTests {
     private static final UUID CUSTOMER = UUID.randomUUID();
     private static final UUID ORDER = UUID.randomUUID();
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+    private static final ObjectMapper JSON = new ObjectMapper();
+    /** Orders served by the fake Order Service, with the bearer token of the customer who owns each one. */
+    private static final Map<UUID, Map.Entry<String, ObjectNode>> ORDERS = new ConcurrentHashMap<>();
+    private static final AtomicInteger ORDER_STATUS = new AtomicInteger(200);
+    private static final AtomicInteger ORDER_CALLS = new AtomicInteger();
+    private static final HttpServer ORDER_SERVICE = startOrderService();
 
     @Container
     @ServiceConnection
@@ -56,9 +74,24 @@ class PaymentApiTests {
 
     private final String token = TestAccessTokens.issue(CUSTOMER);
 
+    @DynamicPropertySource
+    static void orderServiceUrl(DynamicPropertyRegistry properties) {
+        properties.add("payment.integration.order-url",
+                () -> "http://127.0.0.1:" + ORDER_SERVICE.getAddress().getPort());
+    }
+
     @BeforeEach
     void clearAttempts() {
         jdbc.update("DELETE FROM payment_attempts");
+        ORDERS.clear();
+        ORDER_STATUS.set(200);
+        ORDER_CALLS.set(0);
+        awaitingOrder(ORDER, token, "59.80");
+    }
+
+    @AfterAll
+    static void stopOrderService() {
+        ORDER_SERVICE.stop(0);
     }
 
     @Test
@@ -127,6 +160,7 @@ class PaymentApiTests {
         assertThat(json(foreign).path("detail").asString()).isEqualTo("Pagamento não encontrado.");
         assertThat(json(send("GET", "/api/payments?orderId=" + ORDER, null, other)).path("totalElements").asLong())
                 .isZero();
+        awaitingOrder(ORDER, other, "59.80");
         var sameKey = pay("checkout-0001", body("sim-card-declined"), other);
         assertThat(sameKey.statusCode()).isEqualTo(201);
         assertThat(json(sameKey).path("id").asString()).isNotEqualTo(id);
@@ -137,7 +171,10 @@ class PaymentApiTests {
     void listsTheCustomersAttemptsForAnOrderInCreationOrder() throws Exception {
         String first = json(pay("checkout-0001", body("sim-card-declined"), token)).path("id").asString();
         String second = json(pay("checkout-0002", body("sim-card-approved"), token)).path("id").asString();
-        pay("checkout-0003", body("sim-card-approved").replace(ORDER.toString(), UUID.randomUUID().toString()), token);
+        UUID otherOrder = UUID.randomUUID();
+        awaitingOrder(otherOrder, token, "59.80");
+        assertThat(pay("checkout-0003", body("sim-card-approved").replace(ORDER.toString(), otherOrder.toString()), token)
+                .statusCode()).isEqualTo(201);
 
         var page = json(send("GET", "/api/payments?orderId=" + ORDER + "&page=0&size=1", null, token));
         assertThat(page.path("totalElements").asLong()).isEqualTo(2);
@@ -256,5 +293,85 @@ class PaymentApiTests {
         assertThat(json(response).path("status").asInt()).isEqualTo(status);
         assertThat(json(response).path("detail").asString()).isNotBlank();
         assertThat(response.body()).doesNotContain("org.hibernate", "SQLException", "stackTrace", "com.victhor");
+    }
+
+    @Test
+    void readsTheOrderWithTheCustomersTokenAndChargesOnlyWhatItAwaits() throws Exception {
+        assertThat(pay("checkout-0001", body("sim-card-approved").replace("59.80", "59.79"), token).statusCode())
+                .isEqualTo(409);
+        ORDERS.get(ORDER).getValue().putNull("paymentRequestedAt");
+        var notAwaiting = pay("checkout-0002", body("sim-card-approved"), token);
+        assertProblem(notAwaiting, 409);
+        assertThat(json(notAwaiting).path("detail").asString()).contains("POST /api/orders/{id}/payment");
+        awaitingOrder(ORDER, token, "59.80").put("status", "CANCELLED");
+        assertProblem(pay("checkout-0003", body("sim-card-approved"), token), 409);
+        assertThat(ORDER_CALLS.get()).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment_attempts", Integer.class)).isZero();
+    }
+
+    @Test
+    void reportsAnotherCustomersOrAMissingOrderAsAbsentWithoutCharging() throws Exception {
+        var foreign = pay("checkout-0001", body("sim-card-approved"), TestAccessTokens.issue(UUID.randomUUID()));
+        assertProblem(foreign, 404);
+        assertThat(json(foreign).path("detail").asString()).isEqualTo("Pedido não encontrado.");
+        assertProblem(pay("checkout-0002", body("sim-card-approved").replace(ORDER.toString(),
+                UUID.randomUUID().toString()), token), 404);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment_attempts", Integer.class)).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 401, 500, 503 })
+    void chargesNothingWhileTheOrderCannotBeRead(int status) throws Exception {
+        ORDER_STATUS.set(status);
+
+        assertProblem(pay("checkout-0001", body("sim-card-approved"), token), 503);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment_attempts", Integer.class)).isZero();
+        ORDER_STATUS.set(200);
+        assertThat(pay("checkout-0001", body("sim-card-approved"), token).statusCode()).isEqualTo(201);
+    }
+
+    @Test
+    void replaysAStoredAttemptWithoutReadingTheOrderAgain() throws Exception {
+        var created = pay("checkout-0001", body("sim-card-approved"), token);
+        ORDER_STATUS.set(503);
+
+        var replayed = pay("checkout-0001", body("sim-card-approved"), token);
+        assertThat(replayed.statusCode()).isEqualTo(200);
+        assertThat(json(replayed)).isEqualTo(json(created));
+        assertThat(ORDER_CALLS.get()).isEqualTo(1);
+    }
+
+    private static ObjectNode awaitingOrder(UUID id, String ownerToken, String total) {
+        ObjectNode order = JSON.createObjectNode().put("id", id.toString()).put("status", "CREATED")
+                .put("total", new java.math.BigDecimal(total)).put("currency", "BRL")
+                .put("paymentRequestedAt", "2026-10-07T12:00:00Z").putNull("paymentId");
+        ORDERS.put(id, Map.entry("Bearer " + ownerToken, order));
+        return order;
+    }
+
+    private static HttpServer startOrderService() {
+        try {
+            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            server.createContext("/api/orders/", PaymentApiTests::order);
+            server.start();
+            return server;
+        } catch (IOException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    /** Like the Order Service, answers 404 for a missing order and for another customer's order. */
+    private static void order(HttpExchange exchange) throws IOException {
+        ORDER_CALLS.incrementAndGet();
+        UUID id = UUID.fromString(exchange.getRequestURI().getPath().substring("/api/orders/".length()));
+        var entry = ORDERS.get(id);
+        String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+        int status = ORDER_STATUS.get() != 200 ? ORDER_STATUS.get()
+                : entry == null || !entry.getKey().equals(authorization) ? 404 : 200;
+        byte[] body = (status == 200 ? entry.getValue().toString() : "{}").getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(status, body.length);
+        exchange.getResponseBody().write(body);
+        exchange.close();
     }
 }

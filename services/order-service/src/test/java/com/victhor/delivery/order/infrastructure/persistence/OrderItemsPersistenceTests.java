@@ -28,12 +28,16 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import com.victhor.delivery.order.application.DeliveryRequestRepository;
+import com.victhor.delivery.order.application.OrderPaymentRepository;
 import com.victhor.delivery.order.application.OrderRepository;
 import com.victhor.delivery.order.domain.DeliveryDestination;
 import com.victhor.delivery.order.domain.DeliveryRequest;
+import com.victhor.delivery.order.domain.IdempotencyKey;
 import com.victhor.delivery.order.domain.Order;
 import com.victhor.delivery.order.domain.OrderItem;
+import com.victhor.delivery.order.domain.OrderPayment;
 import com.victhor.delivery.order.domain.OrderPricing;
+import com.victhor.delivery.order.domain.SimulatedPaymentMethod;
 
 @ActiveProfiles("test")
 @SpringBootTest(properties = "ORDER_DB_PASSWORD=testcontainers-only")
@@ -53,6 +57,9 @@ class OrderItemsPersistenceTests {
     private DeliveryRequestRepository deliveryRequests;
 
     @Autowired
+    private OrderPaymentRepository payments;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @Autowired
@@ -66,6 +73,7 @@ class OrderItemsPersistenceTests {
     @BeforeEach
     void createOrderWithSnapshots() {
         jdbc.update("DELETE FROM order_delivery_requests");
+        jdbc.update("DELETE FROM order_payments");
         jdbc.update("DELETE FROM orders");
         var pricing = new OrderPricing(List.of(
                 new OrderItem(UUID.randomUUID(), "Lasagna", 2, new BigDecimal("32.50")),
@@ -92,11 +100,10 @@ class OrderItemsPersistenceTests {
     }
 
     @Test
-    void preservesCompositionAcrossConfirmationAndCancellation() {
-        var confirmation = orders.confirm(order.id(), CREATED_AT.plusSeconds(10)).orElseThrow();
+    void preservesCompositionAcrossARejectedPaymentAndCancellation() {
+        payments.complete(payments.start(intent("checkout-0001")).reject(CREATED_AT.plusSeconds(15)));
         var cancellation = orders.cancel(order.id(), CREATED_AT.plusSeconds(20)).orElseThrow();
 
-        assertThat(confirmation.pricing()).isEqualTo(order.pricing());
         assertThat(cancellation.pricing()).isEqualTo(order.pricing());
         assertThat(orders.findById(order.id())).contains(cancellation);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items WHERE order_id = ?", Integer.class,
@@ -105,7 +112,8 @@ class OrderItemsPersistenceTests {
 
     @Test
     void preservesCompositionAcrossTheIdempotentDeliveryIntent() {
-        orders.confirm(order.id(), CREATED_AT.plusSeconds(10));
+        payments.complete(payments.start(intent("checkout-0001")).approve(UUID.randomUUID(), CREATED_AT.plusSeconds(15)));
+        assertThat(orders.findById(order.id()).orElseThrow().pricing()).isEqualTo(order.pricing());
         var request = new DeliveryRequest(order.id(),
                 new DeliveryDestination("Cantina", -23.54, -46.62), order.destination());
 
@@ -223,5 +231,10 @@ class OrderItemsPersistenceTests {
 
     private static DeliveryDestination destination() {
         return new DeliveryDestination("Rua das Flores, 42", -23.55, -46.63);
+    }
+
+    private OrderPayment intent(String key) {
+        return OrderPayment.request(order, new IdempotencyKey(key), SimulatedPaymentMethod.APPROVED_CARD,
+                CREATED_AT.plusSeconds(10));
     }
 }

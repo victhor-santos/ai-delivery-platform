@@ -42,7 +42,7 @@ class OrderCustomersMigrationTests {
         var originalOrder = jdbc.queryForMap("SELECT * FROM orders WHERE id = ?", orderId);
         var originalItem = jdbc.queryForMap("SELECT * FROM order_items WHERE order_id = ?", orderId);
 
-        var flyway = Flyway.configure().dataSource(dataSource).load();
+        var flyway = Flyway.configure().dataSource(dataSource).target("4").load();
         assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
         flyway.validate();
 

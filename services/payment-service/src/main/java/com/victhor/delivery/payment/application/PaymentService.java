@@ -16,23 +16,27 @@ public class PaymentService {
     public static final int MAX_PAGE_SIZE = 100;
 
     private final PaymentRepository payments;
+    private final OrderLookup orders;
     private final Clock clock;
 
-    public PaymentService(PaymentRepository payments, Clock clock) {
+    public PaymentService(PaymentRepository payments, OrderLookup orders, Clock clock) {
         this.payments = payments;
+        this.orders = orders;
         this.clock = clock;
     }
 
     /**
      * Processes a simulated charge once per customer and idempotency key. Repeating the same intent returns the
      * stored attempt, including after a concurrent request won the race; another intent under the key is rejected.
+     * A new attempt is charged only after Order confirms that the customer's order awaits exactly this amount.
      */
     public PaymentResult attempt(UUID customerId, IdempotencyKey key, UUID orderId, BigDecimal amount,
-            SimulatedPaymentMethod method) {
+            SimulatedPaymentMethod method, String accessToken) {
         Objects.requireNonNull(customerId, "Customer id is required");
         Objects.requireNonNull(key, "Idempotency key is required");
         Objects.requireNonNull(orderId, "Order id is required");
         Objects.requireNonNull(method, "Payment method is required");
+        Objects.requireNonNull(accessToken, "Access token is required");
         BigDecimal validAmount = PaymentAttempt.validateAmount(amount);
 
         var existing = payments.findByIdempotencyKey(customerId, key);
@@ -42,6 +46,9 @@ public class PaymentService {
         try {
             if (payments.hasApprovedPayment(customerId, orderId)) {
                 throw new OrderAlreadyPaidException();
+            }
+            if (!orders.findById(orderId, accessToken).accepts(validAmount)) {
+                throw new OrderNotPayableException();
             }
             var attempt = PaymentAttempt.process(customerId, orderId, key, validAmount, method, now());
             return new PaymentResult(payments.save(attempt), false);

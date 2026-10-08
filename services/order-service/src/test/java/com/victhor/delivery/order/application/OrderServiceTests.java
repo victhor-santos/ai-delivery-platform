@@ -232,14 +232,11 @@ class OrderServiceTests {
     void readsAndTransitionsPersistedSnapshotsWithoutFetchingCatalogAgain() {
         var pricing = new OrderPricing(List.of(new OrderItem(FIRST_ITEM, "Nome preservado", 2, BigDecimal.TEN)));
         var original = Order.create(CUSTOMER_ID, RESTAURANT_ID, DESTINATION, pricing, DATABASE_TIME.minusSeconds(60));
-        var confirmed = original.confirm(DATABASE_TIME);
-        var cancelled = confirmed.cancel(DATABASE_TIME);
+        var cancelled = original.cancel(DATABASE_TIME);
         when(orders.findById(original.id())).thenReturn(Optional.of(original));
-        when(orders.confirm(original.id(), DATABASE_TIME)).thenReturn(Optional.of(confirmed));
         when(orders.cancel(original.id(), DATABASE_TIME)).thenReturn(Optional.of(cancelled));
 
         assertThat(service.findById(original.id(), CUSTOMER_ID).pricing()).isSameAs(pricing);
-        assertThat(service.confirm(original.id(), CUSTOMER_ID).pricing()).isSameAs(pricing);
         assertThat(service.cancel(original.id(), CUSTOMER_ID).pricing()).isSameAs(pricing);
         verifyNoInteractions(catalog);
     }
@@ -255,10 +252,8 @@ class OrderServiceTests {
 
         for (UUID id : List.of(foreign.id(), legacy.id())) {
             assertThatThrownBy(() -> service.findById(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
-            assertThatThrownBy(() -> service.confirm(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
             assertThatThrownBy(() -> service.cancel(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
         }
-        verify(orders, never()).confirm(any(), any());
         verify(orders, never()).cancel(any(), any());
         verifyNoInteractions(catalog);
     }
@@ -268,9 +263,7 @@ class OrderServiceTests {
         UUID id = UUID.randomUUID();
 
         assertThatThrownBy(() -> service.findById(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
-        assertThatThrownBy(() -> service.confirm(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
         assertThatThrownBy(() -> service.cancel(id, CUSTOMER_ID)).isInstanceOf(OrderNotFoundException.class);
-        verify(orders, never()).confirm(any(), any());
         verify(orders, never()).cancel(any(), any());
         verifyNoInteractions(catalog);
     }

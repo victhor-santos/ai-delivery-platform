@@ -63,11 +63,11 @@ A V1 deverá permitir usuário → cardápio → pedido com itens e valores pres
 | `feature/authentication` (PR #28 integrado) | Cadastro com senha, login, senhas protegidas e credenciais de acesso, com testes de sucesso/recusa |
 | `feature/resource-authorization` (PR #29 integrado) | Permissões e vínculo entre usuário e recursos; impedir acesso ou alteração de pedido alheio |
 | `feature/simulated-payments` (PR #31 integrado) | Tentativas de pagamento simuladas com aprovação/recusa, persistência e idempotência |
-| `feature/order-payment-integration` | Regras de compra e recuperação de falhas entre pedido/pagamento/entrega, sem duplicar cobrança ou entrega |
+| `feature/order-payment-integration` (atual) | Regras de compra e recuperação de falhas entre pedido/pagamento/entrega, sem duplicar cobrança ou entrega |
 | `feature/frontend-foundation` | Interface web conectada ao Gateway, navegação, login e tratamento de erros; framework definido nessa etapa |
 | `feature/frontend-checkout` | Restaurantes, cardápio, quantidades, resumo de valores, criação do pedido e pagamento simulado |
 | `feature/frontend-deliveries` | Acompanhamento dos estados e visualização do grafo/rota sintética; ações operacionais autorizadas |
-| `feature/ci-validation` (atual) | Builds e testes Java/Python/frontend reproduzíveis em CI, incluindo integrações com PostgreSQL; antecipada antes do frontend, que acrescentará seus jobs |
+| `feature/ci-validation` | Builds e testes Java/Python/frontend reproduzíveis em CI, incluindo integrações com PostgreSQL; antecipada antes do frontend, que acrescentará seus jobs |
 | `feature/request-observability` | Correlação de requisições, logs úteis e métricas do fluxo/roteamento, sem expor credenciais |
 | `feature/model-promotion-validation` | Coleta simulada cobrindo trechos, horários e tráfego; validar contrato, métricas e compatibilidade antes de permitir promoção do modelo |
 | `feature/v1-release-validation` | Testes E2E do fluxo completo, falhas e retomada, documentação de execução e limites, checklist de release |

@@ -69,7 +69,7 @@ class OrderPersistenceTests {
                 var firstCopy = first.find(OrderEntity.class, order.id());
                 var secondCopy = second.find(OrderEntity.class, order.id());
                 Instant confirmationTime = order.createdAt().plusSeconds(10);
-                firstCopy.applyState(firstCopy.toDomain().confirm(confirmationTime));
+                firstCopy.applyState(firstCopy.toDomain().requestPayment(confirmationTime));
                 first.getTransaction().commit();
                 secondCopy.applyState(secondCopy.toDomain().cancel(confirmationTime.plusSeconds(10)));
                 assertThatThrownBy(second::flush).isInstanceOf(OptimisticLockException.class);
@@ -82,7 +82,8 @@ class OrderPersistenceTests {
                 }
             }
         }
-        assertThat(orders.findById(order.id()).orElseThrow().status()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(orders.findById(order.id()).orElseThrow().status()).isEqualTo(OrderStatus.CREATED);
+        assertThat(orders.findById(order.id()).orElseThrow().paymentRequestedAt()).isNotNull();
         assertThat(orders.findById(order.id()).orElseThrow().cancelledAt()).isNull();
         assertThat(orders.findById(order.id()).orElseThrow().pricing()).isEqualTo(order.pricing());
     }

@@ -41,11 +41,6 @@ public class OrderController {
         return OrderResponse.from(orders.findById(id, CurrentCustomer.id(principal)));
     }
 
-    @PostMapping("/{id}/confirm")
-    public OrderResponse confirm(@AuthenticationPrincipal Jwt principal, @PathVariable UUID id) {
-        return OrderResponse.from(orders.confirm(id, CurrentCustomer.id(principal)));
-    }
-
     @PostMapping("/{id}/cancel")
     public OrderResponse cancel(@AuthenticationPrincipal Jwt principal, @PathVariable UUID id) {
         return OrderResponse.from(orders.cancel(id, CurrentCustomer.id(principal)));

@@ -17,6 +17,9 @@ import com.victhor.delivery.order.application.OrderNotFoundException;
 import com.victhor.delivery.order.application.CatalogSelectionConflictException;
 import com.victhor.delivery.order.application.RemoteServiceUnavailableException;
 import com.victhor.delivery.order.application.DeliveryIntegrationConflictException;
+import com.victhor.delivery.order.application.IdempotencyKeyReusedException;
+import com.victhor.delivery.order.application.PaymentInProgressException;
+import com.victhor.delivery.order.application.PaymentRejectedException;
 import com.victhor.delivery.order.domain.OrderStateConflictException;
 
 @RestControllerAdvice
@@ -39,6 +42,24 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail handleDeliveryConflict(DeliveryIntegrationConflictException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
                 "O restaurante ou os dados da entrega não permitem esta solicitação.");
+    }
+
+    @ExceptionHandler(PaymentInProgressException.class)
+    ProblemDetail handlePaymentInProgress(PaymentInProgressException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Outro pagamento deste pedido está em andamento. Repita-o com a mesma Idempotency-Key.");
+    }
+
+    @ExceptionHandler(PaymentRejectedException.class)
+    ProblemDetail handlePaymentRejected(PaymentRejectedException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "O serviço de pagamentos não aceitou esta tentativa; nenhum valor foi cobrado.");
+    }
+
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    ProblemDetail handleIdempotencyKeyReused(IdempotencyKeyReusedException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT,
+                "A Idempotency-Key já foi usada neste pedido com outro método de pagamento.");
     }
 
     @ExceptionHandler(CatalogSelectionConflictException.class)

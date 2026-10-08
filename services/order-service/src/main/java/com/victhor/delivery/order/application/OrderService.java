@@ -53,11 +53,6 @@ public class OrderService {
                 .orElseThrow(OrderNotFoundException::new);
     }
 
-    public Order confirm(UUID id, UUID customerId) {
-        findById(id, customerId);
-        return orders.confirm(id, now()).orElseThrow(OrderNotFoundException::new);
-    }
-
     public Order cancel(UUID id, UUID customerId) {
         findById(id, customerId);
         return orders.cancel(id, now()).orElseThrow(OrderNotFoundException::new);

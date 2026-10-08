@@ -2,6 +2,7 @@ package com.victhor.delivery.payment.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -25,6 +26,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -36,6 +38,7 @@ import com.victhor.delivery.payment.application.IdempotencyKeyAlreadyUsedExcepti
 import com.victhor.delivery.payment.application.OrderAlreadyPaidException;
 import com.victhor.delivery.payment.application.PaymentRepository;
 import com.victhor.delivery.payment.application.PaymentResult;
+import com.victhor.delivery.payment.application.OrderLookup;
 import com.victhor.delivery.payment.application.PaymentService;
 import com.victhor.delivery.payment.domain.IdempotencyKey;
 import com.victhor.delivery.payment.domain.PaymentAttempt;
@@ -45,6 +48,8 @@ import com.victhor.delivery.payment.domain.SimulatedPaymentMethod;
 @SpringBootTest(properties = "PAYMENT_DB_PASSWORD=testcontainers-only")
 @Testcontainers
 class PaymentPersistenceTests {
+
+    private static final String TOKEN = "access-token";
 
     private static final Instant NOW = Instant.parse("2026-10-07T12:00:00.123456Z");
     private static final BigDecimal AMOUNT = new BigDecimal("59.80");
@@ -60,6 +65,9 @@ class PaymentPersistenceTests {
     @Autowired
     private PaymentService service;
 
+    @MockitoBean
+    private OrderLookup orders;
+
     @Autowired
     private JdbcTemplate jdbc;
 
@@ -69,6 +77,7 @@ class PaymentPersistenceTests {
     @BeforeEach
     void clearAttempts() {
         jdbc.update("DELETE FROM payment_attempts");
+        when(orders.findById(order, TOKEN)).thenReturn(new OrderLookup.OrderSnapshot("CREATED", AMOUNT, true));
     }
 
     @Test
@@ -159,7 +168,8 @@ class PaymentPersistenceTests {
     @Test
     void concurrentRequestsWithTheSameKeyStoreOneAttemptAndReturnIt() throws Exception {
         var key = new IdempotencyKey("checkout-race");
-        var results = race(() -> service.attempt(customer, key, order, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD));
+        var results = race(() -> service.attempt(customer, key, order, AMOUNT, SimulatedPaymentMethod.APPROVED_CARD,
+                TOKEN));
 
         assertThat(results).allSatisfy(result -> assertThat(result).isInstanceOf(PaymentResult.class));
         assertThat(results.stream().map(result -> ((PaymentResult) result).attempt().id()).distinct()).hasSize(1);
@@ -170,7 +180,7 @@ class PaymentPersistenceTests {
     @Test
     void concurrentApprovalsWithDifferentKeysChargeTheOrderOnce() throws Exception {
         var results = race(() -> service.attempt(customer, new IdempotencyKey("checkout-" + UUID.randomUUID()), order,
-                AMOUNT, SimulatedPaymentMethod.APPROVED_CARD));
+                AMOUNT, SimulatedPaymentMethod.APPROVED_CARD, TOKEN));
 
         assertThat(results.stream().filter(PaymentResult.class::isInstance)).hasSize(1);
         assertThat(results.stream().filter(OrderAlreadyPaidException.class::isInstance))

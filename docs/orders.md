@@ -4,15 +4,15 @@ O Order Service registra criação, consulta, confirmação e cancelamento de pe
 
 Novos pedidos exigem itens e quantidades. O cadastro consulta o catálogo por HTTP, exige restaurante ativo e itens disponíveis e salva nomes, preços unitários e total em BRL. Alterações posteriores no cardápio não recalculam o pedido. O [contrato de itens e valores](order-items.md) descreve limites, erros e preservação dos pedidos antigos.
 
-Todas as operações exigem o Bearer token do cliente; o pedido registra o `customerId` do token e só atende esse cliente, retornando `404` para outra conta. Veja a [autorização dos recursos](resource-authorization.md). O [pagamento simulado](simulated-payments.md) existe, mas ainda não é exigido nem conferido pelo pedido. Confirmar um pedido é uma ação manual; depois dela, `POST /api/orders/{id}/delivery` solicita a entrega e verifica a localização de coleta. A confirmação não indica pagamento aprovado.
+Todas as operações exigem o Bearer token do cliente; o pedido registra o `customerId` do token e só atende esse cliente, retornando `404` para outra conta. Veja a [autorização dos recursos](resource-authorization.md). O pedido é confirmado somente por um [pagamento simulado aprovado](order-payment-integration.md), cobrado pelo total do pedido; depois dele, `POST /api/orders/{id}/delivery` solicita a entrega e verifica a localização de coleta.
 
 ## Estados e dados
 
 ```text
-CREATED ──confirm──> CONFIRMED
+CREATED ──payment──> CONFIRMED
    │                    │
- cancel               cancel
-   │                    │
+ cancel               cancel (sem pagamento
+   │                    │      aprovado)
    └──────> CANCELLED <──┘
 ```
 
@@ -22,7 +22,7 @@ A composição também é imutável nesta etapa. Cada linha contém `menuItemId`
 
 `createdAt` e `updatedAt` são preenchidos no cadastro. `confirmedAt` e `cancelledAt` começam como `null` e registram as respectivas transições. Os horários usam UTC e precisão de microssegundos. Um cancelamento após a confirmação preserva os dois eventos.
 
-Confirmar um pedido já confirmado ou cancelar um pedido já cancelado retorna o estado atual, sem mudar os horários. Confirmar um pedido cancelado retorna `409`. O cadastro não é idempotente: repetir `POST /api/orders` cria outro pedido.
+Cancelar um pedido já cancelado retorna o estado atual, sem mudar os horários. Um pedido com pagamento em andamento ou aprovado não pode ser cancelado (`409`), e um pedido cancelado não pode ser pago (`409`). `paymentRequestedAt` e `paymentId` acompanham o pagamento; veja [pagamento de pedidos](order-payment-integration.md). O cadastro não é idempotente: repetir `POST /api/orders` cria outro pedido.
 
 O pedido inclui `deliveryRequestedAt`, inicialmente `null`. Depois da intenção de entrega persistida, o cancelamento é rejeitado com `409`, inclusive se Delivery estiver indisponível. Uma nova tentativa de solicitação recupera a entrega pelo mesmo pedido e snapshots, sem criar duplicatas. Veja [o contrato, falhas e exemplos da integração](order-delivery-integration.md).
 
@@ -95,11 +95,10 @@ $response.StatusCode
 $response.Headers['Location']
 $order = $response.Content | ConvertFrom-Json
 Invoke-RestMethod "$baseUrl/api/orders/$($order.id)" -Headers $auth
-Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders/$($order.id)/confirm" -Headers $auth
 Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders/$($order.id)/cancel" -Headers $auth
 ```
 
-O cadastro retorna `201` e `Location: /api/orders/{id}`. Consulta, confirmação e cancelamento retornam `200` com o mesmo formato:
+O cadastro retorna `201` e `Location: /api/orders/{id}`. Consulta e cancelamento retornam `200` com o mesmo formato. A confirmação acontece pelo [pagamento do pedido](order-payment-integration.md):
 
 ```json
 {
@@ -125,7 +124,9 @@ O cadastro retorna `201` e `Location: /api/orders/{id}`. Consulta, confirmação
     "lineTotal": 51.80
   }],
   "total": 51.80,
-  "currency": "BRL"
+  "currency": "BRL",
+  "paymentRequestedAt": null,
+  "paymentId": null
 }
 ```
 

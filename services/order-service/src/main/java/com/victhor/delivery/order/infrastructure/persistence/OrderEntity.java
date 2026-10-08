@@ -60,6 +60,10 @@ public class OrderEntity {
 
     private Instant deliveryRequestedAt;
 
+    private Instant paymentRequestedAt;
+
+    private UUID paymentId;
+
     @Column(precision = 14, scale = 2)
     private BigDecimal total;
 
@@ -99,7 +103,7 @@ public class OrderEntity {
         var pricing = total == null && items.isEmpty() ? null
                 : new OrderPricing(items.stream().map(OrderItemEmbeddable::toDomain).toList(), total);
         return new Order(id, restaurantId, destination, status, createdAt, updatedAt, confirmedAt, cancelledAt,
-                deliveryRequestedAt, pricing, customerId);
+                deliveryRequestedAt, pricing, customerId, paymentRequestedAt, paymentId);
     }
 
     void applyState(Order order) {
@@ -108,5 +112,7 @@ public class OrderEntity {
         confirmedAt = order.confirmedAt();
         cancelledAt = order.cancelledAt();
         deliveryRequestedAt = order.deliveryRequestedAt();
+        paymentRequestedAt = order.paymentRequestedAt();
+        paymentId = order.paymentId();
     }
 }

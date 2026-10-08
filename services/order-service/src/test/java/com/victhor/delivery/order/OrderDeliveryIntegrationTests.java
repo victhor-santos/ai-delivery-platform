@@ -89,11 +89,13 @@ class OrderDeliveryIntegrationTests {
         String url = "http://localhost:" + REMOTE.getAddress().getPort();
         properties.add("order.integration.catalog-url", () -> url);
         properties.add("order.integration.delivery-url", () -> url);
+        properties.add("order.integration.payment-url", () -> url);
     }
 
     @BeforeEach
     void reset() {
         jdbc.update("DELETE FROM order_delivery_requests");
+        jdbc.update("DELETE FROM order_payments");
         jdbc.update("DELETE FROM orders");
         catalogStatus = 200;
         mode = "normal";
@@ -147,12 +149,16 @@ class OrderDeliveryIntegrationTests {
 
     @ParameterizedTest
     @ValueSource(strings = {"inactive", "no-location"})
-    void invalidRestaurantDoesNotFreezeOrder(String responseMode) throws Exception {
+    void invalidRestaurantRecordsNoDeliveryIntentAndAllowsALaterRetry(String responseMode) throws Exception {
         String order = confirmedOrder();
         mode = responseMode;
         assertProblem(send("POST", order + "/delivery", null), 409);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM order_delivery_requests", Integer.class)).isZero();
-        assertThat(send("POST", order + "/cancel", null).statusCode()).isEqualTo(200);
+        assertThat(JSON.readTree(send("GET", order, null).body()).path("deliveryRequestedAt").isNull()).isTrue();
+        // A paid order is never cancelled without a refund, which V1 does not offer.
+        assertProblem(send("POST", order + "/cancel", null), 409);
+        mode = "normal";
+        assertThat(send("POST", order + "/delivery", null).statusCode()).isEqualTo(200);
     }
 
     @ParameterizedTest
@@ -254,7 +260,13 @@ class OrderDeliveryIntegrationTests {
 
     private String confirmedOrder() throws Exception {
         String path = newOrder();
-        assertThat(send("POST", path + "/confirm", null).statusCode()).isEqualTo(200);
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path + "/payment"))
+                .header("Content-Type", "application/json").header("Idempotency-Key", UUID.randomUUID().toString())
+                .header("Authorization", "Bearer " + TestAccessTokens.issue(CUSTOMER))
+                .POST(HttpRequest.BodyPublishers.ofString("{\"method\":\"sim-card-approved\"}")).build();
+        var payment = client.send(request, HttpResponse.BodyHandlers.ofString());
+        assertThat(payment.statusCode()).as(payment.body()).isEqualTo(200);
+        assertThat(JSON.readTree(send("GET", path, null).body()).path("status").asString()).isEqualTo("CONFIRMED");
         return path;
     }
 
@@ -280,6 +292,7 @@ class OrderDeliveryIntegrationTests {
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             server.createContext("/api/catalog/restaurants", OrderDeliveryIntegrationTests::catalog);
             server.createContext("/api/deliveries/by-order", OrderDeliveryIntegrationTests::delivery);
+            server.createContext("/api/payments", OrderDeliveryIntegrationTests::payment);
             server.start();
             return server;
         } catch (IOException exception) {
@@ -328,6 +341,14 @@ class OrderDeliveryIntegrationTests {
         } else {
             respond(exchange, mode.equals("lost-response") ? 503 : 200, receipt.toString());
         }
+    }
+
+    /** Approves every charge, echoing the request the way the Payment Service does. */
+    private static void payment(HttpExchange exchange) throws IOException {
+        ObjectNode request = (ObjectNode) JSON.readTree(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+        request.put("id", UUID.randomUUID().toString()).put("currency", "BRL").put("status", "APPROVED")
+                .putNull("declineReason").put("simulated", true);
+        respond(exchange, 201, request.toString());
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {
