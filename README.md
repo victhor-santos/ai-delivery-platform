@@ -18,6 +18,8 @@ O Delivery Service cria e consulta entregas e entregadores por HTTP, com persist
 
 Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. O Payment Service registra [tentativas de pagamento simuladas](docs/simulated-payments.md), com aprovação ou recusa fixadas pelo método, idempotência e PostgreSQL próprio; antes de cobrar, confere o pedido no Order Service. RabbitMQ permanece em etapa posterior.
 
+A [interface web](docs/frontend-foundation.md), em React e TypeScript, permite criar conta, entrar e consultar o perfil autenticado. Ela chama somente o Gateway, sob `/api` na mesma origem, e encerra a sessão quando o token de 15 minutos expira. Checkout e acompanhamento das entregas são as próximas etapas.
+
 Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A [API de rotas previstas](docs/intelligent-routing-api.md) combina o modelo em lote com Dijkstra. Delivery já consulta essa API e persiste o plano por entrega. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
 O gerador offline já produz observações sintéticas por trecho, com seed, timestamps de disponibilidade, schema de features, partições temporais por cenário e manifesto com checksums. Os dados completos são gerados localmente e ficam fora do Git. Veja [como gerar e conferir o dataset](docs/route-segment-dataset.md).
@@ -26,7 +28,7 @@ O treinamento offline compara Dummy, regressão linear, Random Forest e referên
 
 ## Evolução para AI Engineering
 
-A consulta `POST /api/routes/fastest` retorna o caminho de menor tempo previsto, com prontidão dos recursos e falhas controladas. Delivery integra e persiste o plano e associa as previsões aos tempos observados em travessias simuladas. O perfil `demo` do Compose executa o fluxo completo em containers, com modelo Linux montado somente para leitura e treinamento offline. Java continua cuidando das transações. A [avaliação offline dos CSVs](docs/segment-observation-evaluation.md) valida os exports e produz métricas das previsões armazenadas, com cortes de disponibilidade e proveniência. A [preparação das observações](docs/segment-observation-dataset.md) cria partições temporais por entrega, com manifesto e carregamento validado próprios. O [treinamento dessas observações](docs/segment-observation-training.md) seleciona um modelo na validação e o avalia no teste reservado, com bundle exclusivo para uso offline. Publicação desse modelo na API e interface web são evoluções posteriores.
+A consulta `POST /api/routes/fastest` retorna o caminho de menor tempo previsto, com prontidão dos recursos e falhas controladas. Delivery integra e persiste o plano e associa as previsões aos tempos observados em travessias simuladas. O perfil `demo` do Compose executa o fluxo completo em containers, com modelo Linux montado somente para leitura e treinamento offline. Java continua cuidando das transações. A [avaliação offline dos CSVs](docs/segment-observation-evaluation.md) valida os exports e produz métricas das previsões armazenadas, com cortes de disponibilidade e proveniência. A [preparação das observações](docs/segment-observation-dataset.md) cria partições temporais por entrega, com manifesto e carregamento validado próprios. O [treinamento dessas observações](docs/segment-observation-training.md) seleciona um modelo na validação e o avalia no teste reservado, com bundle exclusivo para uso offline. Publicação desse modelo na API é uma evolução posterior.
 
 A [integração de rotas com Delivery](docs/delivery-route-integration.md) está implementada. Grafo e observações são fictícios e não representam ruas ou trânsito reais. Python não é necessário para executar os serviços Java.
 
@@ -49,9 +51,9 @@ docker compose --profile demo up -d --build --wait --wait-timeout 240
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 ```
 
-Gateway atende em `http://localhost:8080`; Python em `http://localhost:8000`. As portas Java 8081–8085 são internas neste perfil. Sem `demo`, o Compose continua iniciando somente bancos. Não é necessário instalar Java ou Python na máquina para esta demonstração. O script verifica um modelo existente e só treina se não houver bundle; a API nunca treina ao iniciar.
+A interface web atende em `http://localhost:3000`; Gateway em `http://localhost:8080`; Python em `http://localhost:8000`. As portas Java 8081–8085 são internas neste perfil. Sem `demo`, o Compose continua iniciando somente bancos. Não é necessário instalar Java, Python ou Node.js na máquina para esta demonstração. O script verifica um modelo existente e só treina se não houver bundle; a API nunca treina ao iniciar.
 
-O perfil utiliza cinco bancos e sete aplicações, totalizando doze containers. Cada JVM usa heap entre 64 e 384 MB e dimensiona seus pools para dois processadores, evitando que as seis aplicações dimensionem memória/threads pelo total da VM Docker. `DEMO_JAVA_TOOL_OPTIONS` permite ajustar esses parâmetros somente no Compose; execução nativa permanece independente.
+O perfil utiliza cinco bancos, sete aplicações e a interface web, totalizando treze containers. Cada JVM usa heap entre 64 e 384 MB e dimensiona seus pools para dois processadores, evitando que as seis aplicações dimensionem memória/threads pelo total da VM Docker. `DEMO_JAVA_TOOL_OPTIONS` permite ajustar esses parâmetros somente no Compose; execução nativa permanece independente.
 
 Veja o [guia do Compose](docs/route-intelligence-compose.md) para configuração, compatibilidade do modelo, testes de queda/recuperação e preservação dos volumes. O smoke cria registros de demonstração no banco. Os comandos de execução nativa abaixo continuam disponíveis.
 
@@ -64,6 +66,7 @@ Para verificar cadastro com senha, login, identidade autenticada, perfis e ender
 - Docker com suporte a containers Linux e Docker Compose v2, em execução, para os bancos locais e os testes de integração de usuários, catálogo, pedidos e entregas.
 - Acesso à internet na primeira execução para baixar Maven, dependências e a imagem PostgreSQL.
 - Para Route Intelligence: Python 3.12+ e `uv`; a versão de referência é 3.12. A preparação está no [guia do serviço Python](docs/route-intelligence-foundation.md).
+- Para a interface web: Node.js 22.22+ e npm. Os comandos estão na [base da interface web](docs/frontend-foundation.md).
 
 ### Linux
 
