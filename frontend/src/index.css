@@ -333,3 +333,7 @@ button.secondary {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.payment {
+  margin: 1rem 0 0.75rem;
+}

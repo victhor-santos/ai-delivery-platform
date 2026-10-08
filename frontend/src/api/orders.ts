@@ -49,3 +49,37 @@ export function createOrder(token: string, order: NewOrder): Promise<Order> {
 export function getOrder(token: string, id: string, signal?: AbortSignal): Promise<Order> {
   return request(`/api/orders/${encodeURIComponent(id)}`, { token, signal })
 }
+
+export type PaymentMethod = 'sim-card-approved' | 'sim-card-declined' | 'sim-card-insufficient-funds'
+
+// Recusa é um resultado registrado (200), não um erro HTTP.
+export type OrderPayment = {
+  orderId: string
+  paymentId: string
+  status: 'APPROVED' | 'DECLINED'
+  declineReason: string | null
+  method: PaymentMethod
+  amount: number
+  currency: 'BRL'
+  requestedAt: string
+  completedAt: string
+}
+
+// Repetir com a mesma chave retoma a mesma intenção, sem nova cobrança.
+export function payOrder(
+  token: string,
+  orderId: string,
+  method: PaymentMethod,
+  idempotencyKey: string,
+): Promise<OrderPayment> {
+  return request(`/api/orders/${encodeURIComponent(orderId)}/payment`, {
+    method: 'POST',
+    body: { method },
+    token,
+    headers: { 'Idempotency-Key': idempotencyKey },
+  })
+}
+
+export function cancelOrder(token: string, orderId: string): Promise<Order> {
+  return request(`/api/orders/${encodeURIComponent(orderId)}/cancel`, { method: 'POST', token })
+}

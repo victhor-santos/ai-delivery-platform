@@ -5,6 +5,8 @@ import { getOrder, type Order } from '../api/orders'
 import { useLoad } from '../api/useLoad'
 import { useAuth } from '../auth/AuthContext'
 import { formatAmount } from '../checkout/money'
+import { OrderActions } from '../checkout/OrderActions'
+import { clearPendingPayment } from '../checkout/pendingPayment'
 import { Alert } from '../components/Alert'
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -27,13 +29,16 @@ export function OrderPage() {
   const load = useCallback(
     async (signal: AbortSignal) => {
       const order = await getOrder(token, orderId, signal)
+      if (order.status !== 'CREATED') {
+        clearPendingPayment(order.id)
+      }
       // O nome do restaurante é só informativo; sem ele o pedido continua utilizável.
       const restaurant = await getRestaurant(order.restaurantId, signal).catch(() => null)
       return { order, restaurantName: restaurant?.name ?? null }
     },
     [token, orderId],
   )
-  const { data, error } = useLoad(load, 'Não foi possível carregar o pedido.')
+  const { data, error, setData } = useLoad(load, 'Não foi possível carregar o pedido.')
 
   if (error) {
     return (
@@ -84,6 +89,7 @@ export function OrderPage() {
         <span>Total</span>
         <strong>{order.total === null ? 'Valor desconhecido' : formatAmount(order.total)}</strong>
       </p>
+      <OrderActions order={order} onChange={(next) => setData({ order: next, restaurantName })} />
     </section>
   )
 }
