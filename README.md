@@ -18,7 +18,7 @@ O Delivery Service cria e consulta entregas e entregadores por HTTP, com persist
 
 Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. O Payment Service registra [tentativas de pagamento simuladas](docs/simulated-payments.md), com aprovação ou recusa fixadas pelo método, idempotência e PostgreSQL próprio; antes de cobrar, confere o pedido no Order Service. RabbitMQ permanece em etapa posterior.
 
-A [interface web](docs/frontend-foundation.md), em React e TypeScript, permite criar conta, entrar e consultar o perfil autenticado. Ela chama somente o Gateway, sob `/api` na mesma origem, e encerra a sessão quando o token de 15 minutos expira. Checkout e acompanhamento das entregas são as próximas etapas.
+A [interface web](docs/frontend-foundation.md), em React e TypeScript, permite criar conta, entrar e consultar o perfil autenticado. Ela chama somente o Gateway, sob `/api` na mesma origem, e encerra a sessão quando o token de 15 minutos expira. O [checkout](docs/frontend-checkout.md) cobre restaurantes, cardápio, carrinho, destino, pedido e pagamento simulado. O acompanhamento das entregas é a próxima etapa.
 
 Route Intelligence possui aplicação FastAPI, configuração por ambiente, `/health`, testes e dependências travadas. Já calcula rotas em um grafo sintético com Dijkstra e tempos fixos de referência, por um comando de terminal. A [API de rotas previstas](docs/intelligent-routing-api.md) combina o modelo em lote com Dijkstra. Delivery já consulta essa API e persiste o plano por entrega. Veja a [execução do serviço Python](docs/route-intelligence-foundation.md) e a [demonstração de roteamento](docs/road-graph.md).
 
@@ -50,6 +50,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-route-model.
 docker compose --profile demo up -d --build --wait --wait-timeout 240
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 ```
+
+Para ter restaurantes e cardápios na interface, rode `pwsh -NoProfile -File scripts/seed-demo-catalog.ps1` com a demonstração no ar; repetir o comando não duplica dados.
 
 A interface web atende em `http://localhost:3000`; Gateway em `http://localhost:8080`; Python em `http://localhost:8000`. As portas Java 8081–8085 são internas neste perfil. Sem `demo`, o Compose continua iniciando somente bancos. Não é necessário instalar Java, Python ou Node.js na máquina para esta demonstração. O script verifica um modelo existente e só treina se não houver bundle; a API nunca treina ao iniciar.
 

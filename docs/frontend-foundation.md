@@ -1,6 +1,6 @@
 # Base da interface web
 
-A aplicação em [`frontend/`](../frontend) é a interface web da V1. Nesta etapa ela permite criar conta, entrar, consultar o perfil autenticado e sair. Restaurantes, cardápio, pedido e pagamento entram em `feature/frontend-checkout`, e o acompanhamento das entregas em `feature/frontend-deliveries`.
+A aplicação em [`frontend/`](../frontend) é a interface web da V1. Nesta etapa ela permite criar conta, entrar, consultar o perfil autenticado e sair. Restaurantes, cardápio, pedido e pagamento estão no [checkout](frontend-checkout.md), e o acompanhamento das entregas em `feature/frontend-deliveries`.
 
 ## Escolhas
 
