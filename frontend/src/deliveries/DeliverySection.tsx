@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
 import { DeliveryTimeline } from './DeliveryTimeline'
 import { deliveryStatusLabel } from './deliveryStatus'
+import { RouteSection } from './RouteSection'
 import { useDeliveryTracking } from './useDeliveryTracking'
 
 const UNKNOWN_RESULT =
@@ -76,7 +77,12 @@ export function DeliverySection({ order, onOrderChange }: { order: Order; onOrde
       {requested && !tracking.delivery && !tracking.missing && !tracking.error && (
         <p aria-busy="true">Carregando entrega…</p>
       )}
-      {tracking.delivery && <DeliveryTimeline delivery={tracking.delivery} />}
+      {tracking.delivery && (
+        <>
+          <DeliveryTimeline delivery={tracking.delivery} />
+          <RouteSection delivery={tracking.delivery} />
+        </>
+      )}
     </section>
   )
 }

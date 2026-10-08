@@ -390,3 +390,108 @@ button.secondary {
   background: var(--accent);
   border-color: var(--accent);
 }
+
+.route-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.route-section h3 {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+}
+
+.route-section > button {
+  justify-self: start;
+}
+
+.route-map {
+  margin: 0;
+}
+
+.route-map svg {
+  display: block;
+  width: 100%;
+  max-height: 22rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.route-map .road {
+  stroke: var(--border);
+  stroke-width: 45;
+  stroke-linecap: round;
+}
+
+.route-map polyline.route {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 70;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.route-map circle {
+  fill: var(--surface);
+  stroke: var(--muted);
+  stroke-width: 18;
+}
+
+.route-map .origin circle {
+  fill: var(--info-bg);
+  stroke: var(--info-text);
+  stroke-width: 30;
+}
+
+.route-map .destination circle {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+.route-map text {
+  font-size: 120px;
+  font-weight: 700;
+  fill: var(--text);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.route-map .destination text {
+  fill: var(--accent-text);
+}
+
+.route-map figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.legend::before {
+  content: '';
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: 0.35rem;
+  vertical-align: -0.1rem;
+  border-radius: 50%;
+}
+
+.legend.origin::before {
+  background: var(--info-bg);
+  border: 2px solid var(--info-text);
+}
+
+.legend.destination::before {
+  background: var(--accent);
+}
+
+.legend.route::before {
+  height: 0.25rem;
+  vertical-align: 0.15rem;
+  background: var(--accent);
+  border-radius: 2px;
+}

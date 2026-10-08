@@ -1,4 +1,4 @@
-import { request } from './client'
+import { ApiError, request } from './client'
 
 export type DeliveryStatus = 'CREATED' | 'ASSIGNED' | 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
 
@@ -44,4 +44,56 @@ export function getDeliveryByOrder(orderId: string, signal?: AbortSignal): Promi
 
 export function isFinished(delivery: Delivery): boolean {
   return delivery.status === 'DELIVERED' || delivery.status === 'CANCELLED'
+}
+
+export type RoutePoint = {
+  latitude: number
+  longitude: number
+}
+
+export type RouteSegment = {
+  segmentId: string
+  distanceKm: number
+  predictedTravelTimeMinutes: number
+}
+
+// Último plano salvo pelo Delivery Service; tempos previstos pelo modelo sobre dados sintéticos.
+export type RoutePlan = {
+  id: string
+  deliveryId: string
+  departureAt: string
+  plannedAt: string
+  route: RoutePoint[]
+  segments: RouteSegment[]
+  distanceKm: number
+  predictedTravelTimeMinutes: number
+  predictedAt: string
+  contextAsOf: string
+  modelVersion: string
+  graphVersion: string
+  dataOrigin: string
+}
+
+// Sem plano salvo, o servidor responde 404; aqui isso vira null.
+export async function getRoutePlan(deliveryId: string, signal?: AbortSignal): Promise<RoutePlan | null> {
+  try {
+    return await request<RoutePlan>(`/api/deliveries/${encodeURIComponent(deliveryId)}/route`, { signal })
+  } catch (failure) {
+    if (failure instanceof ApiError && failure.status === 404) {
+      return null
+    }
+    throw failure
+  }
+}
+
+// Cada chamada consulta o modelo e substitui o plano anterior; uma falha preserva o plano salvo.
+export function planRoute(deliveryId: string, departureAt: Date): Promise<RoutePlan> {
+  return request(`/api/deliveries/${encodeURIComponent(deliveryId)}/route`, {
+    method: 'POST',
+    body: { departureAt: departureAt.toISOString() },
+  })
+}
+
+export function canPlanRoute(delivery: Delivery): boolean {
+  return delivery.status === 'CREATED' || delivery.status === 'ASSIGNED' || delivery.status === 'PICKED_UP'
 }
