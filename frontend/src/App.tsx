@@ -6,6 +6,8 @@ import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { RestaurantPage } from './pages/RestaurantPage'
+import { RestaurantsPage } from './pages/RestaurantsPage'
 
 export function App() {
   return (
@@ -17,6 +19,22 @@ export function App() {
             element={
               <RequireAuth>
                 <HomePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="restaurants"
+            element={
+              <RequireAuth>
+                <RestaurantsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="restaurants/:restaurantId"
+            element={
+              <RequireAuth>
+                <RestaurantPage />
               </RequireAuth>
             }
           />
