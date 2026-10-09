@@ -6,6 +6,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.api.request_ids import HEADER, request_id_of
+
 logger = logging.getLogger(__name__)
 ProblemCode = Literal[
     "INVALID_REQUEST",
@@ -79,4 +81,9 @@ def register_problem_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def internal_error(request: Request, exception: Exception):
         logger.exception("Unhandled route service error", exc_info=exception)
-        return problem_response("INTERNAL_ERROR")
+        response = problem_response("INTERNAL_ERROR")
+        # Unhandled errors are answered outside the request id middleware.
+        request_id = request_id_of(request)
+        if request_id is not None:
+            response.headers[HEADER] = request_id
+        return response

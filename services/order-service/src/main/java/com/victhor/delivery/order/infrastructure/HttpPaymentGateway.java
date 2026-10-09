@@ -13,6 +13,7 @@ import com.victhor.delivery.order.application.PaymentGateway;
 import com.victhor.delivery.order.application.PaymentRejectedException;
 import com.victhor.delivery.order.application.RemoteServiceUnavailableException;
 import com.victhor.delivery.order.domain.OrderPayment;
+import com.victhor.delivery.order.observability.RequestIds;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -111,8 +112,8 @@ public class HttpPaymentGateway implements PaymentGateway {
     }
 
     private HttpRequest.Builder request(String url, String accessToken) {
-        return HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header("Accept", "application/json")
-                .header("Authorization", "Bearer " + accessToken);
+        return RequestIds.propagate(HttpRequest.newBuilder(URI.create(url))).timeout(timeout)
+                .header("Accept", "application/json").header("Authorization", "Bearer " + accessToken);
     }
 
     private HttpResponse<String> send(HttpRequest request) {

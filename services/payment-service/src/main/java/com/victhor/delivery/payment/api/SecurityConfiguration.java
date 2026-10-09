@@ -29,7 +29,7 @@ class SecurityConfiguration {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.GET, "/api/payments/ping", "/actuator/health", "/actuator/health/**",
-                                "/actuator/info")
+                                "/actuator/info", "/actuator/metrics", "/actuator/metrics/**")
                         .permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())

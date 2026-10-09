@@ -10,6 +10,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -54,11 +55,53 @@ class GatewayRoutingTests {
         }
     }
 
+    @Test
+    void forwardsAndReturnsAValidClientRequestId() throws Exception {
+        HttpResponse<String> response = get("/api/orders/ping", "web-0123456789abcdef");
+
+        assertThat(response.headers().firstValue("X-Request-Id")).hasValue("web-0123456789abcdef");
+        assertThat(response.headers().firstValue("X-Seen-Request-Id")).hasValue("web-0123456789abcdef");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"short", "has space inside", "semicolon;injected-value", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"})
+    void replacesInvalidRequestIdsWithAGeneratedOne(String invalid) throws Exception {
+        HttpResponse<String> response = get("/api/orders/ping", invalid);
+
+        String requestId = response.headers().firstValue("X-Request-Id").orElseThrow();
+        assertThat(requestId).isNotEqualTo(invalid).matches("[0-9a-f-]{36}");
+        assertThat(response.headers().firstValue("X-Seen-Request-Id")).hasValue(requestId);
+    }
+
+    @Test
+    void generatesARequestIdEvenWhenNoRouteMatches() throws Exception {
+        HttpResponse<String> response = get("/api/unknown", null);
+
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.headers().firstValue("X-Request-Id")).hasValueSatisfying(
+                value -> assertThat(value).matches("[0-9a-f-]{36}"));
+    }
+
+    private HttpResponse<String> get(String path, String requestId) throws Exception {
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
+                    .timeout(Duration.ofSeconds(5)).GET();
+            if (requestId != null) {
+                builder.header("X-Request-Id", requestId);
+            }
+            return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        }
+    }
+
     private static HttpServer startBackend() {
         try {
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             server.createContext("/api/", exchange -> {
                 byte[] body = exchange.getRequestURI().getPath().getBytes(StandardCharsets.UTF_8);
+                String requestId = exchange.getRequestHeaders().getFirst("X-Request-Id");
+                if (requestId != null) {
+                    exchange.getResponseHeaders().set("X-Seen-Request-Id", requestId);
+                }
                 exchange.sendResponseHeaders(200, body.length);
                 try (var output = exchange.getResponseBody()) {
                     output.write(body);

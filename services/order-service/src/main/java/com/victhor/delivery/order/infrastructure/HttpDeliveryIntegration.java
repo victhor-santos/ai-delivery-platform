@@ -15,6 +15,7 @@ import com.victhor.delivery.order.application.RemoteServiceUnavailableException;
 import com.victhor.delivery.order.application.RestaurantLookup;
 import com.victhor.delivery.order.domain.DeliveryDestination;
 import com.victhor.delivery.order.domain.DeliveryRequest;
+import com.victhor.delivery.order.observability.RequestIds;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -119,7 +120,8 @@ public class HttpDeliveryIntegration implements RestaurantLookup, DeliveryGatewa
 
     private HttpResponse<String> send(String method, String url, String body) {
         try {
-            var request = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header("Accept", "application/json");
+            var request = RequestIds.propagate(HttpRequest.newBuilder(URI.create(url))).timeout(timeout)
+                    .header("Accept", "application/json");
             if (body != null) {
                 request.header("Content-Type", "application/json");
             }
