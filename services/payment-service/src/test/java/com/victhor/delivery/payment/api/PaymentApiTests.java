@@ -243,8 +243,8 @@ class PaymentApiTests {
 
     static Stream<String> invalidCredentials() {
         return Stream.of(null, "not-a-token",
-                TestAccessTokens.issue("ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=", Instant.now(), claims -> { }),
-                TestAccessTokens.issue(TestAccessTokens.SECRET, Instant.now().minusSeconds(1000), claims -> { }));
+                TestAccessTokens.issue(TestAccessTokens.FOREIGN_PRIVATE_KEY, Instant.now(), claims -> { }),
+                TestAccessTokens.issue(TestAccessTokens.PRIVATE_KEY, Instant.now().minusSeconds(1000), claims -> { }));
     }
 
     @Test

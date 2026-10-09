@@ -1,0 +1,36 @@
+package com.victhor.delivery.user.infrastructure.auth;
+
+import java.security.KeyFactory;
+import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.RSAPublicKeySpec;
+import java.util.Base64;
+
+import com.nimbusds.jose.jwk.RSAKey;
+
+/** Public test-only keys; none of them signs anything outside the test suite. */
+public final class TestSigningKeys {
+
+    /** The key in application-test.properties. */
+    public static final String FIXTURE_PRIVATE_KEY = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDDICQ97JmF/peXdPQjYHh6fL9tJB/31t15SYAFt5kbxpke0U09Qf5pCYYpdRBzLx3SEsDyUBc0CgjlbQfN36tvAgPR6tHXsrbRrBKAR/EE5SQVhCibyHHRxkbtM5p2NVUDvIUhE50ILXTeNa5Sosr0EY5N3wiRX17kd7g50REnj1scG3RWeLzdWcWal6dnQGzKQfWK+VeLnM7e72db5Iv4xPvExNbc92Xx8uoQH8EJFMlEndYL+zJ6cDvOwpYQpDUTmKzQgx/0ZvtzFn+WJfoMCRSAcaqo0BtSiQy5kdeQbIxJbZ1B5KomTCVLBYvzKsSuefE70DqB3kgRB3XqQK3FAgMBAAECggEASGorSRf/uezMUZdD68UnsT2OxXB8tLv3IcYXTwfeOKKxvPAsXCmbw1uXgNdDLZw00vvGw6bZlaSLvKmEFfGGbAIxbLxa+FQI6TOVAiqw1gI8LAgKEhaHtzSAqhNWpbwROvvB5I6k3p4QG0+MzHpCG+ZQC7JUOa9NRjjwE/T1CtrREWSDYS+4utDf2nwBw55dPIODVn4Bb/Q5lJXwfiUqr1VaAIP0uKPt+OkTb7+vogtO0BRwUYiUFF6qH8x5n6ryQL+8h6k8EM4zSG+7iX7qOpEP2xx2tEM4DoCsoSLQBd46F9hOz+I0Xcr0RLOo5FK3zcWUtfo9X8YcYM6GNA9s2QKBgQDn/Cj50GIaXx3UakGuXU3mK1F0y8vEWLHlD69tj61Iejnw3x4+MGjs415TieRtViu5WfhAAsscdzZh8v/7ssWn0rIR7N2iJzcVbg03NUBogG9V+zu5QGflcjOyAM5DmUwfIclSVmY5F0Se+GCnoxTzZxpnLSUs6Ix+GJ+7EZaP8wKBgQDXUyseUvG2XAfViOCchirZXNpRG8mwcGPK4JRxEjwYvBMUmlolxZ8N9lGZscDRNQmDfhL7wQ7Zxqea7rMdmLNbLTfj4Qni0wlVE9hsgo1pBx0Y7qFYvTNut3dGydz5ZwfW3yjHtSadWY6GArxTZgugpWSbg11G4NW2nWnolXPxZwKBgAwjSG2RtqBUm7XyfU9HOH0zhQaMZzP1xBENGgusec+R/ZgZxHZSiBrk5pmOXHJQEOeYyoFm5AOwRRso4LXlq6vVPVXsw8fpL1uir3RVB/KvzaN9CqntscHykLveiOxGiBIU7XiuZpjUG9YJft0mjkESAvKlDQ3lePxcA3eBOxR7AoGBAJhRZPcWhZYSlBghs4IGBtmsLWOi3JHLb0xcgaVa2NhGctjoN0zw9wrRa/flHhjgA9LYpGUitHapaHbY1CvjkTy2SAsTbgLedoOQflCEKbRaK+MvK0Oy02dGsUGKGp7ym0EMq7RaGO7GI2P5G2+DiEYjuX+o9ZrmAUglIn48+r+RAoGAC02G2gFBO2Bcz807tBtmK/WKsjqy6MACg13bR0jSywB1qL+bDm6spzy5Zyx3rbN+LiMoyZe2KwKWEmi+j616aV1OftKsXhbr9JOaGezYJEg6AdM+5mIWjwCj81IryUnEu0+h/hPiq+XBiaCuw+2l6lmg6fL1gCelXHcPDjK9Rw0=";
+    /** A valid 2048-bit RSA key that the services under test do not trust. */
+    public static final String FOREIGN_PRIVATE_KEY = "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDN2ro2Hwu1kjQ/DHWcuZKPMrzjBYbxtnqhLqsSTc71wUSS4+3LJsXjVRiXe1RZZnV8WAee3m/OcMbabCGVM4KVLSK4T7lHJFiexWxJdchtleI7LVhgTrAyAp93y6I3xYMf2CnC7IYwvvTGD7Ih5wt9a359ldhY3xaCmeNG5UKvoD2DHmCo14Yjx4N7dp0NiUgceE4z7t3nPi1ZfofeOFX4ZW9xk4CEwgAhxkqtrxSm0zlqZeOMFrvxjjENrMFLF2nLr+9OLinHNdRf+rdG7DE4rR5Qwb+w86kPiXQSDBDs1xKplCcbXO4wCyRCmDM63xmvNIl8eS9hK0L35f+6yQ8FAgMBAAECggEACgFqCx7jrrnc6b1FNdlW5w3AMhL5nePbc9xPlYEW1d7vYmoLNmmw9SLUoj+XmDfQw+WIdfTu/3GqV1appDWf0M3j5zb9dQMufoXEhLvhl81Q9MTjC91PQZhbNWio/r0jftz+x09qmfxyFnK6sFypSY7maUbAVa4piy6ye2aXIO+abz3ET7d71b8gPVC8mEVdbW/f719bFcQfUhWNhoUUcjddUBj3O0mOk9/xiEzlcmFhOD6Lzd2mGdKgF1taFD1xdmqE2D70a6kmI3z4jx1ilLRY3Cc+bE3+qcuVw00z9NWRtyYcqrTAA62tIRjY2IP1RQRrn9CIfuS2x8WlNQQjgQKBgQD8/N6Hj/+Rf5IPVE5beaorgnp50OiTT4qmrgrLt7mfaLZeVqxOYgdfVC/vPrivnn2vA3DCn7AG9+AkuTGQsuY5uCfnF4Mq6ZquhgdWX+OTItrm9DbvnWEA1rfrBgv6I7IYKqne03PaWo1esWjTtNJEXKDRS0yYevCQT92n716SgQKBgQDQTjDvlLDoKNKtkpomKKH4dZaOTsMmFv3PnL+gGMHco0SsRnkDmL5nHnX71OLRql3PcLGoQP9FhCxFMMh3lYE5Fq/u3Q48CQFDOkR9tq2Bs7n+eb2GQ0pNo6b05psijLhpwIO8hnSaNJN3S5ON5IJ3cYC1TNPd8Tq0OYIXwanyhQKBgARAB0kFvUhneT+yreJRh+9VMNONE+stoems8Nd9TawE6VNqZ1ilwvPyCSAe0KF6qyfeie1rG1zymxxi1BdXOhDsLBdwyK5W4FdgPw1PbRZStpS8s5OQ9Ek8UjirkFXydZJ8XQA2UzLu5IMbveQYnJOzbqw1dKL3JcV24gVpOxCBAoGBAI9q5mJtm4ecY8FByIQxQaNRQoFkVRQqjEGfCIhvwznn52Y9dyA00BMrc8wZfLkidUhXrNnNNnRkVh6lQcCj3L6zkhoBdMV85bOlsHZlifxdA9fjdcu1FLlzzYWcKH+XJ3kYJRtt72YkgMuH62WsSO935EfvR4ftiJ+BYMJ+gkYJAoGBAI6HuUEeZogKVsLP/JwTxjsrx6dHP6//SxIKxfCx636ykpPGjoAZBct0ZmbKVApzALKqU0SB8PoQeHhTlJlchYmU14KM1T/nNqv4qtrPFBgN4Nb59nplhFpwkkQLkf/1wWLSjVSo/3Kj28wkbZZC2XxViLqoACRwSVCNxkeZPE6C";
+    /** RSA, but below the 2048-bit minimum. */
+    public static final String WEAK_PRIVATE_KEY = "MIICeAIBADANBgkqhkiG9w0BAQEFAASCAmIwggJeAgEAAoGBALZ58/w9YaK8tm7OQ2knk/0ccE1/msZxwRY+gszxtL0w4DSZ2DXsMMZxLJJeUkAd5tKtIA+mixFaGV3L/uqKUGmc6s0X/TqkXFMQ7gIPLxPeZ78pD9u1JEtr/Y2Wifd1hjC9uLlBicUVxJOtK+04G/zge3fT6s0IA7t5xWUoWBg9AgMBAAECgYEAln4pzSRKe86rnuMaEYWEtcFYlXHiEjwLBO91LNVDPK0sm/UtrfsnluIL4oNLznlavvHteTrfguYN+Z+ek4yTF8I++ruF3zt6f7RdT7gVMvBR7LIXJdnpVmkt6X5oXHQd64XyEee+wngCf1lFYTDP0qccPHKcJA3zZgMYpXWkxIECQQDkDtJ1rfgAlbQc80ZDOg4y1i3KgV2k0YRy6IXhvuV0U4nOBcKDHc5rzEv3Hc4E7yRQYGER+RLHGPiYAvInqvvNAkEAzNVwMB9o+pgy81lzaLxQTGlBtCv1I+NqHngrFdUWoAZoIgUhfrvJ/xi1T78Wv9Sl6GzXKczduA7S9GiA0mt+MQJBAKYTOSXjW1+ppPEUI42fQGm62LvIe1YkEUzQkXZ0Woncr9StExoCYajUrFk3hijHsW0q0mWROSBtydKBCrDibd0CQQCHuss7aCTlISNp85UxCs/ewkSighpPrKsuA4zxS6FRas1n9aRrWT6Rxiqm7EXD2cISUMUG0tT82P3arMDoLgiRAkA/VSVK73RF9NAXBcZewI2kN6ynPkzksYWYCF5628sK4CUczFXqEaQQxLKaUFsINMt9DdnyqFzmtI6YR0CkRmps";
+    /** A P-256 key: a valid PKCS#8 key of the wrong type. */
+    public static final String EC_PRIVATE_KEY = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgYO488ExkkxN2iN2bRjhLuzWXfsywLGTnilIJ9jHkjQKhRANCAAQbjJWkY+K7Jkwu8kNnw2pbYqIrfBvPTgwUw3J+ZKchJJrJLV6xgyd1iezLcKpUhaiKbyX9vdIoXRHfKMxIXw7+";
+
+    private TestSigningKeys() {
+    }
+
+    /** Signs arbitrary claims with a fixture key, to build tokens the issuer itself would refuse to create. */
+    public static RSAKey rsaKey(String encodedPrivateKey) throws Exception {
+        var keys = KeyFactory.getInstance("RSA");
+        var privateKey = (RSAPrivateCrtKey) keys.generatePrivate(
+                new PKCS8EncodedKeySpec(Base64.getDecoder().decode(encodedPrivateKey)));
+        var publicKey = (RSAPublicKey) keys.generatePublic(
+                new RSAPublicKeySpec(privateKey.getModulus(), privateKey.getPublicExponent()));
+        return new RSAKey.Builder(publicKey).privateKey(privateKey).build();
+    }
+}

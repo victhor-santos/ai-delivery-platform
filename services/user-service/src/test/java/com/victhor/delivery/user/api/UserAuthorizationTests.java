@@ -45,6 +45,7 @@ import com.victhor.delivery.user.domain.EmailAddress;
 import com.victhor.delivery.user.domain.UserAddress;
 import com.victhor.delivery.user.domain.UserProfile;
 import com.victhor.delivery.user.infrastructure.auth.JwtAccessTokens;
+import com.victhor.delivery.user.infrastructure.auth.TestSigningKeys;
 
 /** Exercises the HTTP authorization policy with the real token decoder and mocked use cases; no database. */
 @WebMvcTest(controllers = { UserProfileController.class, UserAddressController.class,
@@ -64,7 +65,7 @@ class UserAuthorizationTests {
     private MockMvc mvc;
     @Autowired
     private JwtAccessTokens tokens;
-    @Value("${user.auth.secret}")
+    @Value("${user.auth.private-key}")
     private String secret;
 
     @MockitoBean
@@ -78,7 +79,7 @@ class UserAuthorizationTests {
     static class Tokens {
 
         @Bean
-        JwtAccessTokens accessTokens(@Value("${user.auth.secret}") String secret) {
+        JwtAccessTokens accessTokens(@Value("${user.auth.private-key}") String secret) {
             return new JwtAccessTokens(secret, Clock.systemUTC());
         }
 
@@ -131,7 +132,7 @@ class UserAuthorizationTests {
     void rejectsMalformedExpiredAndForeignSignedTokens(Call call) throws Exception {
         String expired = new JwtAccessTokens(secret, Clock.fixed(Instant.now().minusSeconds(1000), ZoneOffset.UTC))
                 .issue(OWNER).value();
-        String foreign = new JwtAccessTokens("ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=", Clock.systemUTC())
+        String foreign = new JwtAccessTokens(TestSigningKeys.FOREIGN_PRIVATE_KEY, Clock.systemUTC())
                 .issue(OWNER).value();
         for (String token : List.of("not-a-token", expired, foreign)) {
             assertUnauthorized(call.request().header("Authorization", "Bearer " + token));

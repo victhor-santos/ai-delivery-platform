@@ -10,8 +10,11 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 @Configuration(proxyBeanMethods = false)
 public class AccessTokenConfiguration {
 
+    /** A pinned public key wins over the key set URL; otherwise keys come from the User service. */
     @Bean
-    JwtDecoder jwtDecoder(@Value("${payment.auth.secret}") String secret, Clock clock) {
-        return AccessTokenVerifier.decoder(secret, clock);
+    JwtDecoder jwtDecoder(@Value("${payment.auth.jwk-set-uri:}") String jwkSetUri,
+            @Value("${payment.auth.public-key:}") String publicKey, Clock clock) {
+        return publicKey.isBlank() ? AccessTokenVerifier.fromJwkSetUri(jwkSetUri, clock)
+                : AccessTokenVerifier.fromPublicKey(publicKey, clock);
     }
 }

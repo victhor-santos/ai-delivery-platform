@@ -51,8 +51,8 @@ class AuthenticationApiTests {
     private ObjectMapper mapper;
     @Autowired
     private JdbcTemplate jdbc;
-    @Value("${user.auth.secret}")
-    private String signingSecret;
+    @Value("${user.auth.private-key}")
+    private String signingKey;
 
     @Test
     void registersHashesLogsInAndResolvesTheTokenSubjectWithoutAcceptingClientIdentity() throws Exception {
@@ -140,13 +140,31 @@ class AuthenticationApiTests {
         String email = email();
         var profile = body(post("/register", Map.of("name", "Cliente", "email", email, "password", PASSWORD)));
         UUID id = UUID.fromString(profile.path("id").asString());
-        String expired = new JwtAccessTokens(signingSecret, Clock.fixed(Instant.now().minusSeconds(1000), ZoneOffset.UTC))
+        String expired = new JwtAccessTokens(signingKey, Clock.fixed(Instant.now().minusSeconds(1000), ZoneOffset.UTC))
                 .issue(id).value();
         assertProblem(getMe(expired), 401);
         String token = body(post("/login", Map.of("email", email, "password", PASSWORD))).path("accessToken").asString();
         String[] parts = token.split("\\.");
         assertProblem(getMe(parts[0] + "." + parts[1] + ".AAAA"), 401);
         assertThat(getMe(token).statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void publishesOnlyThePublicVerificationKeyForTheOtherServices() throws Exception {
+        var response = HTTP.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/.well-known/jwks.json"))
+                .timeout(Duration.ofSeconds(20)).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        var keys = com.nimbusds.jose.jwk.JWKSet.parse(response.body()).getKeys();
+        assertThat(keys).singleElement().satisfies(key -> {
+            assertThat(key.isPrivate()).isFalse();
+            assertThat(key.getAlgorithm().getName()).isEqualTo("RS256");
+            assertThat(key.getKeyUse().identifier()).isEqualTo("sig");
+        });
+        assertThat(mapper.readTree(response.body()).path("keys").path(0).has("d")).isFalse();
+        String email = email();
+        post("/register", Map.of("name", "Cliente", "email", email, "password", PASSWORD));
+        String token = body(post("/login", Map.of("email", email, "password", PASSWORD))).path("accessToken").asString();
+        assertThat(com.nimbusds.jwt.SignedJWT.parse(token).getHeader().getKeyID()).isEqualTo(keys.get(0).getKeyID());
     }
 
     private String email() {

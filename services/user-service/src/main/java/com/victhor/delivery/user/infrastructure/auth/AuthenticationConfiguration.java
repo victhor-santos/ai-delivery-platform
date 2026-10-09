@@ -25,8 +25,8 @@ public class AuthenticationConfiguration {
     }
 
     @Bean
-    JwtAccessTokens accessTokens(@Value("${user.auth.secret}") String secret, Clock clock) {
-        return new JwtAccessTokens(secret, clock);
+    JwtAccessTokens accessTokens(@Value("${user.auth.private-key}") String privateKey, Clock clock) {
+        return new JwtAccessTokens(privateKey, clock);
     }
 
     @Bean
