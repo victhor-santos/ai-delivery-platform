@@ -23,20 +23,24 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import com.victhor.delivery.catalog.infrastructure.auth.TestAccessTokens;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
 		properties = "CATALOG_DB_PASSWORD=testcontainers-only")
 @Testcontainers
+@ActiveProfiles("test")
 class RestaurantApiIntegrationTests {
 
 	private static final String RESTAURANTS = "/api/catalog/restaurants";
 	private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+	private static final String OPERATOR = "Bearer " + TestAccessTokens.issueOperator(UUID.randomUUID());
 
 	@Container
 	@ServiceConnection
@@ -54,6 +58,30 @@ class RestaurantApiIntegrationTests {
 	@BeforeEach
 	void clearRestaurantsInTestContainer() {
 		jdbc.update("DELETE FROM restaurants");
+	}
+
+	@Test
+	void letsAnyoneBrowseButOnlyOperatorsChangeTheCatalog() throws Exception {
+		String id = post("{\"name\":\"Cantina\"}").body().path("id").asString();
+		String location = "{\"latitude\":-23.5,\"longitude\":-46.6}";
+		String customer = "Bearer " + TestAccessTokens.issue(UUID.randomUUID());
+		String foreign = "Bearer " + TestAccessTokens.issue(TestAccessTokens.FOREIGN_PRIVATE_KEY, java.time.Instant.now(),
+				claims -> claims.claim("roles", List.of("OPERATOR")));
+
+		assertThat(get(RESTAURANTS).status()).isEqualTo(200);
+		assertThat(get(RESTAURANTS + "/" + id).status()).isEqualTo(200);
+		for (String authorization : new String[] { null, "Bearer not-a-token", foreign }) {
+			assertProblem(send(write("POST", RESTAURANTS, "{\"name\":\"Outro\"}", authorization)), 401);
+			assertProblem(send(write("PUT", RESTAURANTS + "/" + id + "/pickup-location", location, authorization)), 401);
+		}
+		var denied = send(write("POST", RESTAURANTS, "{\"name\":\"Outro\"}", customer));
+		assertProblem(denied, 403);
+		assertThat(denied.body().path("detail").asString()).isEqualTo("Operação permitida apenas a operadores.");
+		assertProblem(send(write("PUT", RESTAURANTS + "/" + id + "/pickup-location", location, customer)), 403);
+		assertProblem(send(write("DELETE", RESTAURANTS + "/" + id, null, "Bearer " + TestAccessTokens.issueOperator(
+				UUID.randomUUID()))), 403);
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurants", Integer.class)).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT pickup_latitude FROM restaurants", Double.class)).isNull();
 	}
 
 	@Test
@@ -326,14 +354,24 @@ class RestaurantApiIntegrationTests {
 
 	private Response post(String body) throws Exception {
 		return send(HttpRequest.newBuilder(uri(RESTAURANTS)).timeout(Duration.ofSeconds(10))
-				.header("Content-Type", "application/json")
+				.header("Content-Type", "application/json").header("Authorization", OPERATOR)
 				.POST(HttpRequest.BodyPublishers.ofString(body)).build());
 	}
 
 	private Response put(String path, String body) throws Exception {
 		return send(HttpRequest.newBuilder(uri(path)).timeout(Duration.ofSeconds(10))
-				.header("Content-Type", "application/json")
+				.header("Content-Type", "application/json").header("Authorization", OPERATOR)
 				.PUT(HttpRequest.BodyPublishers.ofString(body)).build());
+	}
+
+	private HttpRequest write(String method, String path, String body, String authorization) {
+		var request = HttpRequest.newBuilder(uri(path)).timeout(Duration.ofSeconds(10))
+				.header("Content-Type", "application/json")
+				.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
+		if (authorization != null) {
+			request.header("Authorization", authorization);
+		}
+		return request.build();
 	}
 
 	private Response send(HttpRequest request) throws Exception {

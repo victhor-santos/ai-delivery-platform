@@ -148,6 +148,7 @@ services:
       CATALOG_DB_URL: jdbc:postgresql://catalog-db:5432/catalog
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-catalog}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD in .env}
+      USER_AUTH_JWK_SET_URI: http://user-service:8081/.well-known/jwks.json
     depends_on:
       catalog-db:
         condition: service_healthy

@@ -24,16 +24,19 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import com.victhor.delivery.catalog.infrastructure.auth.TestAccessTokens;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "CATALOG_DB_PASSWORD=testcontainers-only")
 @Testcontainers
+@ActiveProfiles("test")
 class MenuItemApiIntegrationTests {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
@@ -244,6 +247,7 @@ class MenuItemApiIntegrationTests {
         var publisher = body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body);
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + TestAccessTokens.issueOperator(UUID.randomUUID()))
                 .method(method, publisher).build();
         var response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
         return new Response(response.statusCode(), objectMapper.readTree(response.body()), response.headers());
