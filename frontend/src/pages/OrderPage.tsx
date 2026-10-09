@@ -8,6 +8,7 @@ import { formatAmount } from '../checkout/money'
 import { OrderActions } from '../checkout/OrderActions'
 import { clearPendingPayment } from '../checkout/pendingPayment'
 import { Alert } from '../components/Alert'
+import { DeliverySection } from '../deliveries/DeliverySection'
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 
@@ -90,6 +91,7 @@ export function OrderPage() {
         <strong>{order.total === null ? 'Valor desconhecido' : formatAmount(order.total)}</strong>
       </p>
       <OrderActions order={order} onChange={(next) => setData({ order: next, restaurantName })} />
+      <DeliverySection order={order} onOrderChange={(next) => setData({ order: next, restaurantName })} />
     </section>
   )
 }

@@ -1,6 +1,6 @@
 // Nós do grafo sintético (services/route-intelligence-service/app/routing/data/synthetic-city-v1.json).
 // O planejamento de rotas só aceita pontos a até 1 metro de um nó; outros destinos criam o pedido,
-// mas a entrega não terá rota. Se o grafo mudar, esta lista precisa acompanhar.
+// mas a entrega não terá rota. Se o grafo mudar, estas listas precisam acompanhar.
 
 export type SyntheticPoint = {
   id: string
@@ -19,6 +19,16 @@ export const SYNTHETIC_POINTS: readonly SyntheticPoint[] = [
   { id: 'G', label: 'Ponto sintético G', latitude: -23.57, longitude: -46.66 },
 ]
 
+// Ruas do mapa, sem sentido: o grafo tem trechos de mão única (A-D, D-E e E-C), mas o mapa só desenha as ligações.
+export const SYNTHETIC_ROADS: readonly (readonly [string, string])[] = [
+  ['A', 'B'],
+  ['B', 'C'],
+  ['A', 'D'],
+  ['D', 'E'],
+  ['E', 'C'],
+  ['A', 'F'],
+]
+
 const EARTH_RADIUS_METERS = 6_371_000
 const SNAP_TOLERANCE_METERS = 1
 
@@ -30,8 +40,19 @@ function distanceMeters(latA: number, lonA: number, latB: number, lonB: number):
   return Math.hypot(x, y) * EARTH_RADIUS_METERS
 }
 
-export function isInSyntheticCity(latitude: number, longitude: number): boolean {
-  return SYNTHETIC_POINTS.some(
-    (point) => distanceMeters(latitude, longitude, point.latitude, point.longitude) <= SNAP_TOLERANCE_METERS,
+export function syntheticPointAt(latitude: number, longitude: number): SyntheticPoint | null {
+  return (
+    SYNTHETIC_POINTS.find(
+      (point) => distanceMeters(latitude, longitude, point.latitude, point.longitude) <= SNAP_TOLERANCE_METERS,
+    ) ?? null
   )
+}
+
+export function isInSyntheticCity(latitude: number, longitude: number): boolean {
+  return syntheticPointAt(latitude, longitude) !== null
+}
+
+// Descreve um percurso pelos nós, como "A → B → C"; coordenadas fora do grafo aparecem como "?".
+export function describeRoute(route: readonly { latitude: number; longitude: number }[]): string {
+  return route.map((point) => syntheticPointAt(point.latitude, point.longitude)?.id ?? '?').join(' → ')
 }
