@@ -41,24 +41,33 @@ public class JpaDeliveryRepository implements DeliveryRepository {
 
     @Override
     @Transactional
-    public DeliveryCreation createForOrder(Delivery delivery) {
+    public DeliveryCreation createForOrder(Delivery delivery, UUID customerId) {
         if (delivery.status() != DeliveryStatus.CREATED) {
             throw new IllegalArgumentException("Only a new delivery can be created for an order");
         }
         Timestamp createdAt = Timestamp.from(delivery.createdAt().truncatedTo(ChronoUnit.MICROS));
         int inserted = jdbc.update("""
-                INSERT INTO deliveries (id, order_id, origin_description, origin_latitude, origin_longitude,
+                INSERT INTO deliveries (id, order_id, customer_id, origin_description, origin_latitude, origin_longitude,
                     destination_description, destination_latitude, destination_longitude,
                     status, created_at, updated_at, version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CREATED', ?, ?, 0)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'CREATED', ?, ?, 0)
                 ON CONFLICT (order_id) DO NOTHING
-                """, delivery.id(), delivery.orderId(), delivery.origin().description(),
+                """, delivery.id(), delivery.orderId(), customerId, delivery.origin().description(),
                 delivery.origin().point().latitude(), delivery.origin().point().longitude(),
                 delivery.destination().description(), delivery.destination().point().latitude(),
                 delivery.destination().point().longitude(), createdAt, createdAt);
-        Delivery stored = deliveries.findByOrderId(delivery.orderId()).orElseThrow().toDomain();
+        if (inserted == 0 && customerId != null) {
+            // Deliveries created before the customer was sent adopt it; a different customer is a conflict below.
+            jdbc.update("UPDATE deliveries SET customer_id = ? WHERE order_id = ? AND customer_id IS NULL",
+                    customerId, delivery.orderId());
+        }
+        var entity = deliveries.findByOrderId(delivery.orderId()).orElseThrow();
+        Delivery stored = entity.toDomain();
         if (!stored.origin().equals(delivery.origin()) || !stored.destination().equals(delivery.destination())) {
             throw new DeliveryStateConflictException("The order already has a delivery with different locations");
+        }
+        if (customerId != null && !customerId.equals(entity.customerId())) {
+            throw new DeliveryStateConflictException("The order already has a delivery for another customer");
         }
         return new DeliveryCreation(stored, inserted == 1);
     }

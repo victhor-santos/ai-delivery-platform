@@ -39,7 +39,9 @@ import com.victhor.delivery.delivery.domain.GeoPoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest(properties = "DELIVERY_DB_PASSWORD=testcontainers-only")
+@SpringBootTest(properties = {"DELIVERY_DB_PASSWORD=testcontainers-only",
+        "RABBITMQ_PASSWORD=unused", "spring.rabbitmq.listener.simple.auto-startup=false",
+        "management.health.rabbit.enabled=false"})
 @Testcontainers
 class DeliveryPersistenceTests {
 
@@ -85,9 +87,11 @@ class DeliveryPersistenceTests {
         assertThat(couriers.findById(courier.id())).contains(courier);
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                .containsExactly("1", "2", "3");
+                .containsExactly("1", "2", "3", "4");
         assertThat(jdbc.queryForObject("SELECT destination_description FROM deliveries WHERE id = ?", String.class, saved.id()))
                 .isEqualTo(DESTINATION.description());
+        assertThat(jdbc.queryForObject("SELECT customer_id FROM deliveries WHERE id = ?", UUID.class, saved.id()))
+                .isNull();
     }
 
     @Test

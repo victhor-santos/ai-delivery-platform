@@ -32,7 +32,9 @@ import tools.jackson.databind.ObjectMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "DELIVERY_DB_PASSWORD=testcontainers-only")
+        properties = {"DELIVERY_DB_PASSWORD=testcontainers-only",
+                "RABBITMQ_PASSWORD=unused", "spring.rabbitmq.listener.simple.auto-startup=false",
+                "management.health.rabbit.enabled=false"})
 @Testcontainers
 class DeliveryServiceApplicationTests {
 

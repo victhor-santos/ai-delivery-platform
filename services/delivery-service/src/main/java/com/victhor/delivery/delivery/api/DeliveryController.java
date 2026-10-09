@@ -46,7 +46,7 @@ public class DeliveryController {
     @PutMapping("/by-order/{orderId}")
     public ResponseEntity<DeliveryResponse> createForOrder(@PathVariable UUID orderId,
             @Valid @RequestBody DeliveryForOrderRequest request) {
-        var result = deliveries.createForOrder(orderId, request.origin().toDomain(), request.destination().toDomain());
+        var result = deliveries.createForOrder(orderId, null, request.origin().toDomain(), request.destination().toDomain());
         var response = DeliveryResponse.from(result.delivery());
         if (result.created()) {
             return ResponseEntity.created(URI.create("/api/deliveries/" + response.id())).body(response);

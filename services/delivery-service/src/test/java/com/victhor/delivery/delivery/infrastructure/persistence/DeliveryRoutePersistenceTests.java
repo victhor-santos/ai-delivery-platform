@@ -38,7 +38,9 @@ import com.victhor.delivery.delivery.domain.GeoPoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest(properties = "DELIVERY_DB_PASSWORD=testcontainers-only")
+@SpringBootTest(properties = {"DELIVERY_DB_PASSWORD=testcontainers-only",
+        "RABBITMQ_PASSWORD=unused", "spring.rabbitmq.listener.simple.auto-startup=false",
+        "management.health.rabbit.enabled=false"})
 @Testcontainers
 class DeliveryRoutePersistenceTests {
 
