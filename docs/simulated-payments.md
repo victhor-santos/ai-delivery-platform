@@ -36,7 +36,7 @@ O banco garante as regras sob concorrência. `UNIQUE (customer_id, idempotency_k
 
 `PaymentAttempt`, `SimulatedPaymentMethod` e `IdempotencyKey` formam o domínio sem Spring; uma tentativa é decidida na criação e nunca muda. `PaymentService` usa a porta `PaymentRepository`; `JpaPaymentRepository` traduz as constraints para `IdempotencyKeyAlreadyUsedException` e `OrderAlreadyPaidException`. A migração `V1__create_payment_attempts.sql` cria a tabela; Flyway aplica e Hibernate apenas valida.
 
-O serviço valida tokens com `payment.auth.secret=${USER_AUTH_SECRET}`, com as mesmas regras do [Order](resource-authorization.md), sem emiti-los. O Compose acrescenta `payment-db` (banco `payments`, volume `payment_postgres_data`, porta 5437) e fornece `PAYMENT_DB_*` e a chave ao serviço. Ao executar nativamente, inicie `payment-db` e forneça essas variáveis.
+O serviço valida tokens com a chave pública do User (`USER_AUTH_JWK_SET_URI`), com as mesmas regras do [Order](resource-authorization.md), sem emiti-los ([detalhes](security-hardening.md)). O Compose acrescenta `payment-db` (banco `payments`, volume `payment_postgres_data`, porta 5437) e fornece `PAYMENT_DB_*` e a URL do JWKS ao serviço. Ao executar nativamente, inicie `payment-db` e forneça essas variáveis.
 
 ## Limites
 

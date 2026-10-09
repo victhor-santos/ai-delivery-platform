@@ -1,6 +1,6 @@
 # Autorização de perfis, endereços e pedidos
 
-Esta etapa vincula os recursos do cliente à identidade do [token de acesso](authentication.md). User e Order validam o mesmo Bearer JWT HS256 e só atendem o dono do recurso. Catálogo e entregas continuam públicos; papéis operacionais pertencem a etapas próprias. Os [pagamentos simulados](simulated-payments.md), criados depois, seguem as mesmas regras de token e dono.
+Esta etapa vincula os recursos do cliente à identidade do [token de acesso](authentication.md). User e Order validam o mesmo Bearer JWT e só atendem o dono do recurso. Catálogo e entregas ficaram públicos nesta etapa; os papéis de cliente e operador que os protegem vieram depois, em [papéis e chaves assimétricas](security-hardening.md). Os [pagamentos simulados](simulated-payments.md), criados depois, seguem as mesmas regras de token e dono.
 
 ## Regras de acesso
 
@@ -19,15 +19,15 @@ O identificador do cliente vem somente do `sub` validado. Campos como `customerI
 
 A migration `V4__add_order_customers.sql` adiciona `customer_id` anulável. Pedidos anteriores ficam preservados com valor nulo e não pertencem a ninguém: continuam no banco, mas recebem `404` por qualquer token. Atribuí-los a um cliente exigiria uma prova de propriedade que os dados antigos não têm.
 
-## Chave compartilhada
+## Validação do token no Order
 
-Order valida tokens com `order.auth.secret=${USER_AUTH_SECRET}`, sem emitir tokens. `AccessTokenVerifier` repete as verificações do User: HS256, emissor `https://delivery-order-system.local`, audiência `delivery-order-system`, subject UUID canônico, emissão/vencimento, duração máxima de 15 minutos e tolerância de 30 segundos. O Compose fornece a mesma chave aos dois serviços. Como HS256 usa uma chave simétrica, qualquer serviço que a recebe pode emitir tokens; chaves assimétricas e rotação continuam pendentes.
+Order valida tokens sem emiti-los. `AccessTokenVerifier` repete as verificações do User: emissor `https://delivery-order-system.local`, audiência `delivery-order-system`, subject UUID canônico, papéis conhecidos, emissão/vencimento, duração máxima de 15 minutos e tolerância de 30 segundos. Nesta etapa os serviços dividiam uma chave HS256, o que permitia a qualquer um deles emitir tokens. Hoje o User assina com RS256 e Order busca a chave pública em `USER_AUTH_JWK_SET_URI` ([detalhes](security-hardening.md#tokens-rs256-e-jwks)).
 
-O Gateway apenas encaminha `Authorization`. Ao executar Order nativamente, forneça `USER_AUTH_SECRET` junto às variáveis do banco. Os testes usam a fixture pública de `src/test/resources/application-test.properties`, carregada somente pelo perfil `test`.
+O Gateway apenas encaminha `Authorization`. Ao executar Order nativamente com o User em `localhost:8081`, o padrão de `USER_AUTH_JWK_SET_URI` já serve. Os testes usam a fixture pública de `src/test/resources/application-test.properties`, carregada somente pelo perfil `test`.
 
 ## Limites desta etapa
 
-Não há papéis de restaurante, entregador ou administrador. Por isso a confirmação do pedido ainda é feita pelo próprio cliente, e o cadastro de restaurantes, cardápios, entregadores, rotas e observações segue público. Não existe listagem de pedidos por cliente. Revogação de tokens, refresh e limitação de tentativas continuam como descritos na [autenticação](authentication.md).
+Não há papéis de restaurante ou entregador. Por isso a confirmação do pedido ainda é feita pelo próprio cliente. Catálogo, entregadores, rotas e observações passaram a exigir o operador em [papéis e chaves assimétricas](security-hardening.md). Não existe listagem de pedidos por cliente. Revogação de tokens e refresh continuam como descritos na [autenticação](authentication.md).
 
 ## Validação
 
