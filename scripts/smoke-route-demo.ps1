@@ -69,17 +69,37 @@ function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [int]$Status 
     }
 }
 
+# The operator credentials come from the environment or the Compose .env; they are never printed.
+function Get-Setting([string]$Name) {
+    $value = [Environment]::GetEnvironmentVariable($Name)
+    $file = if ($EnvFile) { [System.IO.Path]::GetFullPath($EnvFile) } else { Join-Path $repositoryRoot '.env' }
+    if (-not $value -and (Test-Path -LiteralPath $file -PathType Leaf)) {
+        $line = Get-Content -LiteralPath $file -Encoding UTF8 | Where-Object { $_ -like "$Name=*" } | Select-Object -First 1
+        if ($line) { $value = $line.Substring($Name.Length + 1).Trim() }
+    }
+    if (-not $value) { throw "$Name is not configured. Run scripts/initialize-auth-secret.ps1 and restart the demo." }
+    return $value
+}
+
+function Get-OperatorToken {
+    $credentials = @{ email = (Get-Setting 'USER_OPERATOR_EMAIL'); password = (Get-Setting 'USER_OPERATOR_PASSWORD') }
+    return (Invoke-Api 'POST' '/api/users/auth/login' $credentials).accessToken
+}
+
 # Order publishes delivery requests asynchronously; the delivery appears once Delivery consumes the event.
-function Wait-DeliveryForOrder([string]$OrderId, [int]$TimeoutSeconds = 30) {
+function Wait-DeliveryForOrder([string]$OrderId, [string]$AccessToken, [int]$TimeoutSeconds = 30) {
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
-        $response = $http.GetAsync("$baseUrl/api/deliveries/by-order/$OrderId").GetAwaiter().GetResult()
+        $lookup = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get, "$baseUrl/api/deliveries/by-order/$OrderId")
+        $lookup.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $AccessToken)
+        $response = $http.SendAsync($lookup).GetAwaiter().GetResult()
         try {
             $content = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
             if ([int]$response.StatusCode -eq 200) { return $content | ConvertFrom-Json }
             Assert-Condition ([int]$response.StatusCode -eq 404) "Unexpected delivery lookup status $([int]$response.StatusCode): $content"
         } finally {
             $response.Dispose()
+            $lookup.Dispose()
         }
         Start-Sleep -Milliseconds 250
     }
@@ -105,6 +125,10 @@ try {
     foreach ($service in $services) {
         Invoke-Api 'GET' "/api/$service/ping" | Out-Null
     }
+    if (-not $UsersOnly) {
+        $operatorToken = Get-OperatorToken
+        Assert-Condition ((Invoke-Api 'GET' '/api/users/auth/me' -AccessToken $operatorToken).role -eq 'OPERATOR') 'The provisioned operator has another role.'
+    }
     if (-not $CatalogOnly) {
         $demoEmail = "demo-$([guid]::NewGuid().ToString('N'))@example.test"
         $demoPassword = 'demonstration-password-123'
@@ -119,6 +143,7 @@ try {
         Assert-Condition ($authentication.tokenType -eq 'Bearer' -and $authentication.expiresIn -eq 900) 'Invalid access token metadata.'
         $identity = Invoke-Api 'GET' '/api/users/auth/me' -AccessToken $authentication.accessToken
         Assert-Condition ($identity.id -eq $user.id -and $identity.email -eq $user.email) 'Token resolved to another user.'
+        Assert-Condition ($identity.role -eq 'CUSTOMER') 'Self-registration must create a customer.'
         $accessToken = $authentication.accessToken
         $otherEmail = "other-$([guid]::NewGuid().ToString('N'))@example.test"
         $otherUser = Invoke-Api 'POST' '/api/users/auth/register' @{
@@ -169,20 +194,25 @@ try {
         Write-Output "Users passed: user=$($user.id), address=$($address.id)."
         if ($UsersOnly) { return }
     }
-    $restaurant = Invoke-Api 'POST' '/api/catalog/restaurants' @{
+    $restaurantRequest = @{
         name = "Compose Demo $([guid]::NewGuid().ToString('N').Substring(0, 8))"
         pickupLocation = @{ latitude = -23.5505; longitude = -46.6333 }
-    } 201
+    }
+    Invoke-Api 'POST' '/api/catalog/restaurants' $restaurantRequest 401 | Out-Null
+    if ($accessToken) {
+        Invoke-Api 'POST' '/api/catalog/restaurants' $restaurantRequest 403 -AccessToken $accessToken | Out-Null
+    }
+    $restaurant = Invoke-Api 'POST' '/api/catalog/restaurants' $restaurantRequest 201 -AccessToken $operatorToken
     $menuPath = "/api/catalog/restaurants/$($restaurant.id)/menu-items"
     $menuItem = Invoke-Api 'POST' $menuPath @{
         name = 'Prato do dia'; description = 'Cardapio de demonstracao'; price = [decimal]25.90
-    } 201
+    } 201 -AccessToken $operatorToken
     Assert-Condition ($menuItem.restaurantId -eq $restaurant.id -and $menuItem.available) 'Menu item has invalid ownership or availability.'
     Assert-Condition ($menuItem.currency -eq 'BRL' -and $menuItem.price -eq [decimal]25.90) 'Menu price or currency is invalid.'
     $itemPath = "$menuPath/$($menuItem.id)"
     $updatedItem = Invoke-Api 'PUT' $itemPath @{
         name = 'Prato especial'; description = $null; price = [decimal]29.90; available = $false
-    }
+    } -AccessToken $operatorToken
     Assert-Condition (-not $updatedItem.available -and $updatedItem.price -eq [decimal]29.90) 'Menu update was not applied.'
     $savedItem = Invoke-Api 'GET' $itemPath
     Assert-Condition (($savedItem | ConvertTo-Json -Compress) -eq ($updatedItem | ConvertTo-Json -Compress)) 'Saved menu item differs from the update.'
@@ -190,12 +220,12 @@ try {
     Assert-Condition ($menu.totalElements -eq 1 -and $menu.content[0].id -eq $menuItem.id) 'Menu pagination lost the item.'
     $otherRestaurant = Invoke-Api 'POST' '/api/catalog/restaurants' @{
         name = "Compose Demo ownership $([guid]::NewGuid().ToString('N').Substring(0, 8))"
-    } 201
+    } 201 -AccessToken $operatorToken
     $otherItemPath = "/api/catalog/restaurants/$($otherRestaurant.id)/menu-items/$($menuItem.id)"
     Invoke-Api 'GET' $otherItemPath -Status 404 | Out-Null
     Invoke-Api 'PUT' $otherItemPath @{
         name = 'Alterado'; price = [decimal]1.00; available = $true
-    } 404 | Out-Null
+    } 404 -AccessToken $operatorToken | Out-Null
     $preservedItem = Invoke-Api 'GET' $itemPath
     Assert-Condition (($preservedItem | ConvertTo-Json -Compress) -eq ($updatedItem | ConvertTo-Json -Compress)) 'Another restaurant changed the menu item.'
     Write-Output "Catalog passed: restaurant=$($restaurant.id), menuItem=$($menuItem.id)."
@@ -203,7 +233,7 @@ try {
 
     Invoke-Api 'PUT' $itemPath @{
         name = 'Prato especial'; price = [decimal]29.90; available = $true
-    } | Out-Null
+    } -AccessToken $operatorToken | Out-Null
     $orderRequest = @{
         restaurantId = $restaurant.id
         items = @(@{ menuItemId = $menuItem.id; quantity = 2 })
@@ -216,7 +246,7 @@ try {
     Assert-Condition ($order.items.Count -eq 1 -and $order.items[0].unitPrice -eq [decimal]29.90) 'Order item snapshot is invalid.'
     $updatedItem = Invoke-Api 'PUT' $itemPath @{
         name = 'Prato com novo preco'; price = [decimal]39.90; available = $false
-    }
+    } -AccessToken $operatorToken
     $orderPath = "/api/orders/$($order.id)"
     Invoke-Api 'GET' $orderPath -Status 401 | Out-Null
     foreach ($foreignCall in @(@('GET', ''), @('POST', '/cancel'), @('POST', '/delivery'))) {
@@ -271,7 +301,7 @@ try {
             $pending = Invoke-Api 'POST' "$orderPath/delivery" -Status 202 -AccessToken $accessToken
             Assert-Condition ($pending.status -eq 'REQUESTED') 'Delivery request was not accepted while the broker was down.'
             Start-Sleep -Seconds 2
-            Invoke-Api 'GET' "/api/deliveries/by-order/$($order.id)" -Status 404 | Out-Null
+            Invoke-Api 'GET' "/api/deliveries/by-order/$($order.id)" -Status 404 -AccessToken $accessToken | Out-Null
         } finally {
             Invoke-Compose -CommandArguments @('up', '-d', '--no-build', '--wait', '--wait-timeout', '120', 'rabbitmq')
         }
@@ -281,69 +311,81 @@ try {
     $repeated = Invoke-Api 'POST' "$orderPath/delivery" -Status 202 -AccessToken $accessToken
     Assert-Condition ($receipt.status -eq 'REQUESTED' -and $receipt.orderId -eq $order.id) 'Invalid delivery request receipt.'
     Assert-Condition (($receipt | ConvertTo-Json -Compress) -eq ($repeated | ConvertTo-Json -Compress)) 'Delivery request was not idempotent.'
-    $delivery = Wait-DeliveryForOrder $order.id 60
-    Invoke-Api 'PUT' "/api/deliveries/by-order/$($order.id)" @{ origin = $delivery.origin; destination = $delivery.destination } 405 | Out-Null
+    $delivery = Wait-DeliveryForOrder $order.id $accessToken 60
+    Invoke-Api 'PUT' "/api/deliveries/by-order/$($order.id)" @{ origin = $delivery.origin; destination = $delivery.destination } 405 -AccessToken $operatorToken | Out-Null
 
     $deliveryPath = "/api/deliveries/$($delivery.id)"
+    # Only the customer and the operator see the delivery; commands belong to the operator.
+    Invoke-Api 'GET' $deliveryPath -Status 401 | Out-Null
+    Invoke-Api 'GET' $deliveryPath -AccessToken $otherToken -Status 404 | Out-Null
+    Invoke-Api 'GET' "/api/deliveries/by-order/$($order.id)" -AccessToken $otherToken -Status 404 | Out-Null
+    Assert-Condition ((Invoke-Api 'GET' $deliveryPath -AccessToken $operatorToken).id -eq $delivery.id) 'The operator cannot see the delivery.'
+    Invoke-Api 'POST' "$deliveryPath/pick-up" -AccessToken $accessToken -Status 403 | Out-Null
+    Invoke-Api 'GET' '/api/deliveries' -AccessToken $accessToken -Status 403 | Out-Null
+    $queue = Invoke-Api 'GET' '/api/deliveries?status=CREATED&size=100' -AccessToken $operatorToken
+    Assert-Condition (@($queue.items | Where-Object { $_.id -eq $delivery.id }).Count -eq 1) 'The operator queue lost the delivery.'
+    Write-Output 'Delivery authorization passed: owner and operator only, commands for the operator.'
     $departure = @{ departureAt = [DateTimeOffset]::UtcNow.ToString('o') }
-    $plan = Invoke-Api 'POST' "$deliveryPath/route" $departure
+    Invoke-Api 'POST' "$deliveryPath/route" $departure 403 -AccessToken $accessToken | Out-Null
+    $plan = Invoke-Api 'POST' "$deliveryPath/route" $departure -AccessToken $operatorToken
     Assert-Condition ($plan.deliveryId -eq $delivery.id) 'Route belongs to another delivery.'
     Assert-Condition ($plan.dataOrigin -in @('synthetic', 'simulated')) 'Route must identify synthetic data or a promoted simulated model.'
     Assert-Condition ($plan.route.Count -eq $plan.segments.Count + 1) 'Route and segments disagree.'
     Assert-Condition ($plan.distanceKm -gt 0 -and $plan.predictedTravelTimeMinutes -gt 0) 'Route totals must be positive.'
-    $saved = Invoke-Api 'GET' "$deliveryPath/route"
+    $saved = Invoke-Api 'GET' "$deliveryPath/route" -AccessToken $accessToken
     Assert-Condition (($saved | ConvertTo-Json -Depth 10 -Compress) -eq ($plan | ConvertTo-Json -Depth 10 -Compress)) 'Saved route differs from the planned route.'
     Write-Output "Flow passed: restaurant=$($restaurant.id), order=$($order.id), delivery=$($delivery.id), model=$($plan.modelVersion)."
 
     if ($CheckRecovery) {
         try {
             Invoke-Compose -CommandArguments @('stop', 'route-intelligence-service')
-            $problem = Invoke-Api 'POST' "$deliveryPath/route" $departure 503
+            $problem = Invoke-Api 'POST' "$deliveryPath/route" $departure 503 -AccessToken $operatorToken
             Assert-Condition ($problem.code -eq 'ROUTE_SERVICE_UNAVAILABLE') 'Unexpected Python downtime response.'
-            $preserved = Invoke-Api 'GET' "$deliveryPath/route"
+            $preserved = Invoke-Api 'GET' "$deliveryPath/route" -AccessToken $operatorToken
             Assert-Condition (($preserved | ConvertTo-Json -Depth 10 -Compress) -eq ($plan | ConvertTo-Json -Depth 10 -Compress)) 'Python downtime changed the saved plan.'
-            $unchanged = Invoke-Api 'GET' $deliveryPath
+            $unchanged = Invoke-Api 'GET' $deliveryPath -AccessToken $operatorToken
             Assert-Condition (($unchanged | ConvertTo-Json -Depth 10 -Compress) -eq ($delivery | ConvertTo-Json -Depth 10 -Compress)) 'Python downtime changed delivery state.'
         } finally {
             Invoke-Compose -CommandArguments @('up', '-d', '--no-build', '--wait', '--wait-timeout', '120', 'route-intelligence-service')
         }
-        $newPlan = Invoke-Api 'POST' "$deliveryPath/route" $departure
+        $newPlan = Invoke-Api 'POST' "$deliveryPath/route" $departure -AccessToken $operatorToken
         Assert-Condition ($newPlan.id -ne $plan.id) 'Replanning did not produce a new plan.'
         $plan = $newPlan
         Write-Output 'Python downtime and recovery passed; the previous plan and delivery were preserved.'
     }
 
-    $courier = Invoke-Api 'POST' '/api/deliveries/couriers' -Status 201
-    Invoke-Api 'POST' "$deliveryPath/assign" @{ courierId = $courier.id } | Out-Null
-    Invoke-Api 'POST' "$deliveryPath/pick-up" | Out-Null
-    $transit = Invoke-Api 'POST' "$deliveryPath/start-transit"
+    $courier = Invoke-Api 'POST' '/api/deliveries/couriers' -Status 201 -AccessToken $operatorToken
+    Invoke-Api 'POST' "$deliveryPath/assign" @{ courierId = $courier.id } -AccessToken $operatorToken | Out-Null
+    Invoke-Api 'POST' "$deliveryPath/pick-up" -AccessToken $operatorToken | Out-Null
+    $transit = Invoke-Api 'POST' "$deliveryPath/start-transit" -AccessToken $operatorToken
     $enteredAt = $transit.departedAt
     for ($sequence = 0; $sequence -lt $plan.segments.Count; $sequence++) {
         $segmentPath = "$deliveryPath/segments/$sequence"
         $entryEvent = @{ routePlanId = $plan.id; occurredAt = $enteredAt; dataOrigin = 'simulated' }
-        $entry = Invoke-Api 'PUT' "$segmentPath/entry" $entryEvent
+        $entry = Invoke-Api 'PUT' "$segmentPath/entry" $entryEvent -AccessToken $operatorToken
         Assert-Condition ($null -eq $entry.actualTravelTimeMinutes) 'An incomplete traversal has a label.'
-        $duplicate = Invoke-Api 'PUT' "$segmentPath/entry" $entryEvent
+        $duplicate = Invoke-Api 'PUT' "$segmentPath/entry" $entryEvent -AccessToken $operatorToken
         Assert-Condition (($duplicate | ConvertTo-Json -Depth 10 -Compress) -eq ($entry | ConvertTo-Json -Depth 10 -Compress)) 'Entry retry changed the observation.'
         # Use the server recording time to simulate a completed segment without client clock skew.
         $exitEvent = @{ routePlanId = $plan.id; occurredAt = $entry.entryRecordedAt; dataOrigin = 'simulated' }
-        $exit = Invoke-Api 'PUT' "$segmentPath/exit" $exitEvent
+        $exit = Invoke-Api 'PUT' "$segmentPath/exit" $exitEvent -AccessToken $operatorToken
         Assert-Condition ($exit.actualTravelTimeMinutes -gt 0) 'A completed traversal has no positive duration.'
         Assert-Condition ($exit.prediction.segment.segmentId -eq $plan.segments[$sequence].segmentId) 'Observation refers to another segment.'
         Assert-Condition ($exit.prediction.modelVersion -eq $plan.modelVersion) 'Prediction model snapshot changed.'
         Assert-Condition ($exit.prediction.segment.predictionContext.featureSchemaVersion -eq 'segment-features-v1') 'Feature snapshot is missing.'
         $enteredAt = $exit.exitedAt
     }
-    $observations = @(Invoke-Api 'GET' "$deliveryPath/segments")
+    $observations = @(Invoke-Api 'GET' "$deliveryPath/segments" -AccessToken $accessToken)
     Assert-Condition ($observations.Count -eq $plan.segments.Count) 'Observation count does not match the route.'
     $cutoff = [uri]::EscapeDataString((Format-Instant $exit.labelAvailableAt))
     $exportPath = "$deliveryPath/segments/export?availableAtCutoff=$cutoff"
-    $csv = Invoke-Api 'GET' $exportPath -Raw
+    Invoke-Api 'GET' $exportPath -AccessToken $accessToken -Status 403 | Out-Null
+    $csv = Invoke-Api 'GET' $exportPath -Raw -AccessToken $operatorToken
     $samples = @($csv | ConvertFrom-Csv)
     Assert-Condition ($samples.Count -eq $plan.segments.Count) 'CSV export lost completed observations.'
     Assert-Condition (@($samples | Where-Object { $_.data_origin -ne 'simulated' }).Count -eq 0) 'CSV must identify simulated events.'
-    Invoke-Api 'POST' "$deliveryPath/arrive" | Out-Null
-    $delivery = Invoke-Api 'POST' "$deliveryPath/complete"
+    Invoke-Api 'POST' "$deliveryPath/arrive" -AccessToken $operatorToken | Out-Null
+    $delivery = Invoke-Api 'POST' "$deliveryPath/complete" -AccessToken $operatorToken
     Assert-Condition ($delivery.status -eq 'DELIVERED') 'Delivery lifecycle was not completed.'
     Write-Output "Segment observations passed: $($samples.Count) simulated traversals, prediction snapshots and CSV export."
 
@@ -377,6 +419,7 @@ try {
         $newIdentity = Invoke-Api 'GET' '/api/users/auth/me' -AccessToken $newAuthentication.accessToken
         Assert-Condition ($newIdentity.id -eq $user.id) 'Persisted credentials did not allow login after restart.'
         $accessToken = $newAuthentication.accessToken
+        $operatorToken = Get-OperatorToken
         $persistedUser = Invoke-Api 'GET' $userPath -AccessToken $accessToken
         $persistedAddress = Invoke-Api 'GET' $savedAddressPath -AccessToken $accessToken
         Assert-Condition (($persistedUser | ConvertTo-Json -Compress) -eq ($updatedUser | ConvertTo-Json -Compress)) 'User profile changed after restart.'
@@ -388,8 +431,8 @@ try {
         Assert-Condition (($persistedAttempt | ConvertTo-Json -Compress) -eq ($attempt | ConvertTo-Json -Compress)) 'Payment changed after restart.'
         $replayedPayment = Invoke-Api 'POST' $paymentPath $approvedRequest -AccessToken $accessToken -IdempotencyKey $approvedKey
         Assert-Condition (($replayedPayment | ConvertTo-Json -Compress) -eq ($payment | ConvertTo-Json -Compress)) 'Order payment changed after restart.'
-        $persistedDelivery = Invoke-Api 'GET' $deliveryPath
-        $persistedPlan = Invoke-Api 'GET' "$deliveryPath/route"
+        $persistedDelivery = Invoke-Api 'GET' $deliveryPath -AccessToken $accessToken
+        $persistedPlan = Invoke-Api 'GET' "$deliveryPath/route" -AccessToken $accessToken
         Assert-Condition ($persistedRestaurant.id -eq $restaurant.id) 'Restaurant was lost after restart.'
         Assert-Condition (($persistedMenuItem | ConvertTo-Json -Compress) -eq ($updatedItem | ConvertTo-Json -Compress)) 'Menu item changed after restart.'
         Assert-Condition ($persistedOrder.status -eq 'CONFIRMED' -and $persistedOrder.paymentId -eq $payment.paymentId) 'Order was lost after restart.'
@@ -398,12 +441,12 @@ try {
         Assert-Condition (($persistedOrder.items | ConvertTo-Json -Compress) -eq ($order.items | ConvertTo-Json -Compress)) 'Item snapshots changed after restart.'
         Assert-Condition (($persistedDelivery | ConvertTo-Json -Depth 10 -Compress) -eq ($delivery | ConvertTo-Json -Depth 10 -Compress)) 'Delivery changed after restart.'
         Assert-Condition (($persistedPlan | ConvertTo-Json -Depth 10 -Compress) -eq ($plan | ConvertTo-Json -Depth 10 -Compress)) 'Saved route changed after restart.'
-        $persistedObservations = @(Invoke-Api 'GET' "$deliveryPath/segments")
+        $persistedObservations = @(Invoke-Api 'GET' "$deliveryPath/segments" -AccessToken $accessToken)
         Assert-Condition (($persistedObservations | ConvertTo-Json -Depth 10 -Compress) -eq ($observations | ConvertTo-Json -Depth 10 -Compress)) 'Observation snapshots changed after restart.'
-        Assert-Condition ((Invoke-Api 'GET' $exportPath -Raw) -eq $csv) 'CSV changed after restart for the same cutoff.'
+        Assert-Condition ((Invoke-Api 'GET' $exportPath -Raw -AccessToken $operatorToken) -eq $csv) 'CSV changed after restart for the same cutoff.'
         Invoke-Api 'POST' "$orderPath/delivery" -Status 202 -AccessToken $accessToken | Out-Null
         Start-Sleep -Seconds 1
-        $recoveredDelivery = Invoke-Api 'GET' "/api/deliveries/by-order/$($order.id)"
+        $recoveredDelivery = Invoke-Api 'GET' "/api/deliveries/by-order/$($order.id)" -AccessToken $accessToken
         Assert-Condition ($recoveredDelivery.id -eq $delivery.id) 'Restart caused a duplicate delivery.'
         Write-Output 'Persistence passed after recreating containers; no volumes were removed.'
     }
