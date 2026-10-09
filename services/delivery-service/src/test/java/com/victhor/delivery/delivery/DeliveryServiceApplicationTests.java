@@ -245,35 +245,12 @@ class DeliveryServiceApplicationTests {
     }
 
     @Test
-    void createsIdempotentlyByOrderAndRejectsDifferentSnapshots() throws Exception {
+    void doesNotExposeOrderDrivenCreationOverHttp() throws Exception {
         var request = (tools.jackson.databind.node.ObjectNode) mapper.readTree(VALID_REQUEST);
         request.remove("orderId");
-        String path = DELIVERIES + "/by-order/" + ORDER_ID;
-        var first = send("PUT", path, request.toString());
-        assertThat(first.statusCode()).isEqualTo(201);
-        var repeated = send("PUT", path, request.toString());
-        assertThat(repeated.statusCode()).isEqualTo(200);
-        assertThat(json(repeated)).isEqualTo(json(first));
-        String deliveryPath = DELIVERIES + "/" + json(first).path("id").asString();
-        JsonNode cancelled = command(deliveryPath, "cancel");
-        assertThat(json(send("PUT", path, request.toString()))).isEqualTo(cancelled);
-        ((tools.jackson.databind.node.ObjectNode) request.path("origin")).put("latitude", 0);
-        assertProblem(send("PUT", path, request.toString()), 409);
-        assertThat(get(deliveryPath)).isEqualTo(cancelled);
-    }
-
-    @Test
-    void concurrentIdempotentCreationReturnsTheSameDelivery() throws Exception {
-        var body = (tools.jackson.databind.node.ObjectNode) mapper.readTree(VALID_REQUEST);
-        body.remove("orderId");
-        String path = DELIVERIES + "/by-order/" + ORDER_ID;
-        var first = client.sendAsync(request("PUT", path, body.toString()), HttpResponse.BodyHandlers.ofString());
-        var second = client.sendAsync(request("PUT", path, body.toString()), HttpResponse.BodyHandlers.ofString());
-        var a = first.get(15, TimeUnit.SECONDS);
-        var b = second.get(15, TimeUnit.SECONDS);
-        assertThat(new int[]{a.statusCode(), b.statusCode()}).containsExactlyInAnyOrder(201, 200);
-        assertThat(json(a)).isEqualTo(json(b));
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM deliveries", Integer.class)).isEqualTo(1);
+        var response = send("PUT", DELIVERIES + "/by-order/" + ORDER_ID, request.toString());
+        assertThat(response.statusCode()).isEqualTo(405);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM deliveries", Integer.class)).isZero();
     }
 
     private JsonNode createCourier() throws Exception {

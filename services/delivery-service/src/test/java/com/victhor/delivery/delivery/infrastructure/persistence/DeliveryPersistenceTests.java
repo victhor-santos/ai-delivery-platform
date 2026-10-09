@@ -78,6 +78,50 @@ class DeliveryPersistenceTests {
     }
 
     @Test
+    void createsForOrderIdempotentlyAndRejectsDifferentSnapshotsOrCustomers() {
+        UUID orderId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        var first = deliveries.createForOrder(Delivery.create(orderId, ORIGIN, DESTINATION, TIME), customerId);
+        assertThat(first.created()).isTrue();
+        var repeated = deliveries.createForOrder(Delivery.create(orderId, ORIGIN, DESTINATION, TIME.plusSeconds(5)),
+                customerId);
+        assertThat(repeated.created()).isFalse();
+        assertThat(repeated.delivery()).usingRecursiveComparison().isEqualTo(first.delivery());
+        Delivery cancelled = deliveries.cancel(first.delivery().id(), TIME.plusSeconds(1)).orElseThrow();
+        assertThat(deliveries.createForOrder(Delivery.create(orderId, ORIGIN, DESTINATION, TIME), customerId).delivery())
+                .usingRecursiveComparison().isEqualTo(cancelled);
+
+        var otherOrigin = new DeliveryLocation("Restaurante Central", new GeoPoint(0, 0));
+        assertThatThrownBy(() -> deliveries.createForOrder(Delivery.create(orderId, otherOrigin, DESTINATION, TIME),
+                customerId)).isInstanceOf(DeliveryStateConflictException.class);
+        assertThatThrownBy(() -> deliveries.createForOrder(Delivery.create(orderId, ORIGIN, DESTINATION, TIME),
+                UUID.randomUUID())).isInstanceOf(DeliveryStateConflictException.class);
+        assertThat(jdbc.queryForObject("SELECT customer_id FROM deliveries WHERE order_id = ?", UUID.class, orderId))
+                .isEqualTo(customerId);
+    }
+
+    @Test
+    void concurrentCreationForTheSameOrderStoresOneDelivery() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Callable<Boolean> create = () -> {
+                start.await();
+                return deliveries.createForOrder(Delivery.create(orderId, ORIGIN, DESTINATION, TIME), customerId)
+                        .created();
+            };
+            var a = executor.submit(create);
+            var b = executor.submit(create);
+            start.countDown();
+            assertThat(new boolean[]{a.get(10, TimeUnit.SECONDS), b.get(10, TimeUnit.SECONDS)})
+                    .containsExactlyInAnyOrder(true, false);
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM deliveries WHERE order_id = ?", Integer.class, orderId))
+                .isEqualTo(1);
+    }
+
+    @Test
     void createsAndFindsWithIndependentSnapshotsAndMigratedSchema() {
         Delivery original = Delivery.create(UUID.randomUUID(), ORIGIN, DESTINATION, TIME);
         Delivery saved = deliveries.create(original);
