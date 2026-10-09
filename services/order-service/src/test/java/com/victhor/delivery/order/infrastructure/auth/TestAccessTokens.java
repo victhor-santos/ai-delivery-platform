@@ -37,10 +37,16 @@ public final class TestAccessTokens {
         return issue(PRIVATE_KEY, Instant.now(), claims -> claims.subject(userId.toString()));
     }
 
+    public static String issueOperator(UUID userId) {
+        return issue(PRIVATE_KEY, Instant.now(), claims -> claims.subject(userId.toString())
+                .claim(AccessTokenVerifier.ROLES_CLAIM, List.of("OPERATOR")));
+    }
+
     public static String issue(String privateKey, Instant issuedAt, Consumer<JwtClaimsSet.Builder> customizer) {
         var claims = JwtClaimsSet.builder().issuer(AccessTokenVerifier.ISSUER).subject(UUID.randomUUID().toString())
                 .audience(List.of(AccessTokenVerifier.AUDIENCE)).issuedAt(issuedAt).notBefore(issuedAt)
-                .expiresAt(issuedAt.plus(Duration.ofMinutes(15))).id(UUID.randomUUID().toString());
+                .expiresAt(issuedAt.plus(Duration.ofMinutes(15))).claim(AccessTokenVerifier.ROLES_CLAIM, List.of("CUSTOMER"))
+                .id(UUID.randomUUID().toString());
         customizer.accept(claims);
         var key = rsaKey(privateKey);
         var header = JwsHeader.with(SignatureAlgorithm.RS256).keyId(key.getKeyID()).type("JWT").build();

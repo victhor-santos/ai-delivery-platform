@@ -8,6 +8,8 @@ import java.security.spec.X509EncodedKeySpec;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -20,6 +22,8 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
 import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.web.client.RestTemplate;
 
 /** Validates RS256 access tokens signed by the User service; this service never holds a signing key. */
@@ -30,6 +34,8 @@ public final class AccessTokenVerifier {
     public static final Duration MAX_LIFETIME = Duration.ofMinutes(15);
     public static final Duration CLOCK_SKEW = Duration.ofSeconds(30);
     public static final Duration KEY_FETCH_TIMEOUT = Duration.ofSeconds(2);
+    public static final String ROLES_CLAIM = "roles";
+    public static final Set<String> ROLES = Set.of("CUSTOMER", "OPERATOR");
 
     private AccessTokenVerifier() {
     }
@@ -53,6 +59,16 @@ public final class AccessTokenVerifier {
                 .signatureAlgorithm(SignatureAlgorithm.RS256).build(), clock);
     }
 
+    /** Maps the roles claim to ROLE_CUSTOMER / ROLE_OPERATOR authorities. */
+    public static JwtAuthenticationConverter authenticationConverter() {
+        var authorities = new JwtGrantedAuthoritiesConverter();
+        authorities.setAuthoritiesClaimName(ROLES_CLAIM);
+        authorities.setAuthorityPrefix("ROLE_");
+        var converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(authorities);
+        return converter;
+    }
+
     private static JwtDecoder withValidators(NimbusJwtDecoder decoder, Clock clock) {
         var timestamps = new JwtTimestampValidator(CLOCK_SKEW);
         timestamps.setClock(clock);
@@ -68,12 +84,14 @@ public final class AccessTokenVerifier {
                     && jwt.getIssuedAt() != null && jwt.getExpiresAt() != null
                     && jwt.getExpiresAt().isAfter(jwt.getIssuedAt())
                     && !jwt.getExpiresAt().isAfter(jwt.getIssuedAt().plus(MAX_LIFETIME))
-                    && !jwt.getIssuedAt().isAfter(clock.instant().plus(CLOCK_SKEW));
+                    && !jwt.getIssuedAt().isAfter(clock.instant().plus(CLOCK_SKEW))
+                    && jwt.getClaims().get(ROLES_CLAIM) instanceof List<?> roles && !roles.isEmpty()
+                    && roles.stream().allMatch(ROLES::contains);
             if (valid) {
                 return OAuth2TokenValidatorResult.success();
             }
         } catch (IllegalArgumentException | NullPointerException exception) {
-            // A signed token still needs a usable subject and the required time claims.
+            // A signed token still needs a usable subject, the required time claims and known roles.
         }
         return OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "Invalid access token", null));
     }

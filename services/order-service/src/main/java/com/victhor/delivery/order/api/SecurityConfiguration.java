@@ -16,6 +16,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
+import com.victhor.delivery.order.infrastructure.auth.AccessTokenVerifier;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration(proxyBeanMethods = false)
@@ -36,7 +37,7 @@ class SecurityConfiguration {
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, exception) -> unauthorized(response, mapper)))
                 .oauth2ResourceServer(resource -> resource
-                        .jwt(jwt -> {})
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(AccessTokenVerifier.authenticationConverter()))
                         .authenticationEntryPoint((request, response, exception) -> unauthorized(response, mapper)))
                 .build();
     }

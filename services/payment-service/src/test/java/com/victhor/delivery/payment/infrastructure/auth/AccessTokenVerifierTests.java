@@ -42,6 +42,15 @@ class AccessTokenVerifierTests {
     }
 
     @Test
+    void mapsTheRolesClaimToAuthorities() {
+        var jwt = DECODER.decode(signed(NOW, claims -> claims.claim("roles", List.of("OPERATOR"))));
+        var authentication = AccessTokenVerifier.authenticationConverter().convert(jwt);
+        assertThat(authentication.getAuthorities()).extracting(authority -> authority.getAuthority())
+                .filteredOn(authority -> authority.startsWith("ROLE_")).containsExactly("ROLE_OPERATOR");
+        assertThat(authentication.getName()).isEqualTo(jwt.getSubject());
+    }
+
+    @Test
     void fetchesThePublicKeysFromTheUserServiceKeySetOnceAndCachesThem() throws Exception {
         var requests = new AtomicInteger();
         byte[] keySet = new JWKSet(TestAccessTokens.rsaKey(TestAccessTokens.PRIVATE_KEY).toPublicJWK()).toString()
@@ -85,7 +94,11 @@ class AccessTokenVerifierTests {
                 Arguments.of("other audience", signed(NOW, claims -> claims.audience(List.of("other")))),
                 Arguments.of("non-UUID subject", signed(NOW, claims -> claims.subject("admin"))),
                 Arguments.of("lifetime above 15 minutes", signed(NOW,
-                        claims -> claims.expiresAt(NOW.plusSeconds(16 * 60)))));
+                        claims -> claims.expiresAt(NOW.plusSeconds(16 * 60)))),
+                Arguments.of("no roles", signed(NOW, claims -> claims.claims(map -> map.remove("roles")))),
+                Arguments.of("empty roles", signed(NOW, claims -> claims.claim("roles", List.of()))),
+                Arguments.of("unknown role", signed(NOW, claims -> claims.claim("roles", List.of("ADMIN")))),
+                Arguments.of("roles not a list", signed(NOW, claims -> claims.claim("roles", "OPERATOR"))));
     }
 
     @ParameterizedTest
