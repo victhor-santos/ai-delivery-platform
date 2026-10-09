@@ -52,6 +52,14 @@ class FastApiRouteOptimizerClientTests {
             """;
 
     @Test
+    void acceptsRoutesFromAPromotedObservationModel() throws Exception {
+        String promoted = VALID_RESPONSE.replace("\"data_origin\":\"synthetic\"", "\"data_origin\":\"simulated\"");
+        try (var server = new Remote(200, "application/json", promoted, 0, null)) {
+            assertThat(optimize(server).dataOrigin()).isEqualTo("simulated");
+        }
+    }
+
+    @Test
     void preservesFeaturesAndTheirAvailabilityWhileAcceptingLegacyRoutes() throws Exception {
         var body = (ObjectNode) mapper.readTree(VALID_RESPONSE);
         ((ObjectNode) body.path("segments").get(0)).set("prediction_context", mapper.readTree(FEATURE_CONTEXT));

@@ -67,6 +67,16 @@ class OptimizedRouteTests {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new OptimizedRoute(List.of(ORIGIN), List.of(), 0, 0, NOW, NOW, "v1", "v1", "real"))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OptimizedRoute(List.of(ORIGIN), List.of(), 0, 0, NOW, NOW, "v1", "v1", "SIMULATED"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void acceptsRoutesFromAPromotedModelTrainedOnSimulatedDeliveries() {
+        var route = new OptimizedRoute(List.of(ORIGIN), List.of(), 0, 0, NOW, NOW,
+                "segment-observation-model-v1-0123456789abcdef", "synthetic-city-v1", "simulated");
+
+        assertThat(route.dataOrigin()).isEqualTo("simulated");
     }
 
     @Test
