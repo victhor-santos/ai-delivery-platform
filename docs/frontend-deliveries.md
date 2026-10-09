@@ -7,7 +7,7 @@ Esta etapa continua o [checkout](frontend-checkout.md) a partir do pedido pago. 
 | Parte da página | Chamadas |
 | --- | --- |
 | Solicitação | `POST /api/orders/{id}/delivery` (token do dono) e nova leitura do pedido |
-| Acompanhamento | `GET /api/deliveries/by-order/{orderId}` a cada 5 segundos, até `DELIVERED` ou `CANCELLED` |
+| Acompanhamento | `GET /api/deliveries/by-order/{orderId}` a cada segundo até a entrega existir e, depois, a cada 5 segundos, até `DELIVERED` ou `CANCELLED` |
 | Rota | `GET` e `POST /api/deliveries/{id}/route` |
 | Simulação operacional | `POST /api/deliveries/couriers`, `/assign`, `/pick-up`, `/start-transit`, `/arrive`, `/complete` e `/cancel` |
 
@@ -15,7 +15,7 @@ A seção de entrega só aparece em pedidos `CONFIRMED`. A [integração entre p
 
 ## Solicitação e acompanhamento
 
-A solicitação é idempotente. Rede ou `5xx` deixam o resultado desconhecido: o pedido já pode ter `deliveryRequestedAt` sem que o Delivery Service tenha a entrega. Nesse caso a consulta por pedido responde `404`, e a página mostra "Tentar novamente", que repete a mesma chamada e recupera ou cria a entrega sem duplicá-la. Recusas como restaurante inativo (`409`) mostram o `detail`.
+A solicitação é idempotente e responde `202`: a entrega é criada pelo Delivery ao consumir o evento no RabbitMQ ([solicitação por RabbitMQ](delivery-messaging.md)). Enquanto a consulta por pedido responde `404`, a página mostra "Aguardando o serviço de entregas registrá-la…" e consulta de novo a cada segundo, sem pedir outra ação. Rede ou `5xx` na solicitação mantêm o botão disponível; repetir devolve a mesma solicitação. Recusas como restaurante inativo (`409`) mostram o `detail`.
 
 A linha do tempo exibe criação, atribuição, coleta, saída, chegada e conclusão com os horários do servidor. Uma entrega cancelada termina no cancelamento. Uma falha passageira na consulta mantém a última entrega visível e tenta de novo no próximo ciclo. Uma consulta iniciada antes de um comando não substitui a resposta mais recente, comparada por `updatedAt`.
 

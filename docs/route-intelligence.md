@@ -38,7 +38,7 @@ flowchart TD
     Routing --> Result[Rota com menor tempo previsto]
 ```
 
-O cliente acessa o sistema pelo Gateway. O Delivery chama o serviço Python internamente, sem expor uma nova rota pública no Gateway. Order e Delivery já se comunicam por HTTP, com criação idempotente de entregas. Mensageria pode entrar quando precisarmos processar eventos de forma independente e garantir sua entrega.
+O cliente acessa o sistema pelo Gateway. O Delivery chama o serviço Python internamente, sem expor uma nova rota pública no Gateway. Order solicita a entrega ao Delivery por um evento no RabbitMQ, publicado por outbox e consumido de forma idempotente ([solicitação por RabbitMQ](delivery-messaging.md)).
 
 ## O que falta no backend
 

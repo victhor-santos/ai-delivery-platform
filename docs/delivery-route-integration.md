@@ -111,7 +111,7 @@ $plan
 Invoke-RestMethod $routeUrl
 ```
 
-O cenário padrão e o bundle Windows retornam A → B → C, 2,9 km e aproximadamente 16,06845 minutos. Para usar uma entrega criada pelo fluxo real de pedidos, obtenha `deliveryId` na [solicitação do pedido confirmado](order-delivery-integration.md), com coleta e destino correspondentes ao grafo, e use os mesmos endpoints.
+O cenário padrão e o bundle Windows retornam A → B → C, 2,9 km e aproximadamente 16,06845 minutos. Para usar uma entrega criada pelo fluxo real de pedidos, solicite a entrega do [pedido confirmado](order-delivery-integration.md) e obtenha o `id` em `GET /api/deliveries/by-order/{orderId}`, com coleta e destino correspondentes ao grafo, e use os mesmos endpoints.
 
 ## Validação
 

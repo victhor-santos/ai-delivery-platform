@@ -55,7 +55,7 @@ Mantenha o timeout de Payment abaixo do de Order. Assim, quando Order demora a r
 
 - Não há estorno, expiração de intenções pendentes nem reconciliação em segundo plano: uma intenção pendente só avança quando o cliente repete a requisição com a mesma chave.
 - Payment registra a regra de chave por cliente. Reusar a mesma chave em dois pedidos faz Payment responder `422`, e o segundo pedido registra a intenção como `REJECTED` (`409`). Use uma chave nova por intenção.
-- A comunicação é HTTP síncrona; não há mensageria.
+- A comunicação com Payment é HTTP síncrona; só a solicitação de entrega usa [RabbitMQ](delivery-messaging.md).
 
 ## Exemplo e validação
 

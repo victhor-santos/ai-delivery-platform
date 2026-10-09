@@ -57,7 +57,7 @@ O objeto isolado não consegue garantir uma entrega por pedido nem impedir que o
 
 A persistência foi integrada pelo PR #11 e a API pelo PR #12. `feature/order-delivery-integration` conecta pedidos confirmados à criação de entregas, com snapshots e tratamento de repetição. O domínio de Delivery permanece separado dos clientes HTTP de Order.
 
-O Compose possui `delivery-db`, separado de `catalog-db` e `order-db`. As transições são síncronas e precisam ser confirmadas na transação antes de retornar. Mensageria e chamadas ao serviço Python continuam no roadmap.
+O Compose possui `delivery-db`, separado de `catalog-db` e `order-db`. As transições são síncronas e precisam ser confirmadas na transação antes de retornar. A criação a partir de pedidos chega por [RabbitMQ](delivery-messaging.md), e o [planejamento de rotas](delivery-route-integration.md) chama o serviço Python.
 
 ## Testes
 
