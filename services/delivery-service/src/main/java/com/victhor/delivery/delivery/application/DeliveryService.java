@@ -22,8 +22,10 @@ public class DeliveryService {
         return deliveries.create(Delivery.create(orderId, origin, destination, now()));
     }
 
-    public DeliveryCreation createForOrder(UUID orderId, DeliveryLocation origin, DeliveryLocation destination) {
-        return deliveries.createForOrder(Delivery.create(orderId, origin, destination, now()));
+    /** Idempotent by order: repeating the request returns the stored delivery, even after later transitions. */
+    public DeliveryCreation createForOrder(UUID orderId, UUID customerId, DeliveryLocation origin,
+            DeliveryLocation destination) {
+        return deliveries.createForOrder(Delivery.create(orderId, origin, destination, now()), customerId);
     }
 
     public Delivery findById(UUID id) {

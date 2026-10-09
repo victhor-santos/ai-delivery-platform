@@ -2,7 +2,7 @@
 
 O perfil `demo` executa as seis aplicações Java, Route Intelligence, a interface web e os cinco PostgreSQL, totalizando treze containers. O smoke verifica perfis e endereços e executa o fluxo com um restaurante fictício, itens de cardápio com preços preservados no pedido e os nós do grafo `synthetic-city-v1`: catálogo → pedido confirmado → pagamento simulado → entrega → plano de rota. O smoke também verifica registro/login, identidade JWT e a [autorização dos recursos](resource-authorization.md); não há ruas reais nem API de IA externa. A interface web atende em `http://localhost:3000` (`WEB_PORT`) e encaminha `/api` ao Gateway; veja a [base da interface web](frontend-foundation.md).
 
-Sem o perfil, `docker compose up` inicia somente os cinco bancos. Os volumes existentes foram preservados; `user-db` acrescenta banco `users`, volume `user_postgres_data` e porta padrão 5436, e `payment-db` acrescenta banco `payments`, volume `payment_postgres_data` e porta padrão 5437. As migrations continuam sob responsabilidade de cada aplicação.
+Sem o perfil, `docker compose up` inicia somente os cinco bancos e o RabbitMQ. Os volumes existentes foram preservados; `user-db` acrescenta banco `users`, volume `user_postgres_data` e porta padrão 5436, e `payment-db` acrescenta banco `payments`, volume `payment_postgres_data` e porta padrão 5437. As migrations continuam sob responsabilidade de cada aplicação.
 
 ## Preparar e iniciar
 
@@ -51,7 +51,7 @@ O build Java compila e empacota com `-DskipTests`. Ele não tenta iniciar Testco
 
 No build Python, as dependências usam cache, mas o wheel do próprio projeto é instalado com `--no-cache` após copiar `app` e `training`. Isso impede que uma alteração de código com a mesma versão no `pyproject.toml` reutilize um pacote antigo.
 
-Gateway recebe `USER_SERVICE_URL`, `CATALOG_SERVICE_URL`, `ORDER_SERVICE_URL`, `PAYMENT_SERVICE_URL` e `DELIVERY_SERVICE_URL`. Os padrões continuam `localhost` para execução nativa; no Compose são hostnames dos containers. Order consulta `catalog-service`, `delivery-service` e `payment-service`; Payment consulta `order-service` (`ORDER_SERVICE_URL`, `PAYMENT_REMOTE_TIMEOUT_MS`); Delivery consulta `route-intelligence-service`. User não consulta outros serviços. As URLs JDBC apontam para o banco próprio na porta interna 5432, independentemente das portas publicadas na máquina; User usa `jdbc:postgresql://user-db:5432/users`.
+Gateway recebe `USER_SERVICE_URL`, `CATALOG_SERVICE_URL`, `ORDER_SERVICE_URL`, `PAYMENT_SERVICE_URL` e `DELIVERY_SERVICE_URL`. Os padrões continuam `localhost` para execução nativa; no Compose são hostnames dos containers. Order consulta `catalog-service` e `payment-service` e publica as solicitações de entrega no `rabbitmq`, consumidas pelo Delivery; Payment consulta `order-service` (`ORDER_SERVICE_URL`, `PAYMENT_REMOTE_TIMEOUT_MS`); Delivery consulta `route-intelligence-service`. User não consulta outros serviços. As URLs JDBC apontam para o banco próprio na porta interna 5432, independentemente das portas publicadas na máquina; User usa `jdbc:postgresql://user-db:5432/users`.
 
 O perfil publica somente Gateway, Python e bancos em `127.0.0.1`. As portas 8081–8085 das aplicações Java são internas à rede Docker. Gateway atende em `API_GATEWAY_PORT` (8080 por padrão); Python em `ROUTE_INTELLIGENCE_PORT` (8000). As variáveis de portas dos bancos continuam as mesmas do README. O Compose fornece as URLs internas explicitamente, sem reutilizar URLs `localhost` do `.env`.
 

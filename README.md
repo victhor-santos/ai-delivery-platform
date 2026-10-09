@@ -12,11 +12,11 @@ A localização de coleta pode ser informada no cadastro ou atualizada depois. E
 
 Cada item do cardápio pertence a um restaurante e tem nome, descrição opcional, preço em BRL e disponibilidade. A API permite cadastrar, consultar, listar e substituir seus dados, com valores monetários exatos e isolamento por restaurante. Veja o [contrato do cardápio](docs/restaurant-menu.md).
 
-O Order Service cria, consulta, paga e cancela pedidos em um PostgreSQL próprio. Cada pedido pertence ao cliente do token usado na criação, e somente ele pode consultá-lo ou alterá-lo. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. O pedido é confirmado por um [pagamento simulado aprovado](docs/order-payment-integration.md), cobrado pelo total sem duplicar a cobrança; um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e criação idempotente no Delivery. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
+O Order Service cria, consulta, paga e cancela pedidos em um PostgreSQL próprio. Cada pedido pertence ao cliente do token usado na criação, e somente ele pode consultá-lo ou alterá-lo. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. O pedido é confirmado por um [pagamento simulado aprovado](docs/order-payment-integration.md), cobrado pelo total sem duplicar a cobrança; um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e um evento publicado no RabbitMQ pelo outbox, que o Delivery consome de forma idempotente. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
 O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Consulta Python, salva o último plano de rota e registra [travessias simuladas por trecho](docs/delivery-segment-observations.md), com snapshots da previsão e exportação CSV por disponibilidade temporal. Veja também o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
-Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. O Payment Service registra [tentativas de pagamento simuladas](docs/simulated-payments.md), com aprovação ou recusa fixadas pelo método, idempotência e PostgreSQL próprio; antes de cobrar, confere o pedido no Order Service. RabbitMQ permanece em etapa posterior.
+Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. O Payment Service registra [tentativas de pagamento simuladas](docs/simulated-payments.md), com aprovação ou recusa fixadas pelo método, idempotência e PostgreSQL próprio; antes de cobrar, confere o pedido no Order Service. A [solicitação de entrega](docs/delivery-messaging.md) passa pelo RabbitMQ: Order grava o evento em um outbox na mesma transação do pedido e o publica com confirmação do broker; Delivery o consome de forma idempotente, com retry e fila de mensagens mortas.
 
 A [interface web](docs/frontend-foundation.md), em React e TypeScript, permite criar conta, entrar e consultar o perfil autenticado. Ela chama somente o Gateway, sob `/api` na mesma origem, e encerra a sessão quando o token de 15 minutos expira. O [checkout](docs/frontend-checkout.md) cobre restaurantes, cardápio, carrinho, destino, pedido e pagamento simulado. As [entregas](docs/frontend-deliveries.md) são solicitadas e acompanhadas na página do pedido, com a rota prevista no mapa da cidade sintética e um painel que simula o ciclo operacional. A [observabilidade das requisições](docs/request-observability.md) correlaciona cada chamada por `X-Request-Id` em todos os serviços, com uma linha de log por requisição e métricas do fluxo e do roteamento no Actuator. A [validação da promoção](docs/model-promotion-validation.md) gera uma coleta simulada que cobre o grafo e só permite à API servir um modelo observacional depois de uma decisão aprovada sobre contrato, cobertura e métricas.
 
@@ -41,7 +41,7 @@ A [integração de rotas com Delivery](docs/delivery-route-integration.md) está
 
 Com Docker usando containers Linux, execute na raiz:
 
-Se o `.env` já existe, complete as entradas `USER_DB_*` a partir do `.env.example` antes de executar o Compose, preservando a configuração existente.
+Se o `.env` já existe, complete as entradas `USER_DB_*` e `RABBITMQ_*` a partir do `.env.example` antes de executar o Compose, preservando a configuração existente e escolhendo uma senha própria para o RabbitMQ.
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
@@ -55,7 +55,7 @@ Para ter restaurantes e cardápios na interface, rode `pwsh -NoProfile -File scr
 
 A interface web atende em `http://localhost:3000`; Gateway em `http://localhost:8080`; Python em `http://localhost:8000`. As portas Java 8081–8085 são internas neste perfil. Sem `demo`, o Compose continua iniciando somente bancos. Não é necessário instalar Java, Python ou Node.js na máquina para esta demonstração. O script verifica um modelo existente e só treina se não houver bundle; a API nunca treina ao iniciar.
 
-O perfil utiliza cinco bancos, sete aplicações e a interface web, totalizando treze containers. Cada JVM usa heap entre 64 e 384 MB e dimensiona seus pools para dois processadores, evitando que as seis aplicações dimensionem memória/threads pelo total da VM Docker. `DEMO_JAVA_TOOL_OPTIONS` permite ajustar esses parâmetros somente no Compose; execução nativa permanece independente.
+O perfil utiliza cinco bancos, o RabbitMQ, sete aplicações e a interface web, totalizando catorze containers. A interface de gerenciamento do RabbitMQ atende em `http://localhost:15672`, com as credenciais `RABBITMQ_*` do `.env`. Cada JVM usa heap entre 64 e 384 MB e dimensiona seus pools para dois processadores, evitando que as seis aplicações dimensionem memória/threads pelo total da VM Docker. `DEMO_JAVA_TOOL_OPTIONS` permite ajustar esses parâmetros somente no Compose; execução nativa permanece independente.
 
 Veja o [guia do Compose](docs/route-intelligence-compose.md) para configuração, compatibilidade do modelo, testes de queda/recuperação e preservação dos volumes. O smoke cria registros de demonstração no banco. Os comandos de execução nativa abaixo continuam disponíveis.
 
@@ -86,7 +86,7 @@ sudo snap disable docker && sudo snap enable docker   # somente no Docker instal
 [ -f .env ] || cp .env.example .env
 chmod 600 .env
 scripts/initialize-auth-secret.sh
-docker compose up -d --wait catalog-db order-db delivery-db user-db payment-db
+docker compose up -d --wait catalog-db order-db delivery-db user-db payment-db rabbitmq
 ./services/user-service/mvnw -f services/user-service/pom.xml clean verify
 ./services/user-service/mvnw -f services/user-service/pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 ```
@@ -180,7 +180,7 @@ Se a porta 5432 já estiver ocupada, escolha outra porta em `CATALOG_DB_PORT` e 
 O Compose define `catalog-db`, `order-db`, `delivery-db`, `user-db` e `payment-db`, com `postgres:17-alpine`, portas publicadas em `127.0.0.1` e health check `pg_isready`. Os volumes são separados: `catalog_postgres_data`, `order_postgres_data`, `delivery_postgres_data`, `user_postgres_data` e `payment_postgres_data`. Para iniciar os cinco:
 
 ```powershell
-docker compose up -d --wait catalog-db order-db delivery-db user-db payment-db
+docker compose up -d --wait catalog-db order-db delivery-db user-db payment-db rabbitmq
 docker compose ps
 ```
 
@@ -254,7 +254,7 @@ Diretamente em `http://localhost:8083` ou pelo Gateway em `http://localhost:8080
 | `GET /api/orders/{id}` | `200` com o pedido ou `404` |
 | `POST /api/orders/{id}/payment` com `Idempotency-Key` e `{method}` | `200` com o pagamento simulado; aprovação confirma o pedido |
 | `POST /api/orders/{id}/cancel` | `200` com estado `CANCELLED`; `409` com pagamento em andamento ou aprovado |
-| `POST /api/orders/{id}/delivery` | `200` com `orderId`, `deliveryId` e estado da entrega; exige pedido confirmado |
+| `POST /api/orders/{id}/delivery` | `202` com `orderId` e `status: "REQUESTED"`; exige pedido confirmado. A entrega é criada pelo Delivery ao consumir o evento |
 
 O cadastro recebe `restaurantId`, `destination` com `address`, `latitude` e `longitude`, e `items` com `menuItemId` e `quantity`. São aceitos de 1 a 50 itens distintos, com quantidades inteiras de 1 a 99. O servidor consulta o catálogo e calcula os valores; preços enviados pelo cliente não definem o total. Ausência de restaurante ou item, restaurante inativo ou item de outro restaurante/indisponível resulta em `409`; falhas do catálogo retornam `503` sem detalhes internos. A resposta inclui os itens com nomes e preços preservados, `lineTotal`, `total` e `currency: "BRL"`. Pedidos anteriores à migração mantêm `items: []`, `total: null` e `currency: null`.
 

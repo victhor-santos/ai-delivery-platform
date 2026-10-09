@@ -78,7 +78,6 @@ class OrderPaymentIntegrationTests {
     static void remoteUrls(DynamicPropertyRegistry properties) {
         String url = "http://localhost:" + REMOTE.getAddress().getPort();
         properties.add("order.integration.catalog-url", () -> url);
-        properties.add("order.integration.delivery-url", () -> url);
         properties.add("order.integration.payment-url", () -> url);
     }
 

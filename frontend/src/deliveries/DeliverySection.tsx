@@ -12,7 +12,7 @@ import { RouteSection } from './RouteSection'
 import { useDeliveryTracking } from './useDeliveryTracking'
 
 const UNKNOWN_RESULT =
-  'O serviço de entregas não respondeu. A solicitação ficou registrada; tente novamente para concluí-la.'
+  'Não foi possível confirmar a solicitação da entrega. Tente novamente; repetir não cria outra entrega.'
 
 // Pedido confirmado: solicita a entrega e acompanha seu andamento.
 export function DeliverySection({ order, onOrderChange }: { order: Order; onOrderChange: (order: Order) => void }) {
@@ -28,7 +28,7 @@ export function DeliverySection({ order, onOrderChange }: { order: Order; onOrde
     return null
   }
 
-  // A mesma chamada cria a entrega ou recupera a já existente.
+  // Repetir a chamada devolve a mesma solicitação.
   async function handleRequest() {
     setNotice(null)
     setBusy(true)
@@ -66,16 +66,13 @@ export function DeliverySection({ order, onOrderChange }: { order: Order; onOrde
           </button>
         </>
       )}
-      {requested && tracking.missing && (
-        <>
-          <Alert kind="info">A entrega foi solicitada, mas o serviço de entregas ainda não a confirmou.</Alert>
-          <button type="button" disabled={busy} onClick={handleRequest}>
-            {busy ? 'Solicitando…' : 'Tentar novamente'}
-          </button>
-        </>
+      {requested && tracking.pending && (
+        <p className="muted" aria-busy="true">
+          Entrega solicitada. Aguardando o serviço de entregas registrá-la…
+        </p>
       )}
       {requested && tracking.error && <Alert>{tracking.error}</Alert>}
-      {requested && !tracking.delivery && !tracking.missing && !tracking.error && (
+      {requested && !tracking.delivery && !tracking.pending && !tracking.error && (
         <p aria-busy="true">Carregando entrega…</p>
       )}
       {tracking.delivery && (

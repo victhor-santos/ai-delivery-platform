@@ -10,7 +10,7 @@ Os serviços Java aplicam a mesma regra, o que também cobre chamadas diretas à
 
 | Origem | Destino |
 | --- | --- |
-| Order | Catalog, Delivery e Payment |
+| Order | Catalog e Payment, por HTTP; Delivery, no header `X-Request-Id` do evento de solicitação de entrega |
 | Payment | Order |
 | Delivery | Route Intelligence |
 
@@ -40,6 +40,8 @@ Os cinco serviços expõem `/actuator/metrics`, além de `health` e `info`. O Ga
 | Métrica | Onde | O que mede |
 | --- | --- | --- |
 | `http.server.requests` | Todos os serviços Java | Contagem e duração por `uri` (modelo da rota, como `/api/orders/{id}/payment`), `method`, `status` e `outcome` |
+| `order.outbox.published`, `order.outbox.failed`, `order.outbox.pending` | Order | Publicação dos eventos do outbox; veja a [solicitação por RabbitMQ](delivery-messaging.md) |
+| `delivery.requests.consumed` | Delivery | Eventos de solicitação consumidos, por `outcome` |
 | `delivery.route.optimization` | Delivery | Duração de cada cálculo pedido ao Route Intelligence, por `outcome`: `success`, `outside_coverage`, `route_not_found`, `unavailable` ou `error` |
 
 Na rede da demonstração:

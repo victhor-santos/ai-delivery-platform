@@ -3,20 +3,22 @@ import { ApiError } from '../api/client'
 import { getDeliveryByOrder, isFinished, type Delivery } from '../api/deliveries'
 
 export const POLL_INTERVAL_MS = 5_000
+// Enquanto o evento da solicitação não é consumido, a consulta é mais frequente.
+export const PENDING_POLL_INTERVAL_MS = 1_000
 
 const FALLBACK = 'Não foi possível consultar a entrega.'
 
 type Tracking = {
   delivery: Delivery | null
-  // O pedido registrou a intenção, mas o Delivery Service ainda não tem a entrega (resposta perdida ou 503).
-  missing: boolean
+  // O pedido registrou a solicitação, mas o Delivery Service ainda não consumiu o evento que cria a entrega.
+  pending: boolean
   error: string | null
 }
 
-const EMPTY: Tracking = { delivery: null, missing: false, error: null }
+const EMPTY: Tracking = { delivery: null, pending: false, error: null }
 
 // Consulta a entrega do pedido e repete a consulta até ela terminar. Uma falha passageira mantém a última
-// entrega visível e continua tentando; 404 para a consulta até o cliente repetir a solicitação.
+// entrega visível e continua tentando; 404 indica que a entrega ainda está sendo criada.
 export function useDeliveryTracking(orderId: string, enabled: boolean) {
   const [tracking, setTracking] = useState<Tracking>(EMPTY)
   const [reloads, setReloads] = useState(0)
@@ -35,7 +37,7 @@ export function useDeliveryTracking(orderId: string, enabled: boolean) {
         setTracking((current) =>
           current.delivery && Date.parse(current.delivery.updatedAt) > Date.parse(delivery.updatedAt)
             ? { ...current, error: null }
-            : { delivery, missing: false, error: null },
+            : { delivery, pending: false, error: null },
         )
         if (!isFinished(delivery)) {
           timer = setTimeout(poll, POLL_INTERVAL_MS)
@@ -45,7 +47,8 @@ export function useDeliveryTracking(orderId: string, enabled: boolean) {
           return
         }
         if (failure instanceof ApiError && failure.status === 404) {
-          setTracking({ delivery: null, missing: true, error: null })
+          setTracking({ delivery: null, pending: true, error: null })
+          timer = setTimeout(poll, PENDING_POLL_INTERVAL_MS)
           return
         }
         const error = failure instanceof ApiError ? failure.message : FALLBACK
@@ -62,6 +65,6 @@ export function useDeliveryTracking(orderId: string, enabled: boolean) {
   }, [orderId, enabled, reloads])
 
   const reload = useCallback(() => setReloads((count) => count + 1), [])
-  const setDelivery = useCallback((delivery: Delivery) => setTracking({ delivery, missing: false, error: null }), [])
+  const setDelivery = useCallback((delivery: Delivery) => setTracking({ delivery, pending: false, error: null }), [])
   return { ...tracking, reload, setDelivery }
 }

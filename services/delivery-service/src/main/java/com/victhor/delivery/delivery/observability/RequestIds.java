@@ -28,6 +28,16 @@ public final class RequestIds {
         return request;
     }
 
+    /** Runs work triggered by a message under the request id it carries, or a new one, as the HTTP filter does. */
+    public static void runWith(String candidate, Runnable work) {
+        MDC.put(MDC_KEY, resolve(candidate));
+        try {
+            work.run();
+        } finally {
+            MDC.remove(MDC_KEY);
+        }
+    }
+
     static String resolve(String candidate) {
         return candidate != null && VALID.matcher(candidate).matches() ? candidate : UUID.randomUUID().toString();
     }

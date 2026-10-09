@@ -2,7 +2,7 @@
 
 Delivery oferece criação e consulta de entregas, cadastro mínimo de entregador e comandos do ciclo. A API atende diretamente em `http://localhost:8085` e pelo Gateway em `http://localhost:8080`. Todos os endpoints usam `/api/deliveries`, incluindo entregadores; a rota existente do Gateway encaminha o caminho completo.
 
-O [planejamento de rotas](delivery-route-integration.md) acrescenta `POST` e `GET /api/deliveries/{id}/route`, com resposta própria, sem alterar o ciclo descrito abaixo.
+Entregas de pedidos pagos são criadas a partir do evento publicado pelo Order, sem endpoint HTTP; veja a [solicitação por RabbitMQ](delivery-messaging.md). O [planejamento de rotas](delivery-route-integration.md) acrescenta `POST` e `GET /api/deliveries/{id}/route`, com resposta própria, sem alterar o ciclo descrito abaixo.
 
 ## Contrato HTTP
 
@@ -13,7 +13,6 @@ O [planejamento de rotas](delivery-route-integration.md) acrescenta `POST` e `GE
 | `POST /api/deliveries` | `201`, entrega `CREATED` e `Location` |
 | `GET /api/deliveries/{id}` | `200`, entrega com localizações e histórico |
 | `GET /api/deliveries/by-order/{orderId}` | `200`, entrega associada ao pedido |
-| `PUT /api/deliveries/by-order/{orderId}` com `origin` e `destination` | `201` na criação; `200` para os mesmos snapshots; `409` para dados diferentes |
 | `POST /api/deliveries/{id}/assign` com `courierId` | `200`, estado `ASSIGNED` |
 | `POST /api/deliveries/{id}/pick-up`, sem corpo | `200`, estado `PICKED_UP` |
 | `POST /api/deliveries/{id}/start-transit`, sem corpo | `200`, estado `IN_TRANSIT` |

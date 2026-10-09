@@ -27,6 +27,9 @@ public class DeliveryEntity {
     @Column(nullable = false)
     private UUID orderId;
 
+    @Column(updatable = false, insertable = false)
+    private UUID customerId;
+
     @Column(nullable = false, length = DeliveryLocation.MAX_DESCRIPTION_LENGTH)
     private String originDescription;
 
@@ -92,6 +95,10 @@ public class DeliveryEntity {
                 new GeoPoint(destinationLatitude, destinationLongitude));
         return Delivery.restore(id, orderId, origin, destination, courierId, status, createdAt, updatedAt,
                 assignedAt, pickedUpAt, departedAt, arrivedAt, deliveredAt, cancelledAt);
+    }
+
+    UUID customerId() {
+        return customerId;
     }
 
     long version() {

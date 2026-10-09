@@ -9,7 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,17 +40,6 @@ public class DeliveryController {
     @GetMapping("/by-order/{orderId}")
     public DeliveryResponse findByOrderId(@PathVariable UUID orderId) {
         return DeliveryResponse.from(deliveries.findByOrderId(orderId));
-    }
-
-    @PutMapping("/by-order/{orderId}")
-    public ResponseEntity<DeliveryResponse> createForOrder(@PathVariable UUID orderId,
-            @Valid @RequestBody DeliveryForOrderRequest request) {
-        var result = deliveries.createForOrder(orderId, request.origin().toDomain(), request.destination().toDomain());
-        var response = DeliveryResponse.from(result.delivery());
-        if (result.created()) {
-            return ResponseEntity.created(URI.create("/api/deliveries/" + response.id())).body(response);
-        }
-        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{id}/assign")

@@ -113,7 +113,7 @@ function advance(state: State, changes: Partial<Delivery>) {
 function created(state: State) {
   state.order = REQUESTED
   state.delivery = DELIVERY
-  return json(200, { orderId: 'o1', deliveryId: 'd1', status: 'CREATED' })
+  return json(202, { orderId: 'o1', status: 'REQUESTED' })
 }
 
 async function openOrder() {
@@ -139,20 +139,39 @@ describe('order delivery', () => {
     expect(calls('/api/orders/o1/delivery')[0][1]?.headers).toMatchObject({ Authorization: 'Bearer token-123' })
   })
 
-  it('keeps the request retryable when the delivery service does not answer', async () => {
+  it('waits for the delivery service to consume the request', async () => {
     const { state, calls } = server({ order: CONFIRMED, delivery: null }, (current) => {
       current.order = REQUESTED
-      return problem(503, 'indisponível')
+      return json(202, { orderId: 'o1', status: 'REQUESTED' })
     })
     const user = await openOrder()
 
     await user.click(screen.getByRole('button', { name: 'Solicitar entrega' }))
 
-    expect(await screen.findByText(/não respondeu/)).toBeInTheDocument()
-    expect(await screen.findByText(/ainda não a confirmou/)).toBeInTheDocument()
+    expect(await screen.findByText(/Aguardando o serviço de entregas/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Solicitar entrega' })).not.toBeInTheDocument()
 
     state.delivery = DELIVERY
-    await user.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+
+    expect(await screen.findByText('Aguardando entregador', {}, { timeout: 3_000 })).toBeInTheDocument()
+    expect(calls('/api/orders/o1/delivery')).toHaveLength(1)
+  })
+
+  it('lets the customer repeat a request whose answer was lost', async () => {
+    let attempts = 0
+    const { calls } = server({ order: CONFIRMED, delivery: null }, (current) => {
+      attempts += 1
+      if (attempts === 1) {
+        return problem(503, 'indisponível')
+      }
+      return created(current)
+    })
+    const user = await openOrder()
+
+    await user.click(screen.getByRole('button', { name: 'Solicitar entrega' }))
+    expect(await screen.findByText(/repetir não cria outra entrega/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Solicitar entrega' }))
 
     expect(await screen.findByText('Aguardando entregador')).toBeInTheDocument()
     expect(calls('/api/orders/o1/delivery')).toHaveLength(2)

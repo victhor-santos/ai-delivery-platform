@@ -14,26 +14,27 @@ public class OrderDeliveryService {
     private final OrderRepository orders;
     private final DeliveryRequestRepository requests;
     private final RestaurantLookup restaurants;
-    private final DeliveryGateway deliveries;
     private final Clock clock;
 
     public OrderDeliveryService(OrderRepository orders, DeliveryRequestRepository requests,
-            RestaurantLookup restaurants, DeliveryGateway deliveries, Clock clock) {
+            RestaurantLookup restaurants, Clock clock) {
         this.orders = orders;
         this.requests = requests;
         this.restaurants = restaurants;
-        this.deliveries = deliveries;
         this.clock = clock;
     }
 
-    public DeliveryGateway.DeliveryReceipt requestDelivery(UUID orderId, UUID customerId) {
+    /**
+     * Records the delivery request and its event in one transaction; Delivery creates the delivery asynchronously.
+     * Repeating the request returns the stored snapshot without fetching the catalog or publishing again.
+     */
+    public DeliveryRequest requestDelivery(UUID orderId, UUID customerId) {
         Order order = orders.findById(orderId).filter(candidate -> candidate.isPlacedBy(customerId))
                 .orElseThrow(OrderNotFoundException::new);
         if (order.status() != OrderStatus.CONFIRMED) {
             throw new OrderStateConflictException("Only a confirmed order can request delivery");
         }
-        DeliveryRequest request = requests.findByOrderId(orderId).orElseGet(() -> prepare(order));
-        return deliveries.createForOrder(request);
+        return requests.findByOrderId(orderId).orElseGet(() -> prepare(order));
     }
 
     private DeliveryRequest prepare(Order order) {

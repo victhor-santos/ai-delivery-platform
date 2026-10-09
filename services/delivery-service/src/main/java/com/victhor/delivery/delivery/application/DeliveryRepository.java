@@ -10,7 +10,7 @@ public interface DeliveryRepository {
 
     Delivery create(Delivery delivery);
 
-    DeliveryCreation createForOrder(Delivery delivery);
+    DeliveryCreation createForOrder(Delivery delivery, UUID customerId);
 
     Optional<Delivery> findById(UUID id);
 

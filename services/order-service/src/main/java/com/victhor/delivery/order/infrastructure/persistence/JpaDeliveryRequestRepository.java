@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.victhor.delivery.order.application.DeliveryRequestRepository;
 import com.victhor.delivery.order.application.OrderNotFoundException;
 import com.victhor.delivery.order.domain.DeliveryRequest;
+import com.victhor.delivery.order.infrastructure.messaging.OutboxEvents;
 
 @Repository
 @Transactional(readOnly = true)
@@ -17,10 +18,13 @@ public class JpaDeliveryRequestRepository implements DeliveryRequestRepository {
 
     private final SpringDataOrderRepository orders;
     private final SpringDataDeliveryRequestRepository requests;
+    private final OutboxEvents outbox;
 
-    public JpaDeliveryRequestRepository(SpringDataOrderRepository orders, SpringDataDeliveryRequestRepository requests) {
+    public JpaDeliveryRequestRepository(SpringDataOrderRepository orders, SpringDataDeliveryRequestRepository requests,
+            OutboxEvents outbox) {
         this.orders = orders;
         this.requests = requests;
+        this.outbox = outbox;
     }
 
     @Override
@@ -42,6 +46,8 @@ public class JpaDeliveryRequestRepository implements DeliveryRequestRepository {
         }
         entity.applyState(order);
         orders.flush();
-        return requests.save(DeliveryRequestEntity.from(request)).toDomain();
+        var saved = requests.save(DeliveryRequestEntity.from(request)).toDomain();
+        outbox.deliveryRequested(saved, order.customerId(), now);
+        return saved;
     }
 }
