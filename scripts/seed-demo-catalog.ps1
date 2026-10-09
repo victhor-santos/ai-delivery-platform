@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [uri]$GatewayUrl = 'http://localhost:8080',
-    [string]$CatalogFile = (Join-Path $PSScriptRoot 'demo-catalog.json')
+    [string]$CatalogFile = (Join-Path $PSScriptRoot 'demo-catalog.json'),
+    [string]$EnvFile = (Join-Path (Split-Path -Parent $PSScriptRoot) '.env')
 )
 
 # Creates the demo restaurants and menus through the Gateway. Records are matched by name, so running it again
@@ -9,10 +10,25 @@ param(
 $ErrorActionPreference = 'Stop'
 $baseUrl = $GatewayUrl.AbsoluteUri.TrimEnd('/')
 
+# Only the operator changes the catalog. Credentials come from the environment or the local .env, never arguments.
+function Get-Setting([string]$Name) {
+    $value = [Environment]::GetEnvironmentVariable($Name)
+    if (-not $value -and (Test-Path -LiteralPath $EnvFile -PathType Leaf)) {
+        $line = Get-Content -LiteralPath $EnvFile -Encoding UTF8 | Where-Object { $_ -like "$Name=*" } | Select-Object -First 1
+        if ($line) { $value = $line.Substring($Name.Length + 1).Trim() }
+    }
+    if (-not $value) { throw "$Name is not configured. Run scripts/initialize-auth-secret.ps1 and restart the demo." }
+    return $value
+}
+
+$login = @{ email = (Get-Setting 'USER_OPERATOR_EMAIL'); password = (Get-Setting 'USER_OPERATOR_PASSWORD') } | ConvertTo-Json
+$token = (Invoke-RestMethod -Method Post -Uri "$baseUrl/api/users/auth/login" -ContentType 'application/json' -Body $login).accessToken
+$headers = @{ Authorization = "Bearer $token" }
+
 # Requests and responses are decoded as UTF-8 explicitly: Windows PowerShell would otherwise assume ISO-8859-1
 # for JSON without a charset and duplicate names with accents on every run.
 function Invoke-Catalog([string]$Method, [string]$Path, $Body = $null) {
-    $request = @{ Method = $Method; Uri = "$baseUrl$Path"; UseBasicParsing = $true }
+    $request = @{ Method = $Method; Uri = "$baseUrl$Path"; UseBasicParsing = $true; Headers = $headers }
     if ($null -ne $Body) {
         $request.ContentType = 'application/json; charset=utf-8'
         $request.Body = [System.Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 5 -Compress))

@@ -6,14 +6,18 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.victhor.delivery.delivery.application.DeliveryService;
+import com.victhor.delivery.delivery.domain.DeliveryStatus;
 
 @RestController
 @RequestMapping("/api/deliveries")
@@ -32,14 +36,21 @@ public class DeliveryController {
         return ResponseEntity.created(URI.create("/api/deliveries/" + response.id())).body(response);
     }
 
+    /** Operators only, enforced by the security configuration. */
+    @GetMapping
+    public DeliveryPageResponse findPage(@RequestParam(required = false) DeliveryStatus status,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return DeliveryPageResponse.from(deliveries.findPage(status, page, size));
+    }
+
     @GetMapping("/{id}")
-    public DeliveryResponse findById(@PathVariable UUID id) {
-        return DeliveryResponse.from(deliveries.findById(id));
+    public DeliveryResponse findById(@AuthenticationPrincipal Jwt principal, @PathVariable UUID id) {
+        return DeliveryResponse.from(deliveries.findById(id, CurrentViewer.of(principal)));
     }
 
     @GetMapping("/by-order/{orderId}")
-    public DeliveryResponse findByOrderId(@PathVariable UUID orderId) {
-        return DeliveryResponse.from(deliveries.findByOrderId(orderId));
+    public DeliveryResponse findByOrderId(@AuthenticationPrincipal Jwt principal, @PathVariable UUID orderId) {
+        return DeliveryResponse.from(deliveries.findByOrderId(orderId, CurrentViewer.of(principal)));
     }
 
     @PostMapping("/{id}/assign")

@@ -3,6 +3,7 @@ import { ApiError, NETWORK_ERROR_STATUS } from '../api/client'
 import { canPlanRoute, getRoutePlan, planRoute, type Delivery, type RoutePlan } from '../api/deliveries'
 import { useLoad } from '../api/useLoad'
 import { describeRoute, isInSyntheticCity } from '../checkout/syntheticCity'
+import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
 import { RouteMap } from './RouteMap'
 
@@ -21,11 +22,14 @@ const DATA_ORIGINS: Record<string, string> = {
 }
 
 // Rota prevista pelo modelo sobre a cidade sintética, desenhada no mapa com origem e destino da entrega.
-export function RouteSection({ delivery }: { delivery: Delivery }) {
+// Somente o operador calcula a rota; o cliente vê o plano salvo.
+export function RouteSection({ delivery, canPlan = false }: { delivery: Delivery; canPlan?: boolean }) {
+  const { session } = useAuth()
+  const token = session?.token ?? ''
   // O plano fica num objeto para distinguir "ainda carregando" (data nulo) de "sem plano" (plan nulo).
   const load = useCallback(
-    async (signal: AbortSignal) => ({ plan: await getRoutePlan(delivery.id, signal) }),
-    [delivery.id],
+    async (signal: AbortSignal) => ({ plan: await getRoutePlan(token, delivery.id, signal) }),
+    [token, delivery.id],
   )
   const { data, error, setData } = useLoad<{ plan: RoutePlan | null }>(load, 'Não foi possível carregar a rota.')
   const plan = data?.plan ?? null
@@ -48,7 +52,7 @@ export function RouteSection({ delivery }: { delivery: Delivery }) {
     setNotice(null)
     setBusy(true)
     try {
-      setData({ plan: await planRoute(delivery.id, new Date()) })
+      setData({ plan: await planRoute(token, delivery.id, new Date()) })
     } catch (failure) {
       const unavailable =
         failure instanceof ApiError && (failure.status === NETWORK_ERROR_STATUS || failure.status >= 500)
@@ -81,9 +85,13 @@ export function RouteSection({ delivery }: { delivery: Delivery }) {
           <dd>{DATA_ORIGINS[plan.dataOrigin] ?? plan.dataOrigin}</dd>
         </dl>
       ) : (
-        data && <p className="muted">Nenhuma rota foi calculada para esta entrega.</p>
+        data && (
+          <p className="muted">
+            {canPlan ? 'Nenhuma rota foi calculada para esta entrega.' : 'A rota aparece quando a operação a calcular.'}
+          </p>
+        )
       )}
-      {canPlanRoute(delivery) && (
+      {canPlan && canPlanRoute(delivery) && (
         <button type="button" className="secondary" disabled={busy} onClick={handlePlan}>
           {busy ? 'Calculando…' : plan ? 'Recalcular rota' : 'Calcular rota'}
         </button>

@@ -16,6 +16,7 @@ export function Layout() {
                 Início
               </NavLink>
               <NavLink to="/restaurants">Restaurantes</NavLink>
+              {session.role === 'OPERATOR' && <NavLink to="/operations">Operação</NavLink>}
               <button type="button" className="link-button" onClick={() => signOut()}>
                 Sair
               </button>

@@ -10,7 +10,7 @@ User mantém credenciais no seu próprio PostgreSQL. A API permite criar um perf
 
 Cadastro/login são públicos. `/auth/me` exige autenticação e deriva o UUID do token, sem aceitar identidade informada pelo cliente. Erros usam `application/problem+json`: entrada inválida `400`, e-mail já utilizado `409`, login incorreto/token ausente ou inválido `401`. Uma identidade de token válido sem perfil existente recebe `404`. Respostas de token/identidade usam `Cache-Control: no-store`; não há cookie de sessão, HTTP Basic ou formulário de login. `401` inclui `WWW-Authenticate: Bearer` sem explicar se um e-mail existe.
 
-A [autorização dos recursos](resource-authorization.md) usa este token: perfis, endereços e pedidos só atendem o próprio dono. Catálogo, entregas e operações administrativas continuam sem papéis nem proteção.
+A [autorização dos recursos](resource-authorization.md) usa este token: perfis, endereços e pedidos só atendem o próprio dono. Papéis de cliente e operador, tokens RS256 e o limite de tentativas de login estão em [papéis e chaves assimétricas](security-hardening.md).
 
 ## Senhas e cadastro atômico
 
@@ -20,17 +20,17 @@ Senhas exigem pelo menos 12 caracteres Unicode e no máximo 72 bytes em UTF-8. N
 
 `JpaAuthAccountRepository.register` envolve perfil e credencial na mesma transação. Reutiliza a tradução específica da constraint de e-mail existente e faz flush da credencial. Uma falha depois da gravação do perfil desfaz ambas as alterações. A unicidade continua protegida pelo banco em cadastros concorrentes. Cadastro repetido não substitui a senha anterior.
 
-O login consulta e-mail normalizado e verifica o hash. E-mail desconhecido e perfil sem credencial também executam uma verificação BCrypt com hash fictício, retornando o mesmo erro genérico. Isso reduz a diferença de trabalho nesses casos; não promete tempos idênticos nem substitui limitação de tentativas.
+O login consulta e-mail normalizado e verifica o hash. E-mail desconhecido e perfil sem credencial também executam uma verificação BCrypt com hash fictício, retornando o mesmo erro genérico. Isso reduz a diferença de trabalho nesses casos, sem prometer tempos idênticos. Depois de 5 tentativas em 15 minutos, a conta responde `429` até o fim da janela ([detalhes](security-hardening.md#limite-de-tentativas-de-login)).
 
 Perfis anteriores à V2 e os criados pelo antigo `POST /api/users`, removido na autorização, ficam sem credenciais; seus dados e endereços são preservados. Não recebem senha padrão e não podem ser assumidos por cadastro público com o mesmo e-mail. Para a demonstração, cadastre uma conta nova por `/auth/register`. Conversão de perfis antigos, confirmação de e-mail e recuperação de senha precisam de prova de propriedade e não foram implementadas.
 
 ## Tokens e configuração
 
-`JwtAccessTokens` emite JWT HS256 com UUID em `sub`, `jti` único, `iss`, `aud`, `iat`, `nbf` e `exp`. O emissor é `https://delivery-order-system.local` e a audiência é `delivery-order-system`. O emissor é um identificador, sem descoberta OIDC nem consulta a esse domínio. O token dura 15 minutos. O decoder exige assinatura HS256, emissor, audiência, subject UUID canônico, emissão/vencimento e duração permitida; valida datas com tolerância de 30 segundos. O `Clock` é injetado para testar essas regras.
+`JwtAccessTokens` emite JWT RS256 com `kid`, UUID em `sub`, `roles`, `jti` único, `iss`, `aud`, `iat`, `nbf` e `exp`. O emissor é `https://delivery-order-system.local` e a audiência é `delivery-order-system`. O emissor é um identificador, sem descoberta OIDC nem consulta a esse domínio. O token dura 15 minutos. O decoder exige assinatura RS256 com a chave do serviço, emissor, audiência, subject UUID canônico, emissão/vencimento e duração permitida; valida datas com tolerância de 30 segundos. O `Clock` é injetado para testar essas regras.
 
 O Spring Security Resource Server processa o Bearer header; não há filtro JWT escrito manualmente. A configuração de segurança é stateless. CSRF está desativado para este contrato sem autenticação por cookies. A política dos endpoints está descrita na [autorização](resource-authorization.md). Esta API de login não é uma implementação completa de servidor OAuth/OIDC.
 
-User exige `USER_AUTH_SECRET`, Base64 de pelo menos 32 bytes aleatórios, sem valor padrão no runtime. A chave local não entra no Git. A fixture em `src/test/resources/application-test.properties` é pública e carregada somente pelo perfil `test`; nunca deve ser usada fora dos testes. Order também recebe a chave para validar tokens, sem emiti-los.
+User exige `USER_AUTH_PRIVATE_KEY`, uma chave RSA PKCS#8 em Base64 com pelo menos 2048 bits, sem valor padrão no runtime. A chave local não entra no Git. A fixture em `src/test/resources/application-test.properties` é pública e carregada somente pelo perfil `test`; nunca deve ser usada fora dos testes. Os outros serviços validam tokens com a chave pública publicada em `/.well-known/jwks.json`, sem poder emiti-los.
 
 Na raiz, crie/complete o `.env` a partir do `.env.example` e gere a chave:
 
@@ -40,9 +40,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/initialize-auth-secr
 docker compose --profile demo up -d --build --wait --wait-timeout 240
 ```
 
-O script gera 32 bytes com `RandomNumberGenerator`, preenche somente uma entrada ausente/vazia, preserva uma chave já configurada e não mostra seu valor. Entradas duplicadas causam erro sem gravação. `-EnvFile` permite um arquivo de ambiente isolado. Preserve a mesma chave entre reinícios para aceitar tokens ainda válidos; substituí-la invalida tokens anteriores. A chave HS256 é usada para assinar e validar: quem tiver acesso a ela pode emitir tokens. A distribuição/rotação de chaves será decidida junto à proteção dos demais serviços.
+O script gera a chave RSA de 2048 bits e as credenciais do operador, preenche somente entradas ausentes/vazias, preserva valores já configurados e não os mostra. Entradas duplicadas causam erro sem gravação. `-EnvFile` permite um arquivo de ambiente isolado. Preserve a mesma chave entre reinícios para aceitar tokens ainda válidos; substituí-la invalida tokens anteriores. Só o User guarda a chave privada.
 
-Não há refresh token, revogação imediata, logout no servidor ou troca de senha. O cliente pode remover o token localmente; sua validade no servidor termina na expiração ou troca da chave. Limitação de tentativas, confirmação de e-mail e recuperação de senha permanecem pendentes. A demonstração usa HTTP local; transporte fora desse ambiente exige HTTPS.
+Não há refresh token, revogação imediata, logout no servidor ou troca de senha. O cliente pode remover o token localmente; sua validade no servidor termina na expiração ou troca da chave. Confirmação de e-mail e recuperação de senha permanecem pendentes. A demonstração usa HTTP local; transporte fora desse ambiente exige HTTPS.
 
 ## Exemplo e validação
 

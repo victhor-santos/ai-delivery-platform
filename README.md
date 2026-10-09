@@ -4,7 +4,7 @@ Sistema de pedidos para delivery em Java e Spring Boot, desenvolvido como projet
 
 ## Estado atual
 
-O User Service cadastra e consulta perfis e endereços em PostgreSQL próprio. O nome e os endereços podem ser atualizados; o e-mail é normalizado, único e imutável nesta etapa. Os endereços são consultados pelo par usuário/endereço. O cadastro com senha, login e consulta da identidade por JWT estão implementados. Perfis, endereços e pedidos exigem Bearer token e só atendem o próprio dono. Veja [perfis, validação e persistência de usuários](docs/user-profiles.md), [autenticação e configuração da chave](docs/authentication.md) e [autorização dos recursos](docs/resource-authorization.md).
+O User Service cadastra e consulta perfis e endereços em PostgreSQL próprio. O nome e os endereços podem ser atualizados; o e-mail é normalizado, único e imutável nesta etapa. Os endereços são consultados pelo par usuário/endereço. O cadastro com senha, login e consulta da identidade por JWT estão implementados. Perfis, endereços e pedidos exigem Bearer token e só atendem o próprio dono. Só o User assina os tokens (RS256); os outros serviços validam com a chave pública que ele publica. Contas se cadastram como clientes, e um único operador, provisionado pelo `.env`, altera o catálogo e opera as entregas. O login limita as tentativas por conta. Veja [perfis, validação e persistência de usuários](docs/user-profiles.md), [autenticação e configuração da chave](docs/authentication.md) , [autorização dos recursos](docs/resource-authorization.md) e [papéis, chaves assimétricas e limite de login](docs/security-hardening.md).
 
 O Catalog Service cadastra e consulta restaurantes e seus itens de cardápio em PostgreSQL, com migrations Flyway, validação de entrada, paginação e testes de integração com Testcontainers. Um restaurante tem UUID, nome obrigatório e indicador `active`; o cadastro gera o UUID e inicia o restaurante ativo.
 
@@ -14,7 +14,7 @@ Cada item do cardápio pertence a um restaurante e tem nome, descrição opciona
 
 O Order Service cria, consulta, paga e cancela pedidos em um PostgreSQL próprio. Cada pedido pertence ao cliente do token usado na criação, e somente ele pode consultá-lo ou alterá-lo. Na criação, consulta restaurante e itens no catálogo, exige disponibilidade e salva nomes, preços unitários e quantidades, junto ao total em BRL. Mudanças posteriores no cardápio preservam esses valores. O pedido é confirmado por um [pagamento simulado aprovado](docs/order-payment-integration.md), cobrado pelo total sem duplicar a cobrança; um pedido confirmado pode solicitar entrega, com validação da coleta no catálogo, snapshots persistidos e um evento publicado no RabbitMQ pelo outbox, que o Delivery consome de forma idempotente. Veja os [itens e preços dos pedidos](docs/order-items.md) e a [integração entre pedidos e entregas](docs/order-delivery-integration.md).
 
-O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Consulta Python, salva o último plano de rota e registra [travessias simuladas por trecho](docs/delivery-segment-observations.md), com snapshots da previsão e exportação CSV por disponibilidade temporal. Veja também o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
+O Delivery Service cria e consulta entregas e entregadores por HTTP, com persistência em PostgreSQL. Cada entrega só aparece para o cliente que a pediu e para o operador, que também a lista e opera. A API permite atribuir entregador, registrar coleta, partida, chegada, conclusão e cancelamento antes da coleta. Consulta Python, salva o último plano de rota e registra [travessias simuladas por trecho](docs/delivery-segment-observations.md), com snapshots da previsão e exportação CSV por disponibilidade temporal. Veja também o [planejamento de rotas](docs/delivery-route-integration.md), o [contrato e os exemplos da API](docs/delivery-lifecycle.md), o [domínio de entregas](docs/delivery-domain.md) e a [configuração do banco](docs/delivery-persistence.md).
 
 Os cinco serviços Java mantêm seus endpoints `/ping` e roteamento HTTP pelo Gateway. As seis aplicações Java expõem Actuator. O Payment Service registra [tentativas de pagamento simuladas](docs/simulated-payments.md), com aprovação ou recusa fixadas pelo método, idempotência e PostgreSQL próprio; antes de cobrar, confere o pedido no Order Service. A [solicitação de entrega](docs/delivery-messaging.md) passa pelo RabbitMQ: Order grava o evento em um outbox na mesma transação do pedido e o publica com confirmação do broker; Delivery o consome de forma idempotente, com retry e fila de mensagens mortas.
 
@@ -51,7 +51,7 @@ docker compose --profile demo up -d --build --wait --wait-timeout 240
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 ```
 
-Para ter restaurantes e cardápios na interface, rode `pwsh -NoProfile -File scripts/seed-demo-catalog.ps1` com a demonstração no ar; repetir o comando não duplica dados.
+Para ter restaurantes e cardápios na interface, rode `pwsh -NoProfile -File scripts/seed-demo-catalog.ps1` com a demonstração no ar; repetir o comando não duplica dados. O seed e o smoke entram como o operador do `.env`. Para operar as entregas pela interface, entre com `USER_OPERATOR_EMAIL` e `USER_OPERATOR_PASSWORD` do `.env` e abra **Operação**.
 
 A interface web atende em `http://localhost:3000`; Gateway em `http://localhost:8080`; Python em `http://localhost:8000`. As portas Java 8081–8085 são internas neste perfil. Sem `demo`, o Compose continua iniciando somente bancos. Não é necessário instalar Java, Python ou Node.js na máquina para esta demonstração. O script verifica um modelo existente e só treina se não houver bundle; a API nunca treina ao iniciar.
 
@@ -80,7 +80,7 @@ sudo usermod -aG docker "$USER"
 sudo snap disable docker && sudo snap enable docker   # somente no Docker instalado por snap
 ```
 
-`newgrp docker` aplica o grupo apenas ao terminal atual; depois de sair e entrar na sessão, ele vale para todos. Para o `.env` e a chave JWT:
+`newgrp docker` aplica o grupo apenas ao terminal atual; depois de sair e entrar na sessão, ele vale para todos. Para o `.env` e as chaves de autenticação:
 
 ```bash
 [ -f .env ] || cp .env.example .env
@@ -172,7 +172,9 @@ O `.env.example` contém somente valores de desenvolvimento. Ajuste o `.env` ant
 | `PAYMENT_DB_USERNAME` | Usuário do banco de pagamentos; padrão `payments` |
 | `PAYMENT_DB_PASSWORD` | Senha local obrigatória para iniciar o banco e o serviço de pagamentos |
 | `PAYMENT_DB_PORT` | Porta de pagamentos publicada pelo Compose; padrão `5437` |
-| `USER_AUTH_SECRET` | Chave JWT obrigatória, Base64 de pelo menos 32 bytes; gerada pelo script acima |
+| `USER_AUTH_PRIVATE_KEY` | Chave RSA que assina os tokens, PKCS#8 em Base64 com pelo menos 2048 bits; obrigatória, gerada pelo script acima |
+| `USER_OPERATOR_EMAIL`, `USER_OPERATOR_PASSWORD` | Conta do operador, criada pelo User ao iniciar; geradas pelo script acima |
+| `USER_AUTH_JWK_SET_URI` | Onde Order, Payment, Catalog e Delivery buscam a chave pública; padrão `http://localhost:8081/.well-known/jwks.json` |
 | `DEMO_JAVA_TOOL_OPTIONS` | Opções opcionais das seis JVMs no perfil `demo`; padrão `-Xms64m -Xmx384m -XX:ActiveProcessorCount=2` |
 
 Se a porta 5432 já estiver ocupada, escolha outra porta em `CATALOG_DB_PORT` e ajuste também `CATALOG_DB_URL`. A mesma regra vale para pedidos, entregas, usuários e pagamentos. Se você já possui `.env`, acrescente as entradas `ORDER_DB_*`, `DELIVERY_DB_*`, `USER_DB_*` e `PAYMENT_DB_*` que faltarem em relação a `.env.example`, sem substituir os valores existentes. Variáveis de ambiente podem sobrescrever os valores do arquivo. O Compose exige as senhas dos cinco bancos e `USER_AUTH_SECRET` ao resolver sua configuração, mesmo que o comando selecione somente um deles. O script de chave preserva um valor já configurado e nunca o exibe; mantenha a mesma chave entre reinícios.
@@ -218,7 +220,7 @@ Os demais serviços continuam disponíveis, um comando por terminal:
 .\services\delivery-service\mvnw.cmd -f .\services\delivery-service\pom.xml "-Dspring-boot.run.workingDirectory=$PWD" spring-boot:run
 ```
 
-O User Service exige `USER_AUTH_SECRET` e `user-db` em execução, Order exige `USER_AUTH_SECRET` e `order-db`, Payment exige `USER_AUTH_SECRET` e `payment-db`, e Delivery exige `delivery-db`. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar usuários, catálogo, pedidos ou entregas pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
+O User Service exige `USER_AUTH_PRIVATE_KEY` e `user-db` em execução, Order exige `order-db`, Payment exige `payment-db` e Delivery exige `delivery-db`. Order, Payment, Catalog e Delivery validam tokens com o JWKS do User em `localhost:8081`. Use `Ctrl+C` em cada terminal para encerrar a aplicação. As portas precisam estar livres. Ao executar usuários, catálogo, pedidos ou entregas pela IDE, configure o diretório de trabalho como a raiz do repositório ou forneça as variáveis de ambiente ao processo.
 
 ## Cadastrar perfis e endereços
 

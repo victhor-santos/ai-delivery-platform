@@ -16,6 +16,11 @@ final class CurrentUser {
         return UUID.fromString(principal.getSubject());
     }
 
+    /** The role this token grants; the token was already validated to carry exactly known roles. */
+    static String role(Jwt principal) {
+        return principal.getClaimAsStringList("roles").getFirst();
+    }
+
     static UUID requireSelf(Jwt principal, UUID userId) {
         if (!id(principal).equals(userId)) {
             throw new UserNotFoundException();

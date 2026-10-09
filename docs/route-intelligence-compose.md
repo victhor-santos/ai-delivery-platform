@@ -57,7 +57,7 @@ O perfil publica somente Gateway, Python e bancos em `127.0.0.1`. As portas 8081
 
 Os serviços com banco aguardam `service_healthy`. Order aguarda catálogo e Delivery, e Gateway aguarda os cinco backends Java. Delivery não depende da prontidão do Python: consultas e operações do ciclo continuam disponíveis durante uma falha de roteamento. `up --wait` aguarda a saúde de todos os serviços selecionados, inclusive Python. Um modelo inválido faz a demonstração falhar na prontidão; não há fallback silencioso.
 
-As senhas dos cinco bancos e `USER_AUTH_SECRET` são obrigatórias. O script de inicialização gera uma chave aleatória quando ausente/vazia, preserva uma chave configurada e não a mostra. User, Order e Payment recebem essa chave; conserve-a entre reinícios para manter tokens ainda válidos. Veja [autenticação](authentication.md). Preserve as credenciais correspondentes aos volumes existentes; mudar o `.env` não altera um banco já inicializado. O perfil usa os mesmos volumes de desenvolvimento quando executado com o mesmo nome de projeto Compose. O `compose.yaml` fixa esse nome como `ai-delivery-platform`, então os volumes não dependem do nome da pasta do clone; `--project-name` (`-p`) continua criando um projeto isolado, com volumes próprios.
+As senhas dos cinco bancos, `USER_AUTH_PRIVATE_KEY` e as credenciais do operador são obrigatórias. O script de inicialização gera os valores ausentes/vazios, preserva os configurados e não os mostra. Só o User recebe a chave privada; Order, Payment, Catalog e Delivery buscam a chave pública no JWKS do User. Conserve a chave entre reinícios para manter tokens ainda válidos ([detalhes](security-hardening.md)). Veja [autenticação](authentication.md). Preserve as credenciais correspondentes aos volumes existentes; mudar o `.env` não altera um banco já inicializado. O perfil usa os mesmos volumes de desenvolvimento quando executado com o mesmo nome de projeto Compose. O `compose.yaml` fixa esse nome como `ai-delivery-platform`, então os volumes não dependem do nome da pasta do clone; `--project-name` (`-p`) continua criando um projeto isolado, com volumes próprios.
 
 ## Verificar o fluxo
 
@@ -69,7 +69,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 
 O script começa cadastrando uma conta com senha fictícia, verificando login, recusas de senha/token e identidade JWT. Em seguida confere e-mail normalizado e conflito de duplicidade, atualizando o nome e cadastrando/substituindo um endereço. Confere paginação, recusa chamadas sem token e responde `404` quando uma segunda conta tenta consultar ou alterar o perfil/endereço da primeira. O pedido é criado com o token do primeiro usuário e registra seu `customerId`; a segunda conta recebe `404` ao consultar, confirmar, cancelar ou solicitar entrega dele. Depois da confirmação, o smoke registra uma recusa simulada, repete sua chave, recebe `422` ao reutilizá-la com outro método, aprova com nova chave e recebe `409` numa segunda aprovação; veja [pagamentos simulados](simulated-payments.md).
 
-Em seguida cria um restaurante e verifica cadastro, atualização de preço/disponibilidade e consultas do cardápio. Ativa o item e cria um pedido com duas unidades a 29.90, totalizando 59.80 em BRL. Altera o cardápio após a compra e confirma que consulta e confirmação do pedido preservam os nomes e valores originais. Solicita entrega duas vezes e verifica a idempotência. Planeja a rota e compara a consulta persistida com a resposta original, incluindo a identificação dos dados sintéticos. Depois atribui entregador, registra partida, entrada/saída em cada trecho e conclusão da entrega, conferindo snapshots, idempotência e exportação CSV. As travessias são explicitamente simuladas; seus tempos curtos não representam medições reais. Ele usa apenas HTTP pelo Gateway e deixa os registros de demonstração no banco. Cada execução cria novos perfis com e-mails fictícios únicos e restaurantes identificados pelo nome `Compose Demo`.
+Em seguida entra como o operador do `.env`, cria um restaurante (o cliente recebe `403`) e verifica cadastro, atualização de preço/disponibilidade e consultas do cardápio. Ativa o item e cria um pedido com duas unidades a 29.90, totalizando 59.80 em BRL. Altera o cardápio após a compra e confirma que consulta e confirmação do pedido preservam os nomes e valores originais. Solicita entrega duas vezes e verifica a idempotência. Confere que só o cliente dono e o operador veem a entrega e que os comandos exigem o operador. Planeja a rota como operador e compara a consulta persistida com a resposta original, incluindo a identificação dos dados sintéticos. Depois atribui entregador, registra partida, entrada/saída em cada trecho e conclusão da entrega, conferindo snapshots, idempotência e exportação CSV. As travessias são explicitamente simuladas; seus tempos curtos não representam medições reais. Ele usa apenas HTTP pelo Gateway e deixa os registros de demonstração no banco. Cada execução cria novos perfis com e-mails fictícios únicos e restaurantes identificados pelo nome `Compose Demo`.
 
 Para conferir somente [perfis e endereços](user-profiles.md), com User, seu banco e Gateway disponíveis:
 
@@ -79,13 +79,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1
 
 Esse modo verifica registro/login, identidade JWT e recusa de senha/token, além de atualização do perfil, normalização/duplicidade de e-mail, paginação e associação do endereço ao perfil, consultando somente User pelo Gateway.
 
-Para conferir somente o [cardápio](restaurant-menu.md), com catálogo, seu banco e Gateway disponíveis:
+Para conferir somente o [cardápio](restaurant-menu.md), com catálogo, User, seus bancos e Gateway disponíveis:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-route-demo.ps1 -CatalogOnly
 ```
 
-Esse modo não consulta pedidos, pagamentos, usuários, Delivery ou Python.
+Esse modo não consulta pedidos, pagamentos, Delivery ou Python; usa o User apenas para o login do operador, que altera o catálogo.
 
 Para verificar também [itens, totais e preços preservados dos pedidos](order-items.md), com catálogo, Order, seus bancos e Gateway disponíveis:
 

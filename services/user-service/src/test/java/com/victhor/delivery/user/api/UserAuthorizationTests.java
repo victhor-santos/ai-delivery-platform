@@ -37,6 +37,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.victhor.delivery.user.domain.Role;
 import com.victhor.delivery.user.application.AuthenticationService;
 import com.victhor.delivery.user.application.UserAddressPage;
 import com.victhor.delivery.user.application.UserAddressService;
@@ -45,6 +46,7 @@ import com.victhor.delivery.user.domain.EmailAddress;
 import com.victhor.delivery.user.domain.UserAddress;
 import com.victhor.delivery.user.domain.UserProfile;
 import com.victhor.delivery.user.infrastructure.auth.JwtAccessTokens;
+import com.victhor.delivery.user.infrastructure.auth.TestSigningKeys;
 
 /** Exercises the HTTP authorization policy with the real token decoder and mocked use cases; no database. */
 @WebMvcTest(controllers = { UserProfileController.class, UserAddressController.class,
@@ -64,7 +66,7 @@ class UserAuthorizationTests {
     private MockMvc mvc;
     @Autowired
     private JwtAccessTokens tokens;
-    @Value("${user.auth.secret}")
+    @Value("${user.auth.private-key}")
     private String secret;
 
     @MockitoBean
@@ -78,7 +80,7 @@ class UserAuthorizationTests {
     static class Tokens {
 
         @Bean
-        JwtAccessTokens accessTokens(@Value("${user.auth.secret}") String secret) {
+        JwtAccessTokens accessTokens(@Value("${user.auth.private-key}") String secret) {
             return new JwtAccessTokens(secret, Clock.systemUTC());
         }
 
@@ -130,9 +132,9 @@ class UserAuthorizationTests {
     @MethodSource("protectedRequests")
     void rejectsMalformedExpiredAndForeignSignedTokens(Call call) throws Exception {
         String expired = new JwtAccessTokens(secret, Clock.fixed(Instant.now().minusSeconds(1000), ZoneOffset.UTC))
-                .issue(OWNER).value();
-        String foreign = new JwtAccessTokens("ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=", Clock.systemUTC())
-                .issue(OWNER).value();
+                .issue(OWNER, Role.CUSTOMER).value();
+        String foreign = new JwtAccessTokens(TestSigningKeys.FOREIGN_PRIVATE_KEY, Clock.systemUTC())
+                .issue(OWNER, Role.CUSTOMER).value();
         for (String token : List.of("not-a-token", expired, foreign)) {
             assertUnauthorized(call.request().header("Authorization", "Bearer " + token));
         }
@@ -178,7 +180,8 @@ class UserAuthorizationTests {
         mvc.perform(json(put(path + "/addresses/" + ADDRESS), ADDRESS_BODY).header("Authorization", token))
                 .andExpect(status().isOk());
         mvc.perform(get("/api/users/auth/me").header("Authorization", token))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(OWNER.toString()));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(OWNER.toString()))
+                .andExpect(jsonPath("$.role").value("CUSTOMER"));
         verify(addresses).findAll(OWNER, 0, 20);
     }
 
@@ -208,7 +211,7 @@ class UserAuthorizationTests {
     }
 
     private String bearer(UUID userId) {
-        return "Bearer " + tokens.issue(userId).value();
+        return "Bearer " + tokens.issue(userId, Role.CUSTOMER).value();
     }
 
     private static MockHttpServletRequestBuilder json(MockHttpServletRequestBuilder request, String body) {

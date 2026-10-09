@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError } from '../api/client'
-import { getDeliveryByOrder, isFinished, type Delivery } from '../api/deliveries'
+import { isFinished, type Delivery } from '../api/deliveries'
 
 export const POLL_INTERVAL_MS = 5_000
 // Enquanto o evento da solicitação não é consumido, a consulta é mais frequente.
@@ -17,9 +17,9 @@ type Tracking = {
 
 const EMPTY: Tracking = { delivery: null, pending: false, error: null }
 
-// Consulta a entrega do pedido e repete a consulta até ela terminar. Uma falha passageira mantém a última
-// entrega visível e continua tentando; 404 indica que a entrega ainda está sendo criada.
-export function useDeliveryTracking(orderId: string, enabled: boolean) {
+// Consulta a entrega e repete a consulta até ela terminar. Uma falha passageira mantém a última entrega visível e
+// continua tentando; 404 indica que a entrega ainda está sendo criada. `load` deve ser estável (useCallback).
+export function useDeliveryTracking(load: (signal: AbortSignal) => Promise<Delivery>, enabled: boolean) {
   const [tracking, setTracking] = useState<Tracking>(EMPTY)
   const [reloads, setReloads] = useState(0)
 
@@ -32,7 +32,7 @@ export function useDeliveryTracking(orderId: string, enabled: boolean) {
 
     async function poll() {
       try {
-        const delivery = await getDeliveryByOrder(orderId, controller.signal)
+        const delivery = await load(controller.signal)
         // Uma consulta iniciada antes de um comando não pode desfazer o resultado dele na tela.
         setTracking((current) =>
           current.delivery && Date.parse(current.delivery.updatedAt) > Date.parse(delivery.updatedAt)
@@ -62,7 +62,7 @@ export function useDeliveryTracking(orderId: string, enabled: boolean) {
       controller.abort()
       clearTimeout(timer)
     }
-  }, [orderId, enabled, reloads])
+  }, [load, enabled, reloads])
 
   const reload = useCallback(() => setReloads((count) => count + 1), [])
   const setDelivery = useCallback((delivery: Delivery) => setTracking({ delivery, pending: false, error: null }), [])

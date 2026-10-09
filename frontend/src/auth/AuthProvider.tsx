@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { login } from '../api/auth'
 import { AuthContext, type AuthState, type SignOutReason } from './AuthContext'
-import { clearSession, loadSession, saveSession, type Session } from './session'
+import { clearSession, createSession, loadSession, saveSession, type Session } from './session'
 
 const EXPIRED_NOTICE = 'Sua sessão expirou. Entre novamente.'
 
@@ -11,7 +11,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     const token = await login(email, password)
-    const next = { token: token.accessToken, expiresAt: Date.now() + token.expiresIn * 1000 }
+    const next = createSession(token.accessToken, Date.now() + token.expiresIn * 1000)
     saveSession(next)
     setNotice(null)
     setSession(next)

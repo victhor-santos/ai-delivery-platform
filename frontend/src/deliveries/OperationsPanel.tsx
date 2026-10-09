@@ -7,18 +7,20 @@ import {
   type Delivery,
   type DeliveryCommand,
 } from '../api/deliveries'
+import { useFailureMessage } from '../api/useLoad'
+import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
 
-type Action = { label: string; run: (delivery: Delivery) => Promise<Delivery> }
+type Action = { label: string; run: (token: string, delivery: Delivery) => Promise<Delivery> }
 
 // Cada entrega recebe um entregador novo: o serviço não lista entregadores, e um ocupado recusaria a atribuição.
-async function assignNewCourier(delivery: Delivery): Promise<Delivery> {
-  const courier = await createCourier()
-  return assignCourier(delivery.id, courier.id)
+async function assignNewCourier(token: string, delivery: Delivery): Promise<Delivery> {
+  const courier = await createCourier(token)
+  return assignCourier(token, delivery.id, courier.id)
 }
 
 function command(label: string, name: DeliveryCommand): Action {
-  return { label, run: (delivery) => runDeliveryCommand(delivery.id, name) }
+  return { label, run: (token, delivery) => runDeliveryCommand(token, delivery.id, name) }
 }
 
 function nextAction(delivery: Delivery): Action | null {
@@ -45,8 +47,11 @@ type Props = {
   onConflict: () => void
 }
 
-// Na V1 não há contas de entregador ou operador. O painel avança a entrega para a demonstração.
+// Exclusivo do operador: sem contas de entregador na V1, o operador avança a entrega pela demonstração.
 export function OperationsPanel({ delivery, onChange, onConflict }: Props) {
+  const { session } = useAuth()
+  const token = session?.token ?? ''
+  const failureMessage = useFailureMessage()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const next = nextAction(delivery)
@@ -60,9 +65,9 @@ export function OperationsPanel({ delivery, onChange, onConflict }: Props) {
     setError(null)
     setBusy(true)
     try {
-      onChange(await action.run(delivery))
+      onChange(await action.run(token, delivery))
     } catch (failure) {
-      setError(failure instanceof ApiError ? failure.message : 'Não foi possível atualizar a entrega.')
+      setError(failureMessage(failure, 'Não foi possível atualizar a entrega.'))
       if (failure instanceof ApiError && failure.status === 409) {
         onConflict()
       }
@@ -73,9 +78,7 @@ export function OperationsPanel({ delivery, onChange, onConflict }: Props) {
   return (
     <div className="card nested operations" role="group" aria-label="Simulação operacional">
       <h3>Simulação operacional</h3>
-      <small>
-        Sem contas de entregador ou operador nesta versão, estes comandos fazem o papel deles na demonstração.
-      </small>
+      <small>Sem contas de entregador nesta versão, o operador registra cada etapa na demonstração.</small>
       {error && <Alert>{error}</Alert>}
       <div className="row">
         {next && (

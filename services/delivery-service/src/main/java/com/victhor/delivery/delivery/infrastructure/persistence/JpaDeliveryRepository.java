@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Repository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.victhor.delivery.delivery.application.CourierNotFoundException;
 import com.victhor.delivery.delivery.application.DeliveryRepository;
 import com.victhor.delivery.delivery.application.DeliveryCreation;
+import com.victhor.delivery.delivery.application.DeliveryPage;
 import com.victhor.delivery.delivery.domain.Delivery;
 import com.victhor.delivery.delivery.domain.DeliveryStatus;
 import com.victhor.delivery.delivery.domain.DeliveryStateConflictException;
@@ -80,6 +83,18 @@ public class JpaDeliveryRepository implements DeliveryRepository {
     @Override
     public Optional<Delivery> findByOrderId(UUID orderId) {
         return deliveries.findByOrderId(orderId).map(DeliveryEntity::toDomain);
+    }
+
+    @Override
+    public boolean isOwnedBy(UUID id, UUID customerId) {
+        return deliveries.existsByIdAndCustomerId(id, customerId);
+    }
+
+    @Override
+    public DeliveryPage findPage(DeliveryStatus status, int page, int size) {
+        var request = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
+        var result = status == null ? deliveries.findAll(request) : deliveries.findByStatus(status, request);
+        return new DeliveryPage(result.map(DeliveryEntity::toDomain).getContent(), page, size, result.getTotalElements());
     }
 
     @Override

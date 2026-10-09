@@ -213,21 +213,24 @@ describe('order delivery', () => {
   })
 })
 
-describe('delivery route', () => {
-  it('plans the route and draws it on the synthetic city', async () => {
-    const { calls } = server({ order: REQUESTED, delivery: DELIVERY }, created)
-    const user = await openOrder()
-
-    expect(await screen.findByText('Nenhuma rota foi calculada para esta entrega.')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Calcular rota' }))
+describe('delivery route seen by the customer', () => {
+  it('shows the saved plan without offering to plan or operate the delivery', async () => {
+    const { calls } = server({ order: REQUESTED, delivery: DELIVERY, plan: PLAN }, created)
+    await openOrder()
 
     expect(await screen.findByText('A → B → C')).toBeInTheDocument()
-    expect(screen.getByText('2,9 km')).toBeInTheDocument()
-    expect(screen.getByText('16 min')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /rota A → B → C/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Recalcular rota' })).toBeInTheDocument()
-    const body = JSON.parse(calls('/api/deliveries/d1/route')[1][1]!.body as string) as { departureAt: string }
-    expect(Number.isNaN(Date.parse(body.departureAt))).toBe(false)
+    expect(screen.queryByRole('button', { name: /rota/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Simulação operacional' })).not.toBeInTheDocument()
+    expect(calls('/api/deliveries/by-order/o1')[0][1]?.headers).toMatchObject({ Authorization: 'Bearer token-123' })
+    expect(calls('/api/deliveries/d1/route')[0][1]?.headers).toMatchObject({ Authorization: 'Bearer token-123' })
+  })
+
+  it('explains that the operation calculates the route', async () => {
+    server({ order: REQUESTED, delivery: DELIVERY }, created)
+    await openOrder()
+
+    expect(await screen.findByText('A rota aparece quando a operação a calcular.')).toBeInTheDocument()
   })
 
   it('explains when the route comes from a model trained on simulated deliveries', async () => {
@@ -237,43 +240,6 @@ describe('delivery route', () => {
     expect(
       await screen.findByText('Modelo treinado com entregas simuladas: não representa trânsito real'),
     ).toBeInTheDocument()
-  })
-
-  it('keeps the saved plan when the route service is unavailable', async () => {
-    server({ order: REQUESTED, delivery: DELIVERY, plan: PLAN }, created, () => problem(503, 'indisponível'))
-    const user = await openOrder()
-
-    await user.click(await screen.findByRole('button', { name: 'Recalcular rota' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('O serviço de rotas não respondeu.')
-    expect(screen.getByText('A → B → C')).toBeInTheDocument()
-  })
-
-  it('shows why a route cannot be found', async () => {
-    server({ order: REQUESTED, delivery: DELIVERY }, created, () =>
-      problem(422, 'Não há caminho entre a coleta e o destino.'),
-    )
-    const user = await openOrder()
-
-    await user.click(await screen.findByRole('button', { name: 'Calcular rota' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Não há caminho entre a coleta e o destino.')
-  })
-
-  it('shows the saved plan without replanning after departure', async () => {
-    const departed: Delivery = {
-      ...DELIVERY,
-      status: 'IN_TRANSIT',
-      assignedAt: '2026-10-08T12:03:00Z',
-      pickedUpAt: '2026-10-08T12:04:00Z',
-      departedAt: '2026-10-08T12:06:00Z',
-    }
-    server({ order: REQUESTED, delivery: departed, plan: PLAN }, created)
-    await openOrder()
-
-    expect(await screen.findByText('A → B → C')).toBeInTheDocument()
-    expect(screen.getByText('A caminho', { selector: '.badge' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /rota/ })).not.toBeInTheDocument()
   })
 
   it('explains that destinations outside the synthetic city have no route', async () => {
@@ -286,57 +252,5 @@ describe('delivery route', () => {
 
     expect(await screen.findByText(/fora da cidade sintética/)).toBeInTheDocument()
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /rota/ })).not.toBeInTheDocument()
-  })
-})
-
-describe('delivery operations', () => {
-  it('drives the simulated delivery from assignment to completion', async () => {
-    const { calls } = server({ order: REQUESTED, delivery: DELIVERY }, created)
-    const user = await openOrder()
-    const panel = await screen.findByRole('group', { name: 'Simulação operacional' })
-
-    const steps = [
-      ['Atribuir entregador', 'Entregador a caminho do restaurante'],
-      ['Registrar coleta', 'Pedido coletado'],
-      ['Sair para entrega', 'A caminho'],
-      ['Registrar chegada', 'Entregador no destino'],
-      ['Concluir entrega', 'Entregue'],
-    ]
-    for (const [button, status] of steps) {
-      await user.click(within(panel).getByRole('button', { name: button }))
-      expect(await screen.findByText(status, { selector: '.badge' })).toBeInTheDocument()
-    }
-
-    expect(screen.queryByRole('group', { name: 'Simulação operacional' })).not.toBeInTheDocument()
-    const timeline = screen.getByRole('list', { name: 'Andamento da entrega' })
-    expect(within(timeline).getAllByRole('listitem').every((step) => step.classList.contains('done'))).toBe(true)
-    const assignment = calls('/api/deliveries/d1/assign')[0][1]!
-    expect(JSON.parse(assignment.body as string)).toEqual({ courierId: 'c1' })
-  })
-
-  it('cancels a delivery before pickup', async () => {
-    server({ order: REQUESTED, delivery: DELIVERY }, created)
-    const user = await openOrder()
-
-    await user.click(await screen.findByRole('button', { name: 'Cancelar entrega' }))
-
-    expect(await screen.findByText('Entrega cancelada', { selector: '.badge' })).toBeInTheDocument()
-    expect(screen.queryByRole('group', { name: 'Simulação operacional' })).not.toBeInTheDocument()
-  })
-
-  it('reloads the delivery after a conflicting command', async () => {
-    const { state, calls } = server({ order: REQUESTED, delivery: DELIVERY }, created)
-    const user = await openOrder()
-    await screen.findByRole('group', { name: 'Simulação operacional' })
-    const lookups = calls('/api/deliveries/by-order/o1').length
-
-    // Outra aba já atribuiu um entregador; o comando desta página fica fora de ordem.
-    state.delivery = { ...DELIVERY, status: 'ASSIGNED', courierId: 'c0', assignedAt: at(3), updatedAt: at(3) }
-    await user.click(screen.getByRole('button', { name: 'Atribuir entregador' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('A entrega já tem entregador.')
-    expect(await screen.findByText('Entregador a caminho do restaurante', { selector: '.badge' })).toBeInTheDocument()
-    expect(calls('/api/deliveries/by-order/o1').length).toBeGreaterThan(lookups)
   })
 })

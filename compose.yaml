@@ -128,7 +128,9 @@ services:
       USER_DB_URL: jdbc:postgresql://user-db:5432/users
       USER_DB_USERNAME: ${USER_DB_USERNAME:-users}
       USER_DB_PASSWORD: ${USER_DB_PASSWORD:?Set USER_DB_PASSWORD in .env}
-      USER_AUTH_SECRET: ${USER_AUTH_SECRET:?Generate USER_AUTH_SECRET with scripts/initialize-auth-secret.ps1}
+      USER_AUTH_PRIVATE_KEY: ${USER_AUTH_PRIVATE_KEY:?Generate USER_AUTH_PRIVATE_KEY with scripts/initialize-auth-secret.ps1}
+      USER_OPERATOR_EMAIL: ${USER_OPERATOR_EMAIL:?Generate the operator account with scripts/initialize-auth-secret.ps1}
+      USER_OPERATOR_PASSWORD: ${USER_OPERATOR_PASSWORD:?Generate the operator account with scripts/initialize-auth-secret.ps1}
     depends_on:
       user-db:
         condition: service_healthy
@@ -146,6 +148,7 @@ services:
       CATALOG_DB_URL: jdbc:postgresql://catalog-db:5432/catalog
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-catalog}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD in .env}
+      USER_AUTH_JWK_SET_URI: http://user-service:8081/.well-known/jwks.json
     depends_on:
       catalog-db:
         condition: service_healthy
@@ -166,7 +169,8 @@ services:
       CATALOG_SERVICE_URL: http://catalog-service:8082
       PAYMENT_SERVICE_URL: http://payment-service:8084
       ORDER_REMOTE_TIMEOUT_MS: ${ORDER_REMOTE_TIMEOUT_MS:-5000}
-      USER_AUTH_SECRET: ${USER_AUTH_SECRET:?Generate USER_AUTH_SECRET with scripts/initialize-auth-secret.ps1}
+      # Only the public keys leave the User service; Order fetches them on demand.
+      USER_AUTH_JWK_SET_URI: http://user-service:8081/.well-known/jwks.json
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-delivery}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
@@ -199,7 +203,8 @@ services:
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD in .env}
       ORDER_SERVICE_URL: http://order-service:8083
       PAYMENT_REMOTE_TIMEOUT_MS: ${PAYMENT_REMOTE_TIMEOUT_MS:-3000}
-      USER_AUTH_SECRET: ${USER_AUTH_SECRET:?Generate USER_AUTH_SECRET with scripts/initialize-auth-secret.ps1}
+      # Only the public keys leave the User service; Payment fetches them on demand.
+      USER_AUTH_JWK_SET_URI: http://user-service:8081/.well-known/jwks.json
     depends_on:
       payment-db:
         condition: service_healthy
@@ -217,6 +222,7 @@ services:
       DELIVERY_DB_URL: jdbc:postgresql://delivery-db:5432/deliveries
       DELIVERY_DB_USERNAME: ${DELIVERY_DB_USERNAME:-deliveries}
       DELIVERY_DB_PASSWORD: ${DELIVERY_DB_PASSWORD:?Set DELIVERY_DB_PASSWORD in .env}
+      USER_AUTH_JWK_SET_URI: http://user-service:8081/.well-known/jwks.json
       ROUTE_INTELLIGENCE_URL: http://route-intelligence-service:8000
       DELIVERY_ROUTE_CONNECT_TIMEOUT_MS: ${DELIVERY_ROUTE_CONNECT_TIMEOUT_MS:-1000}
       DELIVERY_ROUTE_TIMEOUT_MS: ${DELIVERY_ROUTE_TIMEOUT_MS:-3000}

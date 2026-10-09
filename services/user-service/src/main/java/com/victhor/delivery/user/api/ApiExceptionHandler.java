@@ -14,6 +14,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 import com.victhor.delivery.user.application.EmailAlreadyRegisteredException;
 import com.victhor.delivery.user.application.InvalidCredentialsException;
+import com.victhor.delivery.user.application.TooManyLoginAttemptsException;
 import com.victhor.delivery.user.application.UserAddressNotFoundException;
 import com.victhor.delivery.user.application.UserNotFoundException;
 
@@ -29,6 +30,15 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "E-mail ou senha inválidos."));
+    }
+
+    @ExceptionHandler(TooManyLoginAttemptsException.class)
+    ResponseEntity<ProblemDetail> handleTooManyLoginAttempts(TooManyLoginAttemptsException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(exception.retryAfterSeconds()))
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS,
+                        "Muitas tentativas de login. Tente novamente mais tarde."));
     }
 
     @ExceptionHandler(UserNotFoundException.class)

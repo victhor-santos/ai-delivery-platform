@@ -6,6 +6,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import com.victhor.delivery.delivery.domain.Delivery;
+import com.victhor.delivery.delivery.domain.DeliveryStatus;
 import com.victhor.delivery.delivery.domain.DeliveryLocation;
 
 public class DeliveryService {
@@ -28,12 +29,35 @@ public class DeliveryService {
         return deliveries.createForOrder(Delivery.create(orderId, origin, destination, now()), customerId);
     }
 
+    public static final int MAX_PAGE_SIZE = 100;
+
     public Delivery findById(UUID id) {
         return deliveries.findById(id).orElseThrow(DeliveryNotFoundException::new);
     }
 
-    public Delivery findByOrderId(UUID orderId) {
-        return deliveries.findByOrderId(orderId).orElseThrow(DeliveryNotFoundException::new);
+    public Delivery findById(UUID id, DeliveryViewer viewer) {
+        requireVisible(id, viewer);
+        return findById(id);
+    }
+
+    public Delivery findByOrderId(UUID orderId, DeliveryViewer viewer) {
+        var delivery = deliveries.findByOrderId(orderId).orElseThrow(DeliveryNotFoundException::new);
+        requireVisible(delivery.id(), viewer);
+        return delivery;
+    }
+
+    /** Someone else's delivery is reported as absent, exactly like one that does not exist. */
+    public void requireVisible(UUID id, DeliveryViewer viewer) {
+        if (!viewer.operator() && !deliveries.isOwnedBy(id, viewer.userId())) {
+            throw new DeliveryNotFoundException();
+        }
+    }
+
+    public DeliveryPage findPage(DeliveryStatus status, int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE || (long) page * size > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Invalid page request");
+        }
+        return deliveries.findPage(status, page, size);
     }
 
     public Delivery assign(UUID id, UUID courierId) {

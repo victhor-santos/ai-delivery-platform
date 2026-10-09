@@ -29,7 +29,7 @@ Entregas com coleta ou destino fora da cidade sintética não oferecem mapa nem 
 
 ## Simulação operacional
 
-Ainda não há contas de entregador, restaurante ou operador, e os endpoints de entregas continuam públicos no servidor (veja a [autorização dos recursos](resource-authorization.md)). Para a demonstração chegar ao fim, o painel identificado como "Simulação operacional" executa o próximo comando do ciclo:
+Não há contas de entregador. Para a demonstração chegar ao fim, o painel identificado como "Simulação operacional" executa o próximo comando do ciclo. Desde o [reforço de segurança](security-hardening.md) ele só aparece para o operador, em **Operação**, e o cliente acompanha a entrega e a rota sem comandos:
 
 | Estado | Comando |
 | --- | --- |
@@ -41,7 +41,7 @@ Ainda não há contas de entregador, restaurante ou operador, e os endpoints de 
 
 O cancelamento aparece em `CREATED` e `ASSIGNED`. Cada atribuição cria um entregador novo porque o serviço não lista entregadores e um entregador ocupado recusaria outra entrega. Se a atribuição falhar depois do cadastro, o entregador criado fica sem uso. Um `409` mostra o `detail` e consulta a entrega de novo, pois ela pode ter mudado em outra aba.
 
-Restringir esses comandos a papéis autorizados exige identidade de operador e entregador nos serviços. Isso ficou registrado como evolução posterior no [roadmap](roadmap.md). As observações de travessia por trecho continuam disponíveis pela API e pelo smoke, mas não pela interface.
+Os serviços recusam esses comandos e o cálculo da rota para quem não é operador. Papéis de entregador e restaurante continuam como evolução posterior no [roadmap](roadmap.md). As observações de travessia por trecho continuam disponíveis pela API e pelo smoke, mas não pela interface.
 
 ## Limites
 

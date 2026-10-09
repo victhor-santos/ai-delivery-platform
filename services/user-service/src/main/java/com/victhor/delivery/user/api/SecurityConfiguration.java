@@ -30,7 +30,7 @@ class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/users/auth/register", "/api/users/auth/login")
                         .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/users/ping", "/actuator/health", "/actuator/health/**",
+                        .requestMatchers(HttpMethod.GET, "/api/users/ping", "/.well-known/jwks.json", "/actuator/health", "/actuator/health/**",
                                 "/actuator/info", "/actuator/metrics", "/actuator/metrics/**")
                         .permitAll()
                         .requestMatchers("/error").permitAll()

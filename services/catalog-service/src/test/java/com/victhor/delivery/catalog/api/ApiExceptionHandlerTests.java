@@ -12,13 +12,16 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.victhor.delivery.catalog.application.RestaurantService;
+import com.victhor.delivery.catalog.infrastructure.auth.AccessTokenConfiguration;
 
 @WebMvcTest(RestaurantController.class)
+@Import({ SecurityConfiguration.class, AccessTokenConfiguration.class })
 class ApiExceptionHandlerTests {
 
     @Autowired

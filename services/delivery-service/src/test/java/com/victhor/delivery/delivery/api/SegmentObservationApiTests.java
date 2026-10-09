@@ -30,10 +30,12 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import com.victhor.delivery.delivery.infrastructure.auth.TestAccessTokens;
 import tools.jackson.databind.ObjectMapper;
 
 import com.victhor.delivery.delivery.application.CourierRepository;
@@ -57,6 +59,7 @@ import static org.mockito.Mockito.when;
                 "RABBITMQ_PASSWORD=unused", "spring.rabbitmq.listener.simple.auto-startup=false",
                 "management.health.rabbit.enabled=false"})
 @Testcontainers
+@ActiveProfiles("test")
 class SegmentObservationApiTests {
 
     private static final Instant NOW = Instant.parse("2026-10-03T12:00:00Z");
@@ -363,6 +366,7 @@ class SegmentObservationApiTests {
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).timeout(Duration.ofSeconds(10))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + TestAccessTokens.issueOperator(UUID.randomUUID()))
                 .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body)).build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }

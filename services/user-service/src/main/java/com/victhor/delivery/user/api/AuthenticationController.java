@@ -1,6 +1,8 @@
 package com.victhor.delivery.user.api;
 
 import java.net.URI;
+import java.util.UUID;
+
 import jakarta.validation.Valid;
 
 import org.springframework.http.CacheControl;
@@ -43,9 +45,14 @@ public class AuthenticationController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<UserProfileResponse> me(@AuthenticationPrincipal Jwt principal) {
+    public ResponseEntity<IdentityResponse> me(@AuthenticationPrincipal Jwt principal) {
         var user = users.findById(CurrentUser.id(principal));
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(UserProfileResponse.from(user));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(new IdentityResponse(user.id(), user.name(), user.email().value(), CurrentUser.role(principal)));
+    }
+
+    /** The profile plus the role granted by the presented token, so clients can adapt without decoding it. */
+    public record IdentityResponse(UUID id, String name, String email, String role) {
     }
 
     public record TokenResponse(String accessToken, String tokenType, long expiresIn) {

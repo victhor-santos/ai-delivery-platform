@@ -37,9 +37,34 @@ export function requestDelivery(token: string, orderId: string): Promise<Deliver
   return request(`/api/orders/${encodeURIComponent(orderId)}/delivery`, { method: 'POST', token })
 }
 
-// Entregas ainda são públicas no servidor; o pedido continua protegido pelo token do dono.
-export function getDeliveryByOrder(orderId: string, signal?: AbortSignal): Promise<Delivery> {
-  return request(`/api/deliveries/by-order/${encodeURIComponent(orderId)}`, { signal })
+// O cliente só vê a entrega dos próprios pedidos; a de outra pessoa responde 404, como uma inexistente.
+export function getDeliveryByOrder(token: string, orderId: string, signal?: AbortSignal): Promise<Delivery> {
+  return request(`/api/deliveries/by-order/${encodeURIComponent(orderId)}`, { token, signal })
+}
+
+export function getDelivery(token: string, deliveryId: string, signal?: AbortSignal): Promise<Delivery> {
+  return request(`/api/deliveries/${encodeURIComponent(deliveryId)}`, { token, signal })
+}
+
+export type DeliveryPage = {
+  items: Delivery[]
+  page: number
+  size: number
+  totalElements: number
+}
+
+// Somente o operador lista entregas; as mais recentes vêm primeiro.
+export function listDeliveries(
+  token: string,
+  status: DeliveryStatus | null,
+  page: number,
+  signal?: AbortSignal,
+): Promise<DeliveryPage> {
+  const query = new URLSearchParams({ page: String(page), size: '20' })
+  if (status) {
+    query.set('status', status)
+  }
+  return request(`/api/deliveries?${query.toString()}`, { token, signal })
 }
 
 export function isFinished(delivery: Delivery): boolean {
@@ -75,9 +100,9 @@ export type RoutePlan = {
 }
 
 // Sem plano salvo, o servidor responde 404; aqui isso vira null.
-export async function getRoutePlan(deliveryId: string, signal?: AbortSignal): Promise<RoutePlan | null> {
+export async function getRoutePlan(token: string, deliveryId: string, signal?: AbortSignal): Promise<RoutePlan | null> {
   try {
-    return await request<RoutePlan>(`/api/deliveries/${encodeURIComponent(deliveryId)}/route`, { signal })
+    return await request<RoutePlan>(`/api/deliveries/${encodeURIComponent(deliveryId)}/route`, { token, signal })
   } catch (failure) {
     if (failure instanceof ApiError && failure.status === 404) {
       return null
@@ -86,10 +111,12 @@ export async function getRoutePlan(deliveryId: string, signal?: AbortSignal): Pr
   }
 }
 
-// Cada chamada consulta o modelo e substitui o plano anterior; uma falha preserva o plano salvo.
-export function planRoute(deliveryId: string, departureAt: Date): Promise<RoutePlan> {
+// Somente o operador planeja. Cada chamada consulta o modelo e substitui o plano anterior; uma falha preserva o
+// plano salvo.
+export function planRoute(token: string, deliveryId: string, departureAt: Date): Promise<RoutePlan> {
   return request(`/api/deliveries/${encodeURIComponent(deliveryId)}/route`, {
     method: 'POST',
+    token,
     body: { departureAt: departureAt.toISOString() },
   })
 }
@@ -103,18 +130,22 @@ export type Courier = {
   active: boolean
 }
 
-// Comandos operacionais do ciclo. Repetir um comando já aplicado responde 409; consulte a entrega antes de tentar
-// de novo. Ainda não há papéis de entregador ou operador: o servidor aceita os comandos sem token.
-export function createCourier(): Promise<Courier> {
-  return request('/api/deliveries/couriers', { method: 'POST' })
+// Comandos operacionais do ciclo, exclusivos do operador. Repetir um comando já aplicado responde 409; consulte a
+// entrega antes de tentar de novo.
+export function createCourier(token: string): Promise<Courier> {
+  return request('/api/deliveries/couriers', { method: 'POST', token })
 }
 
-export function assignCourier(deliveryId: string, courierId: string): Promise<Delivery> {
-  return request(`/api/deliveries/${encodeURIComponent(deliveryId)}/assign`, { method: 'POST', body: { courierId } })
+export function assignCourier(token: string, deliveryId: string, courierId: string): Promise<Delivery> {
+  return request(`/api/deliveries/${encodeURIComponent(deliveryId)}/assign`, {
+    method: 'POST',
+    body: { courierId },
+    token,
+  })
 }
 
 export type DeliveryCommand = 'pick-up' | 'start-transit' | 'arrive' | 'complete' | 'cancel'
 
-export function runDeliveryCommand(deliveryId: string, command: DeliveryCommand): Promise<Delivery> {
-  return request(`/api/deliveries/${encodeURIComponent(deliveryId)}/${command}`, { method: 'POST' })
+export function runDeliveryCommand(token: string, deliveryId: string, command: DeliveryCommand): Promise<Delivery> {
+  return request(`/api/deliveries/${encodeURIComponent(deliveryId)}/${command}`, { method: 'POST', token })
 }

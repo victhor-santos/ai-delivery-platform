@@ -352,8 +352,8 @@ class OrderServiceApplicationTests {
 
     static Stream<String> invalidCredentials() {
         return Stream.of(null, "not-a-token", TestAccessTokens.issue(
-                "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=", Instant.now(), claims -> { }),
-                TestAccessTokens.issue(TestAccessTokens.SECRET, Instant.now().minusSeconds(1000), claims -> { }));
+                TestAccessTokens.FOREIGN_PRIVATE_KEY, Instant.now(), claims -> { }),
+                TestAccessTokens.issue(TestAccessTokens.PRIVATE_KEY, Instant.now().minusSeconds(1000), claims -> { }));
     }
 
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
