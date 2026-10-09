@@ -77,6 +77,7 @@ class RoutePlanner:
             "context_as_of": self.traffic.available_at,
             "model_version": self.predictor.metadata.model_version,
             "graph_version": self.graph.graph_version,
+            "data_origin": self.predictor.metadata.data_origin,
         }
         if origin.node_id == destination.node_id:
             return RouteResponse(

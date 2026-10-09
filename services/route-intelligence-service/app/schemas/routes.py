@@ -70,4 +70,5 @@ class RouteResponse(RouteModel):
     context_as_of: AwareDatetime
     model_version: str
     graph_version: Identifier
-    data_origin: Literal["synthetic"] = "synthetic"
+    # Origin of the model's training data: "simulated" only for a promoted observation model.
+    data_origin: Literal["synthetic", "simulated"] = "synthetic"

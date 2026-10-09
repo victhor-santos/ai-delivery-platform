@@ -16,6 +16,8 @@ from app.ml.features import FEATURE_COLUMNS
 from app.routing.graph import Identifier
 
 MODEL_FILE = "segment_travel_time_model.joblib"
+PROMOTION_REPORT_FILE = "promotion-report.json"
+PROMOTION_REPORT_VERSION = "segment-model-promotion-report-v1"
 MAX_MODEL_BYTES = 64 * 1024 * 1024
 Checksum = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 CandidateName = Literal["physical_reference", "dummy_median", "linear_regression", "random_forest"]
@@ -92,6 +94,27 @@ class ObservationModelMetadata(ModelMetadata):
     )
     data_origin: Literal["simulated"] = "simulated"
     prediction_data_origin: Literal["synthetic"] = "synthetic"
+
+
+class PromotedCandidate(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    model_version: str
+    artifact_sha256: Checksum
+    metadata_sha256: Checksum
+    validation_report_sha256: Checksum
+
+
+class PromotionRecord(BaseModel):
+    """Fields of the promotion report the runtime relies on; the full report stays offline."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    report_version: Literal["segment-model-promotion-report-v1"]
+    decision: Literal["approved"]
+    candidate: PromotedCandidate
+    graph_version: Identifier
+    graph_sha256: Checksum
 
 
 def _bounded_bytes(path: Path, limit: int) -> bytes:
@@ -174,8 +197,33 @@ def load_model_bundle[Metadata: ModelMetadata](
 
 
 def load_model(directory: Path) -> tuple[Pipeline, ModelMetadata]:
-    """Load only the synthetic v1 contract supported by the routing runtime."""
-    return load_model_bundle(directory, ModelMetadata)
+    """Load a synthetic bundle, or an observation bundle only with an approved promotion."""
+    try:
+        metadata_bytes = _bounded_bytes(directory / "metadata.json", 2 * 1024 * 1024)
+        schema = json.loads(metadata_bytes).get("artifact_schema_version")
+    except (OSError, ValueError, AttributeError) as exc:
+        raise ValueError(f"Unable to load model artifact: {exc}") from exc
+    if schema != "delivery-observation-model-artifact-v1":
+        return load_model_bundle(directory, ModelMetadata)
+    try:
+        promotion = PromotionRecord.model_validate_json(
+            _bounded_bytes(directory / PROMOTION_REPORT_FILE, 16 * 1024 * 1024)
+        )
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            f"Unable to load model artifact: observation models need an approved promotion: {exc}"
+        ) from exc
+    model, metadata = load_model_bundle(directory, ObservationModelMetadata)
+    if (
+        promotion.candidate.metadata_sha256 != hashlib.sha256(metadata_bytes).hexdigest()
+        or promotion.candidate.model_version != metadata.model_version
+        or promotion.candidate.artifact_sha256 != metadata.artifact_sha256
+        or promotion.candidate.validation_report_sha256 != metadata.validation_report_sha256
+        or (promotion.graph_version, promotion.graph_sha256)
+        != (metadata.graph_version, metadata.graph_sha256)
+    ):
+        raise ValueError("Unable to load model artifact: promotion differs from the bundle.")
+    return model, metadata
 
 
 def load_observation_model(directory: Path) -> tuple[Pipeline, ObservationModelMetadata]:

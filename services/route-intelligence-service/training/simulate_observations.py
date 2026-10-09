@@ -98,6 +98,8 @@ def simulate_observations(
         or predictor.metadata.graph_sha256 != graph_checksum(graph)
     ):
         raise ValueError("Production model and graph are incompatible.")
+    if predictor.metadata.data_origin != "synthetic":
+        raise ValueError("Simulated exports require a production model trained on synthetic data.")
     if not graph.segments:
         raise ValueError("The graph has no segments to simulate.")
     baseline = reference_travel_times(graph)
