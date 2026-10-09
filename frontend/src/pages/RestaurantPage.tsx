@@ -33,31 +33,44 @@ export function RestaurantPage() {
     )
   }
   if (!data) {
-    return <p aria-busy="true">Carregando…</p>
+    return (
+      <p className="loading" aria-busy="true">
+        Carregando…
+      </p>
+    )
   }
   const { restaurant, menu } = data
   const lines = cartLines(cart, menu)
   return (
     <div className={restaurant.active ? 'checkout' : undefined}>
       <section>
-        <p>
-          <Link to="/restaurants">← Restaurantes</Link>
-        </p>
-        <h1>{restaurant.name}</h1>
+        <Link className="back-link" to="/restaurants">
+          ← Restaurantes
+        </Link>
+        <header className="page-header">
+          <div>
+            <h1>{restaurant.name}</h1>
+            <p>{menu.length === 1 ? '1 item no cardápio' : `${menu.length} itens no cardápio`}</p>
+          </div>
+          {!restaurant.active && <span className="badge tone-danger">Fechado</span>}
+        </header>
         {!restaurant.active && <Alert kind="info">Este restaurante está fechado e não aceita pedidos.</Alert>}
         {menu.length === 0 ? (
-          <p>Nenhum item no cardápio.</p>
+          <p className="empty">Nenhum item no cardápio.</p>
         ) : (
           <ul className="list" aria-label="Cardápio">
             {menu.map((item) => (
-              <li key={item.id} className={`card menu-item${item.available ? '' : ' unavailable'}`}>
+              <li
+                key={item.id}
+                className={`card menu-item${item.available ? '' : ' unavailable'}${cart.has(item.id) ? ' selected' : ''}`}
+              >
                 <div>
                   <strong>{item.name}</strong>
                   {item.description && <p className="muted">{item.description}</p>}
                 </div>
                 <div className="menu-item-side">
-                  <span>{formatAmount(item.price)}</span>
-                  {!item.available && <span className="badge">Indisponível</span>}
+                  <span className="price">{formatAmount(item.price)}</span>
+                  {!item.available && <span className="badge tone-warning">Indisponível</span>}
                   {restaurant.active && item.available && (
                     <Stepper
                       name={item.name}
@@ -72,7 +85,9 @@ export function RestaurantPage() {
           </ul>
         )}
       </section>
-      {restaurant.active && <CartSummary restaurantId={restaurant.id} lines={lines} />}
+      {restaurant.active && (
+        <CartSummary restaurantId={restaurant.id} pickup={restaurant.pickupLocation} lines={lines} />
+      )}
     </div>
   )
 }

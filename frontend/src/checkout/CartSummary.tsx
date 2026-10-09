@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import type { Coordinates } from '../api/catalog'
 import { createOrder, type Destination } from '../api/orders'
 import { useFailureMessage } from '../api/useLoad'
 import { useAuth } from '../auth/AuthContext'
@@ -8,7 +9,17 @@ import { totalCents, type CartLine } from './cart'
 import { DestinationPicker } from './DestinationPicker'
 import { formatCents } from './money'
 
-export function CartSummary({ restaurantId, lines }: { restaurantId: string; lines: readonly CartLine[] }) {
+type Props = {
+  restaurantId: string
+  pickup: Coordinates | null
+  lines: readonly CartLine[]
+}
+
+function itemCount(lines: readonly CartLine[]): number {
+  return lines.reduce((count, line) => count + line.quantity, 0)
+}
+
+export function CartSummary({ restaurantId, pickup, lines }: Props) {
   const { session } = useAuth()
   const navigate = useNavigate()
   const failureMessage = useFailureMessage()
@@ -38,6 +49,11 @@ export function CartSummary({ restaurantId, lines }: { restaurantId: string; lin
   return (
     <section className="card summary" aria-labelledby="summary-title">
       <h2 id="summary-title">Seu pedido</h2>
+      {lines.length > 0 && (
+        <span className="summary-count">
+          {itemCount(lines) === 1 ? '1 item' : `${itemCount(lines)} itens`}
+        </span>
+      )}
       {lines.length === 0 ? (
         <p className="muted">Escolha itens do cardápio.</p>
       ) : (
@@ -59,7 +75,7 @@ export function CartSummary({ restaurantId, lines }: { restaurantId: string; lin
           <small>O valor final é calculado pelo servidor com os preços do cardápio no momento do pedido.</small>
         </>
       )}
-      <DestinationPicker onChange={setDestination} />
+      <DestinationPicker pickup={pickup} onChange={setDestination} />
       {error && <Alert>{error}</Alert>}
       <button type="button" disabled={lines.length === 0 || !destination || submitting} onClick={placeOrder}>
         {submitting ? 'Enviando…' : 'Fazer pedido'}

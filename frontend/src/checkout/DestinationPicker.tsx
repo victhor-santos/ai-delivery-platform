@@ -1,11 +1,12 @@
 import { useCallback, useState, type FormEvent } from 'react'
 import { currentUser } from '../api/auth'
+import type { Coordinates } from '../api/catalog'
 import type { Destination } from '../api/orders'
 import { useFailureMessage, useLoad } from '../api/useLoad'
 import { createAddress, listAddresses, type Address } from '../api/users'
 import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
-import { isInSyntheticCity, SYNTHETIC_POINTS } from './syntheticCity'
+import { isInSyntheticCity, SYNTHETIC_POINTS, syntheticPointAt } from './syntheticCity'
 
 const ADDRESS_PREFIX = 'address:'
 const POINT_PREFIX = 'point:'
@@ -20,7 +21,12 @@ function resolve(key: string, addresses: readonly Address[]): Destination | null
 }
 
 // Destino do pedido: um endereço salvo no perfil ou um ponto da cidade sintética.
-export function DestinationPicker({ onChange }: { onChange: (destination: Destination | null) => void }) {
+type Props = {
+  pickup: Coordinates | null
+  onChange: (destination: Destination | null) => void
+}
+
+export function DestinationPicker({ pickup, onChange }: Props) {
   const { session } = useAuth()
   const token = session?.token ?? ''
   const load = useCallback(
@@ -35,6 +41,8 @@ export function DestinationPicker({ onChange }: { onChange: (destination: Destin
   const [adding, setAdding] = useState(false)
   const addresses = data?.addresses ?? []
   const destination = resolve(selected, addresses)
+  const pickupPoint = pickup ? syntheticPointAt(pickup.latitude, pickup.longitude) : null
+  const points = SYNTHETIC_POINTS.filter((point) => point !== pickupPoint)
 
   function select(key: string, from: readonly Address[] = addresses) {
     setSelected(key)
@@ -67,7 +75,7 @@ export function DestinationPicker({ onChange }: { onChange: (destination: Destin
             </optgroup>
           )}
           <optgroup label="Cidade sintética">
-            {SYNTHETIC_POINTS.map((point) => (
+            {points.map((point) => (
               <option key={point.id} value={POINT_PREFIX + point.id}>
                 {point.label}
               </option>
@@ -75,6 +83,7 @@ export function DestinationPicker({ onChange }: { onChange: (destination: Destin
           </optgroup>
         </select>
       </label>
+      {pickupPoint && <small>O restaurante fica no ponto {pickupPoint.id}, por isso ele não aparece como destino.</small>}
       {error && <Alert>{error}</Alert>}
       {destination && !isInSyntheticCity(destination.latitude, destination.longitude) && (
         <Alert kind="info">

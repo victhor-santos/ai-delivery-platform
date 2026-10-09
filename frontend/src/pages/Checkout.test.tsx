@@ -67,6 +67,23 @@ async function openMenu() {
 }
 
 describe('checkout', () => {
+  it('does not offer the restaurant pickup point as the destination', async () => {
+    mockFetch({
+      ...restaurantRoutes(),
+      'GET /api/catalog/restaurants/r1': () =>
+        json(200, { ...RESTAURANT, pickupLocation: { latitude: -23.5505, longitude: -46.6333 } }),
+    })
+    const user = await openMenu()
+    await user.click(screen.getByRole('button', { name: 'Adicionar uma unidade de Prato do dia' }))
+
+    const picker = await screen.findByLabelText('Destino')
+    const options = within(picker).getAllByRole('option').map((option) => option.textContent)
+    expect(options).not.toContain('Ponto sintético A')
+    expect(options).toContain('Ponto sintético B')
+    expect(screen.getByText(/O restaurante fica no ponto A/)).toBeInTheDocument()
+    expect(screen.getByText('1 item')).toBeInTheDocument()
+  })
+
   it('places an order with the chosen quantities and destination', async () => {
     const fetchMock = mockFetch({
       ...restaurantRoutes(),
