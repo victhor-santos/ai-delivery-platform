@@ -689,12 +689,16 @@ button.secondary:hover:not(:disabled) {
 }
 
 .order-header h1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
   margin: 0;
 }
 
 .progress {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
   margin: 0 0 1.5rem;
   padding: 0;
@@ -1066,11 +1070,13 @@ button.secondary:hover:not(:disabled) {
     flex-wrap: wrap;
   }
 
-  .progress {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
   .list > .card {
     flex-wrap: wrap;
   }
+}
+
+.facts + .lines {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }

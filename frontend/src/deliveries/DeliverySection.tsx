@@ -6,7 +6,7 @@ import { useFailureMessage } from '../api/useLoad'
 import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
 import { DeliveryTimeline } from './DeliveryTimeline'
-import { deliveryStatusLabel } from './deliveryStatus'
+import { deliveryStatusLabel, deliveryStatusTone } from './deliveryStatus'
 import { RouteSection } from './RouteSection'
 import { useDeliveryTracking } from './useDeliveryTracking'
 
@@ -55,7 +55,7 @@ export function DeliverySection({ order, onOrderChange }: { order: Order; onOrde
   return (
     <section className="delivery" aria-label="Entrega">
       <h2>
-        Entrega {tracking.delivery && <span className="badge">{deliveryStatusLabel(tracking.delivery)}</span>}
+        Entrega {tracking.delivery && <span className={`badge tone-${deliveryStatusTone(tracking.delivery)}`}>{deliveryStatusLabel(tracking.delivery)}</span>}
       </h2>
       {notice && <Alert>{notice}</Alert>}
       {!requested && (

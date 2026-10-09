@@ -50,7 +50,14 @@ export function RouteMap({ origin, destination, route }: Props) {
         )}
         {SYNTHETIC_POINTS.map((point) => {
           const { x, y } = project(point)
-          const role = point === start ? 'origin' : point === end ? 'destination' : 'node'
+          const role =
+            point === start && point === end
+              ? 'both'
+              : point === start
+                ? 'origin'
+                : point === end
+                  ? 'destination'
+                  : 'node'
           return (
             <g key={point.id} className={role}>
               <circle cx={x} cy={y} r={role === 'node' ? 70 : 110} />
@@ -62,8 +69,8 @@ export function RouteMap({ origin, destination, route }: Props) {
         })}
       </svg>
       <figcaption>
-        <span className="legend origin">Coleta</span>
-        <span className="legend destination">Destino</span>
+        <span className="legend origin">{start && start === end ? 'Coleta e destino' : 'Coleta'}</span>
+        {!(start && start === end) && <span className="legend destination">Destino</span>}
         <span className="legend route">Rota prevista</span>
       </figcaption>
     </figure>

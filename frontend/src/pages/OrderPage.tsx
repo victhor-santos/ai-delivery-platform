@@ -23,6 +23,43 @@ function statusLabel(order: Order): string {
   }
 }
 
+function statusTone(order: Order): string {
+  switch (order.status) {
+    case 'CONFIRMED':
+      return 'success'
+    case 'CANCELLED':
+      return 'danger'
+    default:
+      return 'warning'
+  }
+}
+
+function OrderProgress({ order }: { order: Order }) {
+  if (order.status === 'CANCELLED') {
+    return null
+  }
+  const paid = order.status === 'CONFIRMED'
+  const requested = order.deliveryRequestedAt !== null
+  const steps = [
+    { label: 'Pedido feito', state: 'done' },
+    { label: 'Pagamento aprovado', state: paid ? 'done' : 'current' },
+    { label: 'Entrega solicitada', state: requested ? 'done' : paid ? 'current' : '' },
+  ]
+  return (
+    <ol className="progress" aria-label="Etapas do pedido">
+      {steps.map((step) => (
+        <li
+          key={step.label}
+          className={step.state || undefined}
+          aria-current={step.state === 'current' ? 'step' : undefined}
+        >
+          {step.label}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 export function OrderPage() {
   const { orderId = '' } = useParams()
   const { session } = useAuth()
@@ -52,14 +89,22 @@ export function OrderPage() {
     )
   }
   if (!data) {
-    return <p aria-busy="true">Carregando…</p>
+    return (
+      <p className="loading" aria-busy="true">
+        Carregando…
+      </p>
+    )
   }
   const { order, restaurantName } = data
   return (
     <section className="card">
-      <h1>
-        Pedido <span className="badge">{statusLabel(order)}</span>
-      </h1>
+      <header className="order-header">
+        <h1>
+          Pedido <span className={`badge tone-${statusTone(order)}`}>{statusLabel(order)}</span>
+        </h1>
+        <small>{dateFormatter.format(new Date(order.createdAt))}</small>
+      </header>
+      <OrderProgress order={order} />
       <dl className="facts">
         <dt>Restaurante</dt>
         <dd>

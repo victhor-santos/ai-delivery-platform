@@ -226,6 +226,20 @@ describe('delivery route seen by the customer', () => {
     expect(calls('/api/deliveries/d1/route')[0][1]?.headers).toMatchObject({ Authorization: 'Bearer token-123' })
   })
 
+  it('marks a shared pickup and destination point and shows the order steps', async () => {
+    const sameNode: Delivery = {
+      ...DELIVERY,
+      destination: { description: 'Ponto sintético A', latitude: -23.5505, longitude: -46.6333 },
+    }
+    server({ order: REQUESTED, delivery: sameNode }, created)
+    await openOrder()
+
+    expect(await screen.findByText('Coleta e destino')).toBeInTheDocument()
+    expect(screen.queryByText('Destino', { selector: '.legend' })).not.toBeInTheDocument()
+    const steps = within(screen.getByRole('list', { name: 'Etapas do pedido' })).getAllByRole('listitem')
+    expect(steps.map((step) => step.className)).toEqual(['done', 'done', 'done'])
+  })
+
   it('explains that the operation calculates the route', async () => {
     server({ order: REQUESTED, delivery: DELIVERY }, created)
     await openOrder()

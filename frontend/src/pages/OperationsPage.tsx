@@ -4,7 +4,7 @@ import { listDeliveries, type DeliveryStatus } from '../api/deliveries'
 import { useLoad } from '../api/useLoad'
 import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
-import { deliveryStatusLabel } from '../deliveries/deliveryStatus'
+import { deliveryStatusLabel, deliveryStatusTone } from '../deliveries/deliveryStatus'
 
 const PAGE_SIZE = 20
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -74,7 +74,7 @@ export function OperationsPage() {
           {data.items.map((delivery) => (
             <li key={delivery.id} className="card">
               <Link to={`/operations/deliveries/${delivery.id}`}>{delivery.destination.description}</Link>
-              <span className="badge">{deliveryStatusLabel(delivery)}</span>
+              <span className={`badge tone-${deliveryStatusTone(delivery)}`}>{deliveryStatusLabel(delivery)}</span>
               <small>Criada em {dateFormatter.format(new Date(delivery.createdAt))}</small>
             </li>
           ))}
