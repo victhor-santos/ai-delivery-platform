@@ -20,12 +20,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import com.victhor.delivery.delivery.application.CourierRepository;
 import com.victhor.delivery.delivery.domain.Courier;
+import com.victhor.delivery.delivery.infrastructure.auth.TestAccessTokens;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -36,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "RABBITMQ_PASSWORD=unused", "spring.rabbitmq.listener.simple.auto-startup=false",
                 "management.health.rabbit.enabled=false"})
 @Testcontainers
+@ActiveProfiles("test")
 class DeliveryServiceApplicationTests {
 
     private static final String DELIVERIES = "/api/deliveries";
@@ -299,7 +302,8 @@ class DeliveryServiceApplicationTests {
 
     private HttpRequest request(String method, String path, String body) {
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
-                .timeout(Duration.ofSeconds(10));
+                .timeout(Duration.ofSeconds(10))
+                .header("Authorization", "Bearer " + TestAccessTokens.issueOperator(UUID.randomUUID()));
         if (body != null) {
             request.header("Content-Type", "application/json");
         }

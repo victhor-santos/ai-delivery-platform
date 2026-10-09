@@ -7,6 +7,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.victhor.delivery.delivery.application.DeliveryService;
 import com.victhor.delivery.delivery.application.SegmentObservationService;
 
 @RestController
@@ -22,9 +25,11 @@ import com.victhor.delivery.delivery.application.SegmentObservationService;
 public class SegmentObservationController {
 
     private final SegmentObservationService observations;
+    private final DeliveryService deliveries;
 
-    public SegmentObservationController(SegmentObservationService observations) {
+    public SegmentObservationController(SegmentObservationService observations, DeliveryService deliveries) {
         this.observations = observations;
+        this.deliveries = deliveries;
     }
 
     @PutMapping("/{sequence}/entry")
@@ -40,7 +45,8 @@ public class SegmentObservationController {
     }
 
     @GetMapping
-    public List<SegmentObservationResponse> find(@PathVariable UUID id) {
+    public List<SegmentObservationResponse> find(@AuthenticationPrincipal Jwt principal, @PathVariable UUID id) {
+        deliveries.requireVisible(id, CurrentViewer.of(principal));
         return observations.find(id).stream().map(SegmentObservationResponse::from).toList();
     }
 

@@ -222,6 +222,7 @@ services:
       DELIVERY_DB_URL: jdbc:postgresql://delivery-db:5432/deliveries
       DELIVERY_DB_USERNAME: ${DELIVERY_DB_USERNAME:-deliveries}
       DELIVERY_DB_PASSWORD: ${DELIVERY_DB_PASSWORD:?Set DELIVERY_DB_PASSWORD in .env}
+      USER_AUTH_JWK_SET_URI: http://user-service:8081/.well-known/jwks.json
       ROUTE_INTELLIGENCE_URL: http://route-intelligence-service:8000
       DELIVERY_ROUTE_CONNECT_TIMEOUT_MS: ${DELIVERY_ROUTE_CONNECT_TIMEOUT_MS:-1000}
       DELIVERY_ROUTE_TIMEOUT_MS: ${DELIVERY_ROUTE_TIMEOUT_MS:-3000}

@@ -9,14 +9,18 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.victhor.delivery.delivery.application.DeliveryService;
+import com.victhor.delivery.delivery.infrastructure.auth.AccessTokenConfiguration;
+import com.victhor.delivery.delivery.infrastructure.auth.TestAccessTokens;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -26,6 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(DeliveryController.class)
+@ActiveProfiles("test")
+@Import({ SecurityConfiguration.class, AccessTokenConfiguration.class })
 class ApiExceptionHandlerTests {
 
     @Autowired
@@ -40,7 +46,8 @@ class ApiExceptionHandlerTests {
         UUID id = UUID.randomUUID();
         when(deliveries.complete(id)).thenThrow(failure);
 
-        var response = mvc.perform(post("/api/deliveries/{id}/complete", id))
+        var response = mvc.perform(post("/api/deliveries/{id}/complete", id)
+                        .header("Authorization", "Bearer " + TestAccessTokens.issueOperator(UUID.randomUUID())))
                 .andExpect(status().is(expectedStatus))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(expectedStatus))
