@@ -20,6 +20,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import com.victhor.delivery.user.domain.Role;
 import com.victhor.delivery.user.application.AuthAccountRepository;
 import com.victhor.delivery.user.application.EmailAlreadyRegisteredException;
 import com.victhor.delivery.user.domain.EmailAddress;
@@ -41,16 +42,31 @@ class AuthAccountPersistenceTests {
     @Test
     void registersAndRestoresTheCredentialByCanonicalEmail() {
         var profile = profile();
-        assertThat(accounts.register(profile, "encoded-password")).isEqualTo(profile);
+        assertThat(accounts.register(profile, "encoded-password", Role.CUSTOMER)).isEqualTo(profile);
         var stored = accounts.findByEmail(profile.email()).orElseThrow();
         assertThat(stored.userId()).isEqualTo(profile.id());
         assertThat(stored.passwordHash()).isEqualTo("encoded-password");
+        assertThat(stored.role()).isEqualTo(Role.CUSTOMER);
+        assertThat(accounts.findByUserId(profile.id())).contains(stored);
+    }
+
+    @Test
+    void storesTheOperatorRoleAndChangesOnlyThePasswordHash() {
+        var profile = profile();
+        accounts.register(profile, "first-hash", Role.OPERATOR);
+        accounts.changePasswordHash(profile.id(), "second-hash");
+        var stored = accounts.findByUserId(profile.id()).orElseThrow();
+        assertThat(stored.passwordHash()).isEqualTo("second-hash");
+        assertThat(stored.role()).isEqualTo(Role.OPERATOR);
+        assertThat(accounts.findByUserId(UUID.randomUUID())).isEmpty();
+        assertThatThrownBy(() -> jdbc.update("UPDATE user_credentials SET role = 'ADMIN' WHERE user_id = ?", profile.id()))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void credentialFailureRollsBackTheAlreadyFlushedProfile() {
         var profile = profile();
-        assertThatThrownBy(() -> accounts.register(profile, null)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> accounts.register(profile, null, Role.CUSTOMER)).isInstanceOf(DataIntegrityViolationException.class);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE id = ?", Integer.class, profile.id())).isZero();
         assertThat(accounts.findByEmail(profile.email())).isEmpty();
     }
@@ -90,10 +106,24 @@ class AuthAccountPersistenceTests {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM " + schema + ".user_credentials", Integer.class)).isZero();
     }
 
+    @Test
+    void migrationMakesExistingAccountsCustomers() {
+        String schema = "legacy_roles_" + UUID.randomUUID().toString().replace("-", "");
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .schemas(schema).target("2").load().migrate();
+        var profile = profile();
+        jdbc.update("INSERT INTO " + schema + ".users (id,name,email) VALUES (?,?,?)", profile.id(), profile.name(), profile.email().value());
+        jdbc.update("INSERT INTO " + schema + ".user_credentials (user_id,password_hash) VALUES (?,?)", profile.id(), "hash");
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .schemas(schema).load().migrate();
+        assertThat(jdbc.queryForObject("SELECT role FROM " + schema + ".user_credentials WHERE user_id = ?", String.class,
+                profile.id())).isEqualTo("CUSTOMER");
+    }
+
     private int attempt(UserProfile profile, CountDownLatch start) throws InterruptedException {
         if (!start.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Registration did not start");
         try {
-            accounts.register(profile, "encoded-password");
+            accounts.register(profile, "encoded-password", Role.CUSTOMER);
             return 1;
         } catch (EmailAlreadyRegisteredException exception) {
             return 0;

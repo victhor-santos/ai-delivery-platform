@@ -31,6 +31,8 @@ import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
+import com.victhor.delivery.user.domain.Role;
+
 class JwtAccessTokensTests {
 
     private static final Instant NOW = Instant.parse("2026-10-06T03:00:00Z");
@@ -41,8 +43,8 @@ class JwtAccessTokensTests {
     @Test
     void issuesUniqueRs256TokensWithKeyIdUuidSubjectAudienceAndFifteenMinuteExpiry() {
         UUID id = UUID.randomUUID();
-        var first = tokens.issue(id);
-        var second = tokens.issue(id);
+        var first = tokens.issue(id, Role.OPERATOR);
+        var second = tokens.issue(id, Role.OPERATOR);
         var decoded = tokens.decoder().decode(first.value());
         assertThat(first.value()).isNotEqualTo(second.value());
         assertThat(first.expiresIn()).isEqualTo(900);
@@ -51,6 +53,7 @@ class JwtAccessTokensTests {
         assertThat(decoded.getAudience()).containsExactly(JwtAccessTokens.AUDIENCE);
         assertThat(decoded.getExpiresAt()).isEqualTo(NOW.plusSeconds(900));
         assertThat(decoded.getIssuedAt()).isEqualTo(NOW);
+        assertThat(decoded.getClaimAsStringList("roles")).containsExactly("OPERATOR");
         assertThat(decoded.getHeaders()).containsEntry("alg", "RS256").containsEntry("typ", "JWT")
                 .containsEntry("kid", publicKey().getKeyID());
         assertThat(first.toString()).doesNotContain(first.value());
@@ -69,7 +72,7 @@ class JwtAccessTokensTests {
 
     @Test
     void verifiesTheSignatureAndDoesNotAcceptUnsignedOrForeignTokens() {
-        String token = tokens.issue(UUID.randomUUID()).value();
+        String token = tokens.issue(UUID.randomUUID(), Role.CUSTOMER).value();
         String[] parts = token.split("\\.");
         assertThatThrownBy(() -> tokens.decoder().decode(parts[0] + "." + parts[1] + ".AAAA"))
                 .isInstanceOf(JwtException.class);
@@ -107,12 +110,16 @@ class JwtAccessTokensTests {
                 valid().claims(map -> map.remove("iat")).build(),
                 valid().issuedAt(NOW.minusSeconds(900)).notBefore(NOW.minusSeconds(900)).expiresAt(NOW.minusSeconds(60)).build(),
                 valid().issuedAt(NOW.plusSeconds(60)).build(), valid().notBefore(NOW.plusSeconds(60)).build(),
-                valid().expiresAt(NOW.plusSeconds(901)).build());
+                valid().expiresAt(NOW.plusSeconds(901)).build(),
+                valid().claims(map -> map.remove("roles")).build(), valid().claim("roles", List.of()).build(),
+                valid().claim("roles", List.of("ADMIN")).build(), valid().claim("roles", List.of("CUSTOMER", "ROOT")).build(),
+                valid().claim("roles", "OPERATOR").build());
     }
 
     static JwtClaimsSet.Builder valid() {
         return JwtClaimsSet.builder().issuer(JwtAccessTokens.ISSUER).audience(List.of(JwtAccessTokens.AUDIENCE))
-                .subject(UUID.randomUUID().toString()).issuedAt(NOW).notBefore(NOW).expiresAt(NOW.plusSeconds(900));
+                .subject(UUID.randomUUID().toString()).issuedAt(NOW).notBefore(NOW).expiresAt(NOW.plusSeconds(900))
+                .claim("roles", List.of("CUSTOMER"));
     }
 
     @ParameterizedTest

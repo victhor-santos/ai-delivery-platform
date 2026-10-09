@@ -28,6 +28,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import com.victhor.delivery.user.domain.Role;
 import com.victhor.delivery.user.infrastructure.auth.JwtAccessTokens;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -76,7 +77,8 @@ class AuthenticationApiTests {
         assertThat(token.path("expiresIn").asLong()).isEqualTo(900);
         var me = getMe(token.path("accessToken").asString());
         assertThat(me.statusCode()).isEqualTo(200);
-        assertThat(body(me)).isEqualTo(profile);
+        assertThat(body(me).path("role").asString()).isEqualTo("CUSTOMER");
+        assertThat(((tools.jackson.databind.node.ObjectNode) body(me)).without("role")).isEqualTo(profile);
         assertThat(me.headers().firstValue("Cache-Control")).contains("no-store");
     }
 
@@ -141,7 +143,7 @@ class AuthenticationApiTests {
         var profile = body(post("/register", Map.of("name", "Cliente", "email", email, "password", PASSWORD)));
         UUID id = UUID.fromString(profile.path("id").asString());
         String expired = new JwtAccessTokens(signingKey, Clock.fixed(Instant.now().minusSeconds(1000), ZoneOffset.UTC))
-                .issue(id).value();
+                .issue(id, Role.CUSTOMER).value();
         assertProblem(getMe(expired), 401);
         String token = body(post("/login", Map.of("email", email, "password", PASSWORD))).path("accessToken").asString();
         String[] parts = token.split("\\.");

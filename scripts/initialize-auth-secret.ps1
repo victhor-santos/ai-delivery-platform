@@ -39,10 +39,19 @@ function Set-MissingEntry([string]$Name, [scriptblock]$Generate) {
         $content = $content.TrimEnd("`r", "`n") + "`r`n" + $entry + "`r`n"
     }
     [System.IO.File]::WriteAllText($environmentPath, $content, [System.Text.UTF8Encoding]::new($false))
-    Write-Output "A random $Name was saved locally. Its value is not displayed."
+    Write-Output "$Name was generated and saved locally. Its value is not displayed."
+}
+
+function New-Password {
+    $randomBytes = New-Object byte[] 18
+    $generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $generator.GetBytes($randomBytes) } finally { $generator.Dispose() }
+    return [Convert]::ToBase64String($randomBytes).Replace('+', '-').Replace('/', '_')
 }
 
 Set-MissingEntry 'USER_AUTH_PRIVATE_KEY' { New-RsaPrivateKey }
+Set-MissingEntry 'USER_OPERATOR_EMAIL' { 'operator@delivery.local' }
+Set-MissingEntry 'USER_OPERATOR_PASSWORD' { New-Password }
 if ([regex]::IsMatch([System.IO.File]::ReadAllText($environmentPath), '(?m)^USER_AUTH_SECRET=')) {
     Write-Output 'USER_AUTH_SECRET is no longer used: tokens are now signed with USER_AUTH_PRIVATE_KEY. You may remove it.'
 }

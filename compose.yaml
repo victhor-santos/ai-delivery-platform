@@ -129,6 +129,8 @@ services:
       USER_DB_USERNAME: ${USER_DB_USERNAME:-users}
       USER_DB_PASSWORD: ${USER_DB_PASSWORD:?Set USER_DB_PASSWORD in .env}
       USER_AUTH_PRIVATE_KEY: ${USER_AUTH_PRIVATE_KEY:?Generate USER_AUTH_PRIVATE_KEY with scripts/initialize-auth-secret.ps1}
+      USER_OPERATOR_EMAIL: ${USER_OPERATOR_EMAIL:?Generate the operator account with scripts/initialize-auth-secret.ps1}
+      USER_OPERATOR_PASSWORD: ${USER_OPERATOR_PASSWORD:?Generate the operator account with scripts/initialize-auth-secret.ps1}
     depends_on:
       user-db:
         condition: service_healthy

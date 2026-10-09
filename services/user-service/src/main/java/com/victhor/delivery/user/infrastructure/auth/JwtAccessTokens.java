@@ -37,6 +37,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
 import com.victhor.delivery.user.application.AccessToken;
 import com.victhor.delivery.user.application.AccessTokenIssuer;
+import com.victhor.delivery.user.domain.Role;
 
 /** Signs access tokens with the User service's RSA private key; other services verify them with the public JWKS. */
 public class JwtAccessTokens implements AccessTokenIssuer {
@@ -45,6 +46,7 @@ public class JwtAccessTokens implements AccessTokenIssuer {
     public static final String AUDIENCE = "delivery-order-system";
     public static final Duration LIFETIME = Duration.ofMinutes(15);
     public static final Duration CLOCK_SKEW = Duration.ofSeconds(30);
+    public static final String ROLES_CLAIM = "roles";
     public static final int MIN_KEY_BITS = 2048;
     static final String INVALID_KEY = "USER_AUTH_PRIVATE_KEY must be a Base64 PKCS#8 RSA private key of at least 2048 bits";
 
@@ -72,12 +74,12 @@ public class JwtAccessTokens implements AccessTokenIssuer {
     }
 
     @Override
-    public AccessToken issue(UUID userId) {
+    public AccessToken issue(UUID userId, Role role) {
         var now = clock.instant();
         var expiresAt = now.plus(LIFETIME);
         var claims = JwtClaimsSet.builder().issuer(ISSUER).subject(userId.toString())
                 .audience(List.of(AUDIENCE)).issuedAt(now).notBefore(now).expiresAt(expiresAt)
-                .id(UUID.randomUUID().toString()).build();
+                .claim(ROLES_CLAIM, List.of(role.name())).id(UUID.randomUUID().toString()).build();
         var header = JwsHeader.with(SignatureAlgorithm.RS256).keyId(signingKey.getKeyID()).type("JWT").build();
         String value = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
         return new AccessToken(value, expiresAt, LIFETIME.toSeconds());
@@ -99,7 +101,8 @@ public class JwtAccessTokens implements AccessTokenIssuer {
                     && jwt.getIssuedAt() != null && jwt.getExpiresAt() != null
                     && jwt.getExpiresAt().isAfter(jwt.getIssuedAt())
                     && !jwt.getExpiresAt().isAfter(jwt.getIssuedAt().plus(LIFETIME))
-                    && !jwt.getIssuedAt().isAfter(clock.instant().plus(CLOCK_SKEW));
+                    && !jwt.getIssuedAt().isAfter(clock.instant().plus(CLOCK_SKEW))
+                    && hasKnownRoles(jwt);
             if (valid) {
                 return OAuth2TokenValidatorResult.success();
             }
@@ -107,6 +110,20 @@ public class JwtAccessTokens implements AccessTokenIssuer {
             // A signed token still needs a usable subject and the required time claims.
         }
         return OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "Invalid access token", null));
+    }
+
+    private static boolean hasKnownRoles(Jwt jwt) {
+        return jwt.getClaims().get(ROLES_CLAIM) instanceof List<?> roles && !roles.isEmpty()
+                && roles.stream().allMatch(JwtAccessTokens::isRole);
+    }
+
+    private static boolean isRole(Object value) {
+        for (Role role : Role.values()) {
+            if (role.name().equals(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static RSAKey signingKey(String encodedPrivateKey) {

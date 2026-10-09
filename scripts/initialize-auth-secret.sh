@@ -34,7 +34,7 @@ set_missing_entry() {
     chmod --reference="$env_file" "$temporary" 2>/dev/null || chmod 600 "$temporary"
     mv "$temporary" "$env_file"
     trap - EXIT
-    echo "A random $name was saved locally. Its value is not displayed."
+    echo "$name was generated and saved locally. Its value is not displayed."
 }
 
 rsa_private_key() {
@@ -42,7 +42,12 @@ rsa_private_key() {
         | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\n'
 }
 
+operator_email() { echo 'operator@delivery.local'; }
+random_password() { head -c 18 /dev/urandom | base64 | tr '+/' '-_'; }
+
 set_missing_entry USER_AUTH_PRIVATE_KEY rsa_private_key
+set_missing_entry USER_OPERATOR_EMAIL operator_email
+set_missing_entry USER_OPERATOR_PASSWORD random_password
 if grep -q '^USER_AUTH_SECRET=' "$env_file"; then
     echo 'USER_AUTH_SECRET is no longer used: tokens are now signed with USER_AUTH_PRIVATE_KEY. You may remove it.'
 fi

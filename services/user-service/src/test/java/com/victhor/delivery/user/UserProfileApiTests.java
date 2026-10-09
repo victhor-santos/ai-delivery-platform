@@ -31,6 +31,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import com.victhor.delivery.user.domain.Role;
 import com.victhor.delivery.user.application.UserProfileService;
 import com.victhor.delivery.user.infrastructure.auth.JwtAccessTokens;
 
@@ -502,7 +503,7 @@ class UserProfileApiTests {
     }
 
     private String token(String userId) {
-        return tokens.issue(UUID.fromString(userId)).value();
+        return tokens.issue(UUID.fromString(userId), Role.CUSTOMER).value();
     }
 
     private static String uniqueEmail() {

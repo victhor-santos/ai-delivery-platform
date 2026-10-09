@@ -1,12 +1,16 @@
 package com.victhor.delivery.user.application;
 
+import java.util.UUID;
+
 import com.victhor.delivery.user.domain.EmailAddress;
 import com.victhor.delivery.user.domain.PasswordPolicy;
+import com.victhor.delivery.user.domain.Role;
 import com.victhor.delivery.user.domain.UserProfile;
 
 public class AuthenticationService {
 
     private static final String DUMMY_PASSWORD = "authentication-dummy-password";
+    static final String OPERATOR_NAME = "Operador";
 
     private final AuthAccountRepository accounts;
     private final PasswordHasher passwords;
@@ -23,7 +27,7 @@ public class AuthenticationService {
     public UserProfile register(String name, String email, String password) {
         var profile = UserProfile.create(name, new EmailAddress(email));
         PasswordPolicy.validateRegistration(password);
-        return accounts.register(profile, passwords.hash(password));
+        return accounts.register(profile, passwords.hash(password), Role.CUSTOMER);
     }
 
     public AccessToken login(String email, String password) {
@@ -34,6 +38,30 @@ public class AuthenticationService {
         if (account.isEmpty() || !validInput || !matches) {
             throw new InvalidCredentialsException();
         }
-        return tokens.issue(account.orElseThrow().userId());
+        return tokens.issue(account.orElseThrow().userId(), account.orElseThrow().role());
+    }
+
+    public Role roleOf(UUID userId) {
+        return accounts.findByUserId(userId).map(AuthAccount::role).orElseThrow(UserNotFoundException::new);
+    }
+
+    /**
+     * Creates the configured operator, or aligns its password with the configuration; never promotes a customer.
+     */
+    public void ensureOperator(String email, String password) {
+        var address = new EmailAddress(email);
+        PasswordPolicy.validateRegistration(password);
+        var existing = accounts.findByEmail(address);
+        if (existing.isEmpty()) {
+            accounts.register(UserProfile.create(OPERATOR_NAME, address), passwords.hash(password), Role.OPERATOR);
+            return;
+        }
+        var account = existing.orElseThrow();
+        if (account.role() != Role.OPERATOR) {
+            throw new OperatorAccountConflictException();
+        }
+        if (!passwords.matches(password, account.passwordHash())) {
+            accounts.changePasswordHash(account.userId(), passwords.hash(password));
+        }
     }
 }
