@@ -69,6 +69,23 @@ function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [int]$Status 
     }
 }
 
+# Order publishes delivery requests asynchronously; the delivery appears once Delivery consumes the event.
+function Wait-DeliveryForOrder([string]$OrderId, [int]$TimeoutSeconds = 30) {
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $response = $http.GetAsync("$baseUrl/api/deliveries/by-order/$OrderId").GetAwaiter().GetResult()
+        try {
+            $content = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            if ([int]$response.StatusCode -eq 200) { return $content | ConvertFrom-Json }
+            Assert-Condition ([int]$response.StatusCode -eq 404) "Unexpected delivery lookup status $([int]$response.StatusCode): $content"
+        } finally {
+            $response.Dispose()
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    throw "No delivery was created for order $OrderId within $TimeoutSeconds seconds."
+}
+
 Push-Location $repositoryRoot
 try {
     if ($CheckRecovery -or $CheckPersistence) {
@@ -247,21 +264,36 @@ try {
     Write-Output "Payments passed: declined=$($declined.paymentId), approved=$($payment.paymentId), order confirmed."
     if ($OrderOnly) { return }
 
-    $receipt = Invoke-Api 'POST' "$orderPath/delivery" -AccessToken $accessToken
-    $repeated = Invoke-Api 'POST' "$orderPath/delivery" -AccessToken $accessToken
-    Assert-Condition ($receipt.deliveryId -eq $repeated.deliveryId) 'Delivery creation was not idempotent.'
+    if ($CheckRecovery) {
+        # With the broker down the request is still accepted; the outbox publishes it once the broker is back.
+        try {
+            Invoke-Compose -CommandArguments @('stop', 'rabbitmq')
+            $pending = Invoke-Api 'POST' "$orderPath/delivery" -Status 202 -AccessToken $accessToken
+            Assert-Condition ($pending.status -eq 'REQUESTED') 'Delivery request was not accepted while the broker was down.'
+            Start-Sleep -Seconds 2
+            Invoke-Api 'GET' "/api/deliveries/by-order/$($order.id)" -Status 404 | Out-Null
+        } finally {
+            Invoke-Compose -CommandArguments @('up', '-d', '--no-build', '--wait', '--wait-timeout', '120', 'rabbitmq')
+        }
+        Write-Output 'Broker downtime passed: the delivery request stayed in the outbox until RabbitMQ returned.'
+    }
+    $receipt = Invoke-Api 'POST' "$orderPath/delivery" -Status 202 -AccessToken $accessToken
+    $repeated = Invoke-Api 'POST' "$orderPath/delivery" -Status 202 -AccessToken $accessToken
+    Assert-Condition ($receipt.status -eq 'REQUESTED' -and $receipt.orderId -eq $order.id) 'Invalid delivery request receipt.'
+    Assert-Condition (($receipt | ConvertTo-Json -Compress) -eq ($repeated | ConvertTo-Json -Compress)) 'Delivery request was not idempotent.'
+    $delivery = Wait-DeliveryForOrder $order.id 60
+    Invoke-Api 'PUT' "/api/deliveries/by-order/$($order.id)" @{ origin = $delivery.origin; destination = $delivery.destination } 405 | Out-Null
 
-    $deliveryPath = "/api/deliveries/$($receipt.deliveryId)"
-    $delivery = Invoke-Api 'GET' $deliveryPath
+    $deliveryPath = "/api/deliveries/$($delivery.id)"
     $departure = @{ departureAt = [DateTimeOffset]::UtcNow.ToString('o') }
     $plan = Invoke-Api 'POST' "$deliveryPath/route" $departure
-    Assert-Condition ($plan.deliveryId -eq $receipt.deliveryId) 'Route belongs to another delivery.'
+    Assert-Condition ($plan.deliveryId -eq $delivery.id) 'Route belongs to another delivery.'
     Assert-Condition ($plan.dataOrigin -in @('synthetic', 'simulated')) 'Route must identify synthetic data or a promoted simulated model.'
     Assert-Condition ($plan.route.Count -eq $plan.segments.Count + 1) 'Route and segments disagree.'
     Assert-Condition ($plan.distanceKm -gt 0 -and $plan.predictedTravelTimeMinutes -gt 0) 'Route totals must be positive.'
     $saved = Invoke-Api 'GET' "$deliveryPath/route"
     Assert-Condition (($saved | ConvertTo-Json -Depth 10 -Compress) -eq ($plan | ConvertTo-Json -Depth 10 -Compress)) 'Saved route differs from the planned route.'
-    Write-Output "Flow passed: restaurant=$($restaurant.id), order=$($order.id), delivery=$($receipt.deliveryId), model=$($plan.modelVersion)."
+    Write-Output "Flow passed: restaurant=$($restaurant.id), order=$($order.id), delivery=$($delivery.id), model=$($plan.modelVersion)."
 
     if ($CheckRecovery) {
         try {
@@ -369,8 +401,10 @@ try {
         $persistedObservations = @(Invoke-Api 'GET' "$deliveryPath/segments")
         Assert-Condition (($persistedObservations | ConvertTo-Json -Depth 10 -Compress) -eq ($observations | ConvertTo-Json -Depth 10 -Compress)) 'Observation snapshots changed after restart.'
         Assert-Condition ((Invoke-Api 'GET' $exportPath -Raw) -eq $csv) 'CSV changed after restart for the same cutoff.'
-        $recoveredReceipt = Invoke-Api 'POST' "$orderPath/delivery" -AccessToken $accessToken
-        Assert-Condition ($recoveredReceipt.deliveryId -eq $receipt.deliveryId) 'Restart caused a duplicate delivery.'
+        Invoke-Api 'POST' "$orderPath/delivery" -Status 202 -AccessToken $accessToken | Out-Null
+        Start-Sleep -Seconds 1
+        $recoveredDelivery = Invoke-Api 'GET' "/api/deliveries/by-order/$($order.id)"
+        Assert-Condition ($recoveredDelivery.id -eq $delivery.id) 'Restart caused a duplicate delivery.'
         Write-Output 'Persistence passed after recreating containers; no volumes were removed.'
     }
 } finally {

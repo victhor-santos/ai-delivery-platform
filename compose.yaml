@@ -96,6 +96,25 @@ services:
       retries: 10
       start_period: 10s
 
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    # A fixed hostname keeps the node name, and so its stored queues and messages, across container recreation.
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-delivery}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
   user-service:
     <<: *java-service
     image: delivery-order-system/user-service:local
@@ -145,15 +164,20 @@ services:
       ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:-orders}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
       CATALOG_SERVICE_URL: http://catalog-service:8082
-      DELIVERY_SERVICE_URL: http://delivery-service:8085
       PAYMENT_SERVICE_URL: http://payment-service:8084
       ORDER_REMOTE_TIMEOUT_MS: ${ORDER_REMOTE_TIMEOUT_MS:-5000}
       USER_AUTH_SECRET: ${USER_AUTH_SECRET:?Generate USER_AUTH_SECRET with scripts/initialize-auth-secret.ps1}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-delivery}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
     depends_on:
       order-db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       catalog-service:
         condition: service_healthy
+      # Delivery declares its queue on startup; until then the outbox keeps delivery requests pending.
       delivery-service:
         condition: service_healthy
       # Payment calls Order back only per request, so it starts first and the dependency stays one-way.
@@ -196,8 +220,13 @@ services:
       ROUTE_INTELLIGENCE_URL: http://route-intelligence-service:8000
       DELIVERY_ROUTE_CONNECT_TIMEOUT_MS: ${DELIVERY_ROUTE_CONNECT_TIMEOUT_MS:-1000}
       DELIVERY_ROUTE_TIMEOUT_MS: ${DELIVERY_ROUTE_TIMEOUT_MS:-3000}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-delivery}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
     depends_on:
       delivery-db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   api-gateway:
@@ -265,3 +294,4 @@ volumes:
   delivery_postgres_data:
   user_postgres_data:
   payment_postgres_data:
+  rabbitmq_data:
