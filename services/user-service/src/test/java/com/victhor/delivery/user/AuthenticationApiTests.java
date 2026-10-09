@@ -152,6 +152,25 @@ class AuthenticationApiTests {
     }
 
     @Test
+    void locksAnAccountAfterFiveAttemptsEvenForTheRightPasswordWithoutAffectingOthers() throws Exception {
+        String email = email();
+        post("/register", Map.of("name", "Cliente", "email", email, "password", PASSWORD));
+        for (int attempt = 0; attempt < 5; attempt++) {
+            assertProblem(post("/login", Map.of("email", email, "password", "wrong-password-" + attempt)), 401);
+        }
+        var locked = post("/login", Map.of("email", email.toUpperCase(java.util.Locale.ROOT), "password", PASSWORD));
+        assertProblem(locked, 429);
+        assertThat(locked.headers().firstValue("Retry-After").map(Long::parseLong)).hasValueSatisfying(
+                seconds -> assertThat(seconds).isBetween(1L, 900L));
+        assertThat(body(locked).path("detail").asString())
+                .isEqualTo("Muitas tentativas de login. Tente novamente mais tarde.");
+
+        String other = email();
+        post("/register", Map.of("name", "Cliente", "email", other, "password", PASSWORD));
+        assertThat(post("/login", Map.of("email", other, "password", PASSWORD)).statusCode()).isEqualTo(200);
+    }
+
+    @Test
     void publishesOnlyThePublicVerificationKeyForTheOtherServices() throws Exception {
         var response = HTTP.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/.well-known/jwks.json"))
                 .timeout(Duration.ofSeconds(20)).GET().build(), HttpResponse.BodyHandlers.ofString());

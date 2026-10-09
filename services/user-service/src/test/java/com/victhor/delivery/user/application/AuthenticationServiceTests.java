@@ -7,8 +7,10 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -29,12 +31,13 @@ class AuthenticationServiceTests {
     private final AuthAccountRepository accounts = mock(AuthAccountRepository.class);
     private final PasswordHasher passwords = mock(PasswordHasher.class);
     private final AccessTokenIssuer tokens = mock(AccessTokenIssuer.class);
+    private final LoginThrottle throttle = mock(LoginThrottle.class);
     private AuthenticationService service;
 
     @BeforeEach
     void setUp() {
         when(passwords.hash(anyString())).thenReturn("dummy-hash");
-        service = new AuthenticationService(accounts, passwords, tokens);
+        service = new AuthenticationService(accounts, passwords, tokens, throttle);
         clearInvocations(passwords);
     }
 
@@ -139,5 +142,26 @@ class AuthenticationServiceTests {
         assertThatThrownBy(() -> service.ensureOperator("ops@example.test", "short"))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(accounts);
+    }
+
+    @Test
+    void countsEveryAttemptBeforeHashingAndClearsTheCountOnlyOnSuccess() {
+        UUID id = UUID.randomUUID();
+        when(accounts.findByEmail(any())).thenReturn(Optional.of(new AuthAccount(id, "stored-hash", Role.CUSTOMER)));
+        when(passwords.matches("correct-password", "stored-hash")).thenReturn(true);
+        assertThatThrownBy(() -> service.login(" USER@example.test ", "wrong-password"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        verify(throttle, never()).succeeded(anyString());
+        service.login("user@example.test", "correct-password");
+        verify(throttle, times(2)).acquire("user@example.test");
+        verify(throttle).succeeded("user@example.test");
+    }
+
+    @Test
+    void aLockedAccountIsRefusedWithoutCheckingThePassword() {
+        doThrow(new TooManyLoginAttemptsException(java.time.Duration.ofMinutes(3))).when(throttle).acquire(anyString());
+        assertThatThrownBy(() -> service.login("user@example.test", "correct-password"))
+                .isInstanceOf(TooManyLoginAttemptsException.class);
+        verifyNoInteractions(accounts, passwords, tokens);
     }
 }

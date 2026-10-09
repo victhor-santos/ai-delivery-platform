@@ -15,12 +15,15 @@ public class AuthenticationService {
     private final AuthAccountRepository accounts;
     private final PasswordHasher passwords;
     private final AccessTokenIssuer tokens;
+    private final LoginThrottle throttle;
     private final String dummyHash;
 
-    public AuthenticationService(AuthAccountRepository accounts, PasswordHasher passwords, AccessTokenIssuer tokens) {
+    public AuthenticationService(AuthAccountRepository accounts, PasswordHasher passwords, AccessTokenIssuer tokens,
+            LoginThrottle throttle) {
         this.accounts = accounts;
         this.passwords = passwords;
         this.tokens = tokens;
+        this.throttle = throttle;
         dummyHash = passwords.hash(DUMMY_PASSWORD);
     }
 
@@ -31,13 +34,17 @@ public class AuthenticationService {
     }
 
     public AccessToken login(String email, String password) {
-        var account = accounts.findByEmail(new EmailAddress(email));
+        var address = new EmailAddress(email);
+        // Counted before any password work, so a locked account costs no hashing and ignores even the right password.
+        throttle.acquire(address.value());
+        var account = accounts.findByEmail(address);
         boolean validInput = PasswordPolicy.canMatch(password);
         boolean matches = passwords.matches(validInput ? password : DUMMY_PASSWORD,
                 account.map(AuthAccount::passwordHash).orElse(dummyHash));
         if (account.isEmpty() || !validInput || !matches) {
             throw new InvalidCredentialsException();
         }
+        throttle.succeeded(address.value());
         return tokens.issue(account.orElseThrow().userId(), account.orElseThrow().role());
     }
 

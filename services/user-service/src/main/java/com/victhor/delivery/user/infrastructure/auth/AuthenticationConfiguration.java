@@ -12,6 +12,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 
 import com.victhor.delivery.user.application.AuthAccountRepository;
 import com.victhor.delivery.user.application.AuthenticationService;
+import com.victhor.delivery.user.application.LoginThrottle;
 import com.victhor.delivery.user.application.PasswordHasher;
 
 @Configuration(proxyBeanMethods = false)
@@ -57,7 +58,13 @@ public class AuthenticationConfiguration {
     }
 
     @Bean
-    AuthenticationService authentication(AuthAccountRepository accounts, PasswordHasher passwords, JwtAccessTokens tokens) {
-        return new AuthenticationService(accounts, passwords, tokens);
+    LoginThrottle loginThrottle(Clock clock) {
+        return new LoginThrottle(clock);
+    }
+
+    @Bean
+    AuthenticationService authentication(AuthAccountRepository accounts, PasswordHasher passwords, JwtAccessTokens tokens,
+            LoginThrottle throttle) {
+        return new AuthenticationService(accounts, passwords, tokens, throttle);
     }
 }
