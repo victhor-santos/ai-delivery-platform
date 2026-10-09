@@ -10,7 +10,7 @@ public record TraversalPrediction(RouteSegment segment, Instant plannedDeparture
         Objects.requireNonNull(segment);
         Objects.requireNonNull(segment.predictionContext(), "Segment features were not recorded in this plan");
         segment.predictionContext().validateFor(plannedDepartureAt, predictionAt, contextAsOf);
-        if (!"synthetic".equals(dataOrigin) || modelVersion == null || graphVersion == null) {
+        if (!OptimizedRoute.DATA_ORIGINS.contains(dataOrigin) || modelVersion == null || graphVersion == null) {
             throw new IllegalArgumentException("Invalid prediction provenance");
         }
     }

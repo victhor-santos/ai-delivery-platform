@@ -15,6 +15,11 @@ function minutes(value: number): string {
   return `${Math.max(1, Math.round(value))} min`
 }
 
+const DATA_ORIGINS: Record<string, string> = {
+  synthetic: 'Sintéticos: não representam trânsito real',
+  simulated: 'Modelo treinado com entregas simuladas: não representa trânsito real',
+}
+
 // Rota prevista pelo modelo sobre a cidade sintética, desenhada no mapa com origem e destino da entrega.
 export function RouteSection({ delivery }: { delivery: Delivery }) {
   // O plano fica num objeto para distinguir "ainda carregando" (data nulo) de "sem plano" (plan nulo).
@@ -73,7 +78,7 @@ export function RouteSection({ delivery }: { delivery: Delivery }) {
             <code>{plan.modelVersion}</code> sobre <code>{plan.graphVersion}</code>
           </dd>
           <dt>Dados</dt>
-          <dd>{plan.dataOrigin === 'synthetic' ? 'Sintéticos: não representam trânsito real' : plan.dataOrigin}</dd>
+          <dd>{DATA_ORIGINS[plan.dataOrigin] ?? plan.dataOrigin}</dd>
         </dl>
       ) : (
         data && <p className="muted">Nenhuma rota foi calculada para esta entrega.</p>

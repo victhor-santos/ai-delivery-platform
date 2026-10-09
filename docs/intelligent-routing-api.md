@@ -35,7 +35,7 @@ Cada ponto é associado ao nó mais próximo, usando distância de haversine com
 
 Os custos vêm das seis features já usadas no treinamento: distância, tipo de via, velocidade de referência, tráfego, hora e dia da semana. O cliente não fornece tráfego, modelo, features ou pesos. Todas as arestas são previstas em uma chamada ao predictor, depois Dijkstra escolhe o caminho dirigido. Os totais são somados sem arredondamento intermediário. Origem e destino no mesmo nó retornam uma coordenada, nenhum trecho e totais zero.
 
-A resposta inclui `model_version`, `graph_version`, `predicted_at`, `context_as_of` e `data_origin: synthetic`, além das coordenadas e custos por trecho. Não expõe arquivos internos, hiperparâmetros ou dados de treinamento.
+A resposta inclui `model_version`, `graph_version`, `predicted_at`, `context_as_of` e `data_origin`, além das coordenadas e custos por trecho. `data_origin` é `synthetic` para o modelo treinado no dataset sintético e `simulated` para um [modelo promovido](model-promotion-validation.md) a partir de entregas simuladas. Não expõe arquivos internos, hiperparâmetros ou dados de treinamento.
 
 ## Tráfego e prontidão
 

@@ -90,6 +90,8 @@ Exemplo obtido com o bundle Windows e o cenário padrão. Os timestamps variam a
 }
 ```
 
+`data_origin` vale `synthetic` para o modelo treinado no dataset sintético e `simulated` quando a API serve um [modelo promovido](model-promotion-validation.md) a partir de entregas simuladas. Grafo e tráfego continuam sintéticos nos dois casos.
+
 Os trechos seguem a ordem do percurso. Uma rota com N trechos tem N+1 coordenadas, e os totais são a soma dos valores por trecho. Os testes devem usar uma tolerância numérica para essas somas, por causa da representação de ponto flutuante.
 
 `prediction_context` preserva as seis features usadas pelo predictor e sua proveniência. Java valida schema, direção entre trechos, distância, horário da partida planejada e ordem de disponibilidade. Respostas antigas sem snapshots continuam aceitas para planejamento e consulta, mas não podem gerar [observações de travessia](delivery-segment-observations.md). Misturar trechos com e sem snapshot no mesmo plano é rejeitado.

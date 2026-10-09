@@ -100,11 +100,11 @@ def test_model_metadata_v1_json_is_unchanged_and_class_variables_are_not_fields(
 @pytest.mark.parametrize(
     "online_entry_point", [load_model, SegmentTravelTimePredictor.from_directory]
 )
-def test_runtime_entry_points_reject_observation_bundle_before_deserialization(
+def test_runtime_entry_points_reject_unpromoted_observation_bundle_before_deserialization(
     observation_bundle, online_entry_point
 ):
     with patch("app.ml.artifacts.joblib.load") as deserialize:
-        with pytest.raises(ValueError, match="artifact_schema_version"):
+        with pytest.raises(ValueError, match="approved promotion"):
             online_entry_point(observation_bundle)
         deserialize.assert_not_called()
 

@@ -26,6 +26,7 @@ class ReferencePredictor:
             model_version="test-model-v1",
             graph_version=graph.graph_version,
             graph_sha256=graph_checksum(graph),
+            data_origin="synthetic",
         )
         self.calls = []
 

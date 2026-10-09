@@ -211,6 +211,15 @@ describe('delivery route', () => {
     expect(Number.isNaN(Date.parse(body.departureAt))).toBe(false)
   })
 
+  it('explains when the route comes from a model trained on simulated deliveries', async () => {
+    server({ order: REQUESTED, delivery: DELIVERY, plan: { ...PLAN, dataOrigin: 'simulated' } }, created)
+    await openOrder()
+
+    expect(
+      await screen.findByText('Modelo treinado com entregas simuladas: não representa trânsito real'),
+    ).toBeInTheDocument()
+  })
+
   it('keeps the saved plan when the route service is unavailable', async () => {
     server({ order: REQUESTED, delivery: DELIVERY, plan: PLAN }, created, () => problem(503, 'indisponível'))
     const user = await openOrder()

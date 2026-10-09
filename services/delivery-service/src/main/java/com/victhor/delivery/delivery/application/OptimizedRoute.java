@@ -4,12 +4,16 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import com.victhor.delivery.delivery.domain.GeoPoint;
 
 public record OptimizedRoute(List<GeoPoint> route, List<RouteSegment> segments, double distanceKm,
         double predictedTravelTimeMinutes, Instant predictedAt, Instant contextAsOf, String modelVersion,
         String graphVersion, String dataOrigin) {
+
+    /** Synthetic training data, or simulated deliveries for a model promoted by Route Intelligence. */
+    public static final Set<String> DATA_ORIGINS = Set.of("synthetic", "simulated");
 
     public OptimizedRoute {
         route = List.copyOf(route);
@@ -45,7 +49,7 @@ public record OptimizedRoute(List<GeoPoint> route, List<RouteSegment> segments, 
         }
         if (contextAsOf.isAfter(predictedAt) || modelVersion == null
                 || !modelVersion.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}") || graphVersion == null
-                || !graphVersion.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,63}") || !"synthetic".equals(dataOrigin)) {
+                || !graphVersion.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,63}") || !DATA_ORIGINS.contains(dataOrigin)) {
             throw new IllegalArgumentException("Invalid route provenance");
         }
     }

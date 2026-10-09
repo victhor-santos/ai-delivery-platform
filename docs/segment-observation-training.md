@@ -63,7 +63,7 @@ Os três arquivos são `segment_travel_time_model.joblib`, `metadata.json` e `va
 | `fit_partition`, `selection_partition` | `train`, `validation` |
 | `environment`, hashes e tamanho | Compatibilidade de runtime/dependências e integridade |
 
-`load_observation_model` aceita somente esse contrato para avaliação offline. O carregador `load_model` e o predictor usados na API continuam exigindo `segment-model-artifact-v1` com origem `synthetic`; rejeitam bundles observacionais antes da desserialização. Configurar o novo diretório na API não publica o modelo: sua prontidão falhará. O Compose não é alterado e o bundle atual não é substituído.
+`load_observation_model` aceita somente esse contrato para avaliação offline. O carregador `load_model` e o predictor usados na API recusam um bundle observacional antes da desserialização, a menos que ele venha de uma [promoção aprovada](model-promotion-validation.md). Configurar o diretório produzido por esta etapa na API não publica o modelo: sua prontidão falhará. O Compose não é alterado e o bundle atual não é substituído.
 
 Ambos os contratos usam o mesmo leitor interno para verificar ambiente, hashes, tamanho, pipeline, contagem de features e correspondência do relatório com metadata. Origem, versão de relatório, seleção, seed, parâmetros e identidade são conferidos. Bundles observacionais também conferem schemas, origem da previsão histórica e grafo no relatório. Joblib deve carregar somente artefatos locais confiáveis; hashes comprovam integridade, não confiança.
 
@@ -81,7 +81,7 @@ Não há avaliação da melhor rota ou custo de entrega completa: faltam tempos 
 
 ## Próximos passos
 
-Coletar observações simuladas suficientes e representativas, inspecionar cobertura e avaliar estabilidade ao longo do tempo. Promoção de artefatos observacionais requer uma etapa própria de contrato/runtime e decisão baseada em validação; os comandos desta etapa não promovem modelos. Coleta real, mapas/tráfego reais e interface web continuam no roadmap.
+Coletar observações simuladas suficientes e representativas, inspecionar cobertura e avaliar estabilidade ao longo do tempo. A [validação da promoção](model-promotion-validation.md) cobre a coleta simulada do grafo inteiro e a decisão baseada em contrato, cobertura e métricas; os comandos desta etapa não promovem modelos. Coleta real, mapas/tráfego reais e interface web continuam no roadmap.
 
 ## Validação
 
