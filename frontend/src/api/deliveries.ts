@@ -26,14 +26,14 @@ export type Delivery = {
   cancelledAt: string | null
 }
 
-export type DeliveryReceipt = {
+// 202: o Order registrou a solicitação e a publica no RabbitMQ; a entrega aparece quando o Delivery a consome.
+export type DeliveryRequestReceipt = {
   orderId: string
-  deliveryId: string
-  status: DeliveryStatus
+  status: 'REQUESTED'
 }
 
-// Idempotente: repetir recupera a mesma entrega, inclusive depois de uma resposta perdida (503).
-export function requestDelivery(token: string, orderId: string): Promise<DeliveryReceipt> {
+// Idempotente: repetir devolve a mesma solicitação e nunca cria outra entrega.
+export function requestDelivery(token: string, orderId: string): Promise<DeliveryRequestReceipt> {
   return request(`/api/orders/${encodeURIComponent(orderId)}/delivery`, { method: 'POST', token })
 }
 
