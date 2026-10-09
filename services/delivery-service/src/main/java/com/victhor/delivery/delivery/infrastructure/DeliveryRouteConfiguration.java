@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import com.victhor.delivery.delivery.application.DeliveryRouteRepository;
 import com.victhor.delivery.delivery.application.DeliveryRouteService;
 import com.victhor.delivery.delivery.application.RouteOptimizer;
+import io.micrometer.core.instrument.MeterRegistry;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -23,10 +24,11 @@ class DeliveryRouteConfiguration {
     }
 
     @Bean
-    FastApiRouteOptimizerClient routeOptimizer(HttpClient routeHttpClient, ObjectMapper mapper,
+    RouteOptimizer routeOptimizer(HttpClient routeHttpClient, ObjectMapper mapper, MeterRegistry registry,
             @Value("${delivery.routing.url}") String url,
             @Value("${delivery.routing.timeout-ms}") long timeoutMs) {
-        return new FastApiRouteOptimizerClient(routeHttpClient, mapper, url, Duration.ofMillis(timeoutMs));
+        return new MeteredRouteOptimizer(
+                new FastApiRouteOptimizerClient(routeHttpClient, mapper, url, Duration.ofMillis(timeoutMs)), registry);
     }
 
     @Bean

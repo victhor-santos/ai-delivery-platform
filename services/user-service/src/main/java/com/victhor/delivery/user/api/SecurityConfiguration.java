@@ -31,7 +31,7 @@ class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/users/auth/register", "/api/users/auth/login")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/ping", "/actuator/health", "/actuator/health/**",
-                                "/actuator/info")
+                                "/actuator/info", "/actuator/metrics", "/actuator/metrics/**")
                         .permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
