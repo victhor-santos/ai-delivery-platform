@@ -33,8 +33,9 @@ export function LoginPage() {
   }
 
   return (
-    <section className="card narrow">
+    <section className="card narrow auth-card">
       <h1>Entrar</h1>
+      <p>Acesse para fazer pedidos e acompanhar entregas.</p>
       {notice && <Alert kind="info">{notice}</Alert>}
       {error && <Alert>{error}</Alert>}
       <form onSubmit={handleSubmit}>
