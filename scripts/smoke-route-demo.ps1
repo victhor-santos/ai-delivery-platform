@@ -256,7 +256,7 @@ try {
     $departure = @{ departureAt = [DateTimeOffset]::UtcNow.ToString('o') }
     $plan = Invoke-Api 'POST' "$deliveryPath/route" $departure
     Assert-Condition ($plan.deliveryId -eq $receipt.deliveryId) 'Route belongs to another delivery.'
-    Assert-Condition ($plan.dataOrigin -eq 'synthetic') 'Route must identify synthetic data.'
+    Assert-Condition ($plan.dataOrigin -in @('synthetic', 'simulated')) 'Route must identify synthetic data or a promoted simulated model.'
     Assert-Condition ($plan.route.Count -eq $plan.segments.Count + 1) 'Route and segments disagree.'
     Assert-Condition ($plan.distanceKm -gt 0 -and $plan.predictedTravelTimeMinutes -gt 0) 'Route totals must be positive.'
     $saved = Invoke-Api 'GET' "$deliveryPath/route"
