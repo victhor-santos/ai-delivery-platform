@@ -59,8 +59,9 @@ export function listDeliveries(
   status: DeliveryStatus | null,
   page: number,
   signal?: AbortSignal,
+  size = 20,
 ): Promise<DeliveryPage> {
-  const query = new URLSearchParams({ page: String(page), size: '20' })
+  const query = new URLSearchParams({ page: String(page), size: String(size) })
   if (status) {
     query.set('status', status)
   }

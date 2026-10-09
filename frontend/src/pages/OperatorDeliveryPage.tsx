@@ -20,9 +20,9 @@ export function OperatorDeliveryPage() {
 
   return (
     <section className="card delivery" aria-label="Entrega">
-      <p>
-        <Link to="/operations">Voltar às entregas</Link>
-      </p>
+      <Link className="back-link" to="/operations">
+        ← Entregas
+      </Link>
       <h1>Entrega {delivery && <span className={`badge tone-${deliveryStatusTone(delivery)}`}>{deliveryStatusLabel(delivery)}</span>}</h1>
       {tracking.pending && <Alert>Entrega não encontrada.</Alert>}
       {tracking.error && <Alert>{tracking.error}</Alert>}

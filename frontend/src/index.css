@@ -1025,7 +1025,7 @@ button.secondary:hover:not(:disabled) {
   border-radius: 999px;
 }
 
-.delivery-row {
+.list > .delivery-row {
   position: relative;
   display: grid;
   grid-template-columns: 1fr auto;
@@ -1079,4 +1079,13 @@ button.secondary:hover:not(:disabled) {
   margin-top: 1.25rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
