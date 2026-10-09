@@ -21,6 +21,7 @@ import com.victhor.delivery.delivery.application.SegmentPredictionContext;
 import com.victhor.delivery.delivery.application.RouteServiceUnavailableException;
 import com.victhor.delivery.delivery.application.UnsupportedRouteLocationException;
 import com.victhor.delivery.delivery.domain.GeoPoint;
+import com.victhor.delivery.delivery.observability.RequestIds;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -111,7 +112,7 @@ public class FastApiRouteOptimizerClient implements RouteOptimizer {
     }
 
     private HttpResponse<String> send(String body) {
-        var request = HttpRequest.newBuilder(endpoint).timeout(timeout)
+        var request = RequestIds.propagate(HttpRequest.newBuilder(endpoint)).timeout(timeout)
                 .header("Accept", "application/json, application/problem+json")
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build();

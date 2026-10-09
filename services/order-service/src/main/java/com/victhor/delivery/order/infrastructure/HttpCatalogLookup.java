@@ -12,6 +12,7 @@ import com.victhor.delivery.order.application.CatalogLookup;
 import com.victhor.delivery.order.application.CatalogSelectionConflictException;
 import com.victhor.delivery.order.application.RemoteServiceUnavailableException;
 import com.victhor.delivery.order.domain.OrderItem;
+import com.victhor.delivery.order.observability.RequestIds;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -65,8 +66,8 @@ public class HttpCatalogLookup implements CatalogLookup {
     private JsonNode get(String path) {
         HttpResponse<String> response;
         try {
-            var request = HttpRequest.newBuilder(URI.create(catalogUrl + path)).timeout(timeout)
-                    .header("Accept", "application/json").GET().build();
+            var request = RequestIds.propagate(HttpRequest.newBuilder(URI.create(catalogUrl + path)))
+                    .timeout(timeout).header("Accept", "application/json").GET().build();
             response = client.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();

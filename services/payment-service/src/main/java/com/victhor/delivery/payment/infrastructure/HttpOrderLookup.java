@@ -12,6 +12,7 @@ import java.util.UUID;
 import com.victhor.delivery.payment.application.OrderLookup;
 import com.victhor.delivery.payment.application.PaymentOrderNotFoundException;
 import com.victhor.delivery.payment.application.RemoteServiceUnavailableException;
+import com.victhor.delivery.payment.observability.RequestIds;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -33,8 +34,9 @@ public class HttpOrderLookup implements OrderLookup {
 
     @Override
     public OrderSnapshot findById(UUID orderId, String accessToken) {
-        var request = HttpRequest.newBuilder(URI.create(orderUrl + "/api/orders/" + orderId)).timeout(timeout)
-                .header("Accept", "application/json").header("Authorization", "Bearer " + accessToken).GET().build();
+        var request = RequestIds.propagate(HttpRequest.newBuilder(URI.create(orderUrl + "/api/orders/" + orderId)))
+                .timeout(timeout).header("Accept", "application/json").header("Authorization", "Bearer " + accessToken)
+                .GET().build();
         HttpResponse<String> response;
         try {
             response = client.send(request, HttpResponse.BodyHandlers.ofString());
