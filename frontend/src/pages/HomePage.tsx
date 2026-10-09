@@ -24,7 +24,11 @@ export function HomePage() {
         Conectado como <strong>{profile.email}</strong>.
       </p>
       <p>
-        <Link to="/restaurants">Escolher um restaurante</Link>
+        {profile.role === 'OPERATOR' ? (
+          <Link to="/operations">Acompanhar as entregas</Link>
+        ) : (
+          <Link to="/restaurants">Escolher um restaurante</Link>
+        )}
       </p>
     </section>
   )

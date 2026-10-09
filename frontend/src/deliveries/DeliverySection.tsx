@@ -1,13 +1,12 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ApiError, NETWORK_ERROR_STATUS } from '../api/client'
-import { requestDelivery } from '../api/deliveries'
+import { getDeliveryByOrder, requestDelivery } from '../api/deliveries'
 import { getOrder, type Order } from '../api/orders'
 import { useFailureMessage } from '../api/useLoad'
 import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
 import { DeliveryTimeline } from './DeliveryTimeline'
 import { deliveryStatusLabel } from './deliveryStatus'
-import { OperationsPanel } from './OperationsPanel'
 import { RouteSection } from './RouteSection'
 import { useDeliveryTracking } from './useDeliveryTracking'
 
@@ -20,7 +19,8 @@ export function DeliverySection({ order, onOrderChange }: { order: Order; onOrde
   const token = session?.token ?? ''
   const failureMessage = useFailureMessage()
   const requested = order.deliveryRequestedAt !== null
-  const tracking = useDeliveryTracking(order.id, requested)
+  const load = useCallback((signal: AbortSignal) => getDeliveryByOrder(token, order.id, signal), [token, order.id])
+  const tracking = useDeliveryTracking(load, requested)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -78,7 +78,6 @@ export function DeliverySection({ order, onOrderChange }: { order: Order; onOrde
       {tracking.delivery && (
         <>
           <DeliveryTimeline delivery={tracking.delivery} />
-          <OperationsPanel delivery={tracking.delivery} onChange={tracking.setDelivery} onConflict={tracking.reload} />
           <RouteSection delivery={tracking.delivery} />
         </>
       )}

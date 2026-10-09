@@ -20,6 +20,8 @@ export function login(email: string, password: string): Promise<AccessToken> {
   return request('/api/users/auth/login', { method: 'POST', body: { email, password } })
 }
 
-export function currentUser(token: string, signal?: AbortSignal): Promise<UserProfile> {
+export type Identity = UserProfile & { role: 'CUSTOMER' | 'OPERATOR' }
+
+export function currentUser(token: string, signal?: AbortSignal): Promise<Identity> {
   return request('/api/users/auth/me', { token, signal })
 }
