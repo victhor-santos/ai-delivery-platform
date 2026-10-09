@@ -14,7 +14,7 @@ import com.victhor.delivery.order.application.RemoteServiceUnavailableException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class HttpDeliveryIntegrationTests {
+class HttpRestaurantLookupTests {
 
     @Test
     void boundsRemoteCallsWithAnExplicitRequestTimeout() throws Exception {
@@ -31,7 +31,7 @@ class HttpDeliveryIntegrationTests {
         server.start();
         try (var client = HttpClient.newHttpClient()) {
             String url = "http://127.0.0.1:" + server.getAddress().getPort();
-            var adapter = new HttpDeliveryIntegration(client, new ObjectMapper(), url, url, Duration.ofMillis(50));
+            var adapter = new HttpRestaurantLookup(client, new ObjectMapper(), url, Duration.ofMillis(50));
             assertThatThrownBy(() -> adapter.findById(UUID.randomUUID()))
                     .isInstanceOf(RemoteServiceUnavailableException.class).hasCauseInstanceOf(HttpTimeoutException.class);
         } finally {

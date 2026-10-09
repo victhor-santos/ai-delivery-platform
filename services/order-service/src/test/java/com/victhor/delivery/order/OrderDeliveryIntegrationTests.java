@@ -7,6 +7,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -14,6 +15,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Map;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -23,8 +25,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -35,6 +43,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -46,14 +55,21 @@ import com.victhor.delivery.order.domain.DeliveryRequest;
 import com.victhor.delivery.order.domain.OrderStatus;
 import com.victhor.delivery.order.domain.OrderStateConflictException;
 import com.victhor.delivery.order.infrastructure.auth.TestAccessTokens;
+import com.victhor.delivery.order.infrastructure.messaging.OrderEvents;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
+// Testcontainers first so the context closes before the broker stops.
+@Testcontainers
 @ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "ORDER_DB_PASSWORD=testcontainers-only")
-@Testcontainers
+        properties = {"ORDER_DB_PASSWORD=testcontainers-only", "order.outbox.poll-interval=100ms"})
+@DirtiesContext
 class OrderDeliveryIntegrationTests {
+
+    private static final String EVENTS_QUEUE = "order-tests.delivery-requested";
+    private static final Duration WAIT = Duration.ofSeconds(15);
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final UUID RESTAURANT = UUID.randomUUID();
@@ -61,14 +77,16 @@ class OrderDeliveryIntegrationTests {
     private static final UUID CUSTOMER = UUID.randomUUID();
     private static final HttpServer REMOTE = startRemote();
     private static final AtomicInteger CATALOG_CALLS = new AtomicInteger();
-    private static final AtomicInteger CREATED_DELIVERIES = new AtomicInteger();
     private static volatile int catalogStatus;
     private static volatile String mode;
-    private static volatile ObjectNode receipt;
 
     @Container
     @ServiceConnection
     static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17-alpine");
+
+    @Container
+    @ServiceConnection
+    static final RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:4.1-alpine");
 
     @LocalServerPort
     private int port;
@@ -82,26 +100,32 @@ class OrderDeliveryIntegrationTests {
     @Autowired
     private OrderRepository orders;
 
+    @Autowired
+    private AmqpAdmin admin;
+
+    @Autowired
+    private RabbitTemplate template;
+
     private final HttpClient client = HttpClient.newHttpClient();
 
     @DynamicPropertySource
     static void remoteUrls(DynamicPropertyRegistry properties) {
         String url = "http://localhost:" + REMOTE.getAddress().getPort();
         properties.add("order.integration.catalog-url", () -> url);
-        properties.add("order.integration.delivery-url", () -> url);
         properties.add("order.integration.payment-url", () -> url);
     }
 
     @BeforeEach
     void reset() {
+        bindEventsQueue();
+        admin.purgeQueue(EVENTS_QUEUE, false);
+        jdbc.update("DELETE FROM outbox_events");
         jdbc.update("DELETE FROM order_delivery_requests");
         jdbc.update("DELETE FROM order_payments");
         jdbc.update("DELETE FROM orders");
         catalogStatus = 200;
         mode = "normal";
-        receipt = null;
         CATALOG_CALLS.set(0);
-        CREATED_DELIVERIES.set(0);
     }
 
     @AfterAll
@@ -110,41 +134,57 @@ class OrderDeliveryIntegrationTests {
     }
 
     @Test
-    void requestsDeliveryWithSnapshotsAndRepeatsWithoutFetchingCatalogAgain() throws Exception {
+    void acceptsTheRequestAndPublishesOneEventWithSnapshotsCustomerAndRequestId() throws Exception {
         String orderPath = confirmedOrder();
-        var first = send("POST", orderPath + "/delivery", null);
-        assertThat(first.statusCode()).isEqualTo(200);
+        String orderId = orderPath.substring(orderPath.lastIndexOf('/') + 1);
+        var first = send("POST", orderPath + "/delivery", null, "req-order-delivery-01");
+        assertThat(first.statusCode()).isEqualTo(202);
         JsonNode response = JSON.readTree(first.body());
-        assertThat(response.path("status").asString()).isEqualTo("CREATED");
-        assertThat(response.path("orderId").asString()).isEqualTo(orderPath.substring(orderPath.lastIndexOf('/') + 1));
-        assertThat(receipt.path("origin").path("description").asString()).isEqualTo("Restaurant Central");
-        assertThat(receipt.path("destination").path("description").asString()).isEqualTo("Rua Central, 42");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM order_delivery_requests", Integer.class)).isEqualTo(1);
+        assertThat(response.path("orderId").asString()).isEqualTo(orderId);
+        assertThat(response.path("status").asString()).isEqualTo("REQUESTED");
+        assertThat(response.size()).isEqualTo(2);
+
+        Message message = template.receive(EVENTS_QUEUE, WAIT.toMillis());
+        assertThat(message).isNotNull();
+        var properties = message.getMessageProperties();
+        assertThat(properties.getType()).isEqualTo(OrderEvents.DELIVERY_REQUESTED_TYPE);
+        assertThat(properties.getContentType()).isEqualTo("application/json");
+        assertThat((String) properties.getHeader("X-Request-Id")).isEqualTo("req-order-delivery-01");
+        JsonNode event = JSON.readTree(new String(message.getBody(), StandardCharsets.UTF_8));
+        assertThat(event.path("eventId").asString()).isEqualTo(properties.getMessageId());
+        assertThat(event.path("orderId").asString()).isEqualTo(orderId);
+        assertThat(event.path("customerId").asString()).isEqualTo(CUSTOMER.toString());
+        assertThat(event.path("origin").path("description").asString()).isEqualTo("Restaurant Central");
+        assertThat(event.path("origin").path("latitude").asDouble()).isEqualTo(-23.55);
+        assertThat(event.path("destination").path("description").asString()).isEqualTo("Rua Central, 42");
+        assertThat(Instant.parse(event.path("requestedAt").asString())).isNotNull();
+
         JsonNode order = JSON.readTree(send("GET", orderPath, null).body());
         assertThat(Instant.parse(order.path("deliveryRequestedAt").asString()))
                 .isAfterOrEqualTo(Instant.parse(order.path("confirmedAt").asString()));
         var repeated = send("POST", orderPath + "/delivery", null);
-        assertThat(repeated.statusCode()).isEqualTo(200);
+        assertThat(repeated.statusCode()).isEqualTo(202);
         assertThat(JSON.readTree(repeated.body())).isEqualTo(response);
+        assertThat(template.receive(EVENTS_QUEUE, 1000)).isNull();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE published_at IS NOT NULL",
+                Integer.class)).isEqualTo(1);
         assertThat(CATALOG_CALLS.get()).isEqualTo(1);
-        assertThat(CREATED_DELIVERIES.get()).isEqualTo(1);
         assertThat(send("POST", orderPath + "/cancel", null).statusCode()).isEqualTo(409);
     }
 
     @Test
-    void recoversFromLostResponseUsingFrozenSnapshotAndSameDelivery() throws Exception {
+    void keepsTheEventPendingUntilTheBrokerCanRouteIt() throws Exception {
+        admin.deleteQueue(EVENTS_QUEUE);
         String order = confirmedOrder();
-        mode = "lost-response";
-        assertProblem(send("POST", order + "/delivery", null), 503);
-        UUID originalDelivery = UUID.fromString(receipt.path("id").asString());
-        assertThat(send("POST", order + "/cancel", null).statusCode()).isEqualTo(409);
-        catalogStatus = 404;
-        mode = "normal";
-        var retried = send("POST", order + "/delivery", null);
-        assertThat(retried.statusCode()).isEqualTo(200);
-        assertThat(JSON.readTree(retried.body()).path("deliveryId").asString()).isEqualTo(originalDelivery.toString());
-        assertThat(CATALOG_CALLS.get()).isEqualTo(1);
-        assertThat(CREATED_DELIVERIES.get()).isEqualTo(1);
+        assertThat(send("POST", order + "/delivery", null).statusCode()).isEqualTo(202);
+        await().atMost(WAIT).until(() -> jdbc.queryForObject(
+                "SELECT attempts FROM outbox_events", Integer.class) >= 2);
+        assertThat(jdbc.queryForObject("SELECT published_at IS NULL FROM outbox_events", Boolean.class)).isTrue();
+
+        bindEventsQueue();
+        await().atMost(WAIT).until(() -> jdbc.queryForObject(
+                "SELECT published_at IS NOT NULL FROM outbox_events", Boolean.class));
+        assertThat(template.receive(EVENTS_QUEUE, WAIT.toMillis())).isNotNull();
     }
 
     @ParameterizedTest
@@ -154,31 +194,23 @@ class OrderDeliveryIntegrationTests {
         mode = responseMode;
         assertProblem(send("POST", order + "/delivery", null), 409);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM order_delivery_requests", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events", Integer.class)).isZero();
         assertThat(JSON.readTree(send("GET", order, null).body()).path("deliveryRequestedAt").isNull()).isTrue();
         // A paid order is never cancelled without a refund, which V1 does not offer.
         assertProblem(send("POST", order + "/cancel", null), 409);
         mode = "normal";
-        assertThat(send("POST", order + "/delivery", null).statusCode()).isEqualTo(200);
+        assertThat(send("POST", order + "/delivery", null).statusCode()).isEqualTo(202);
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {404, 503})
-    void missingOrUnavailableCatalogDoesNotCreateIntent(int remoteStatus) throws Exception {
+    @ValueSource(ints = {200, 404, 503})
+    void missingInvalidOrUnavailableCatalogRecordsNothing(int remoteStatus) throws Exception {
         String order = confirmedOrder();
         catalogStatus = remoteStatus;
+        mode = remoteStatus == 200 ? "invalid-catalog" : "normal";
         assertProblem(send("POST", order + "/delivery", null), remoteStatus == 404 ? 409 : 503);
-        assertThat(CREATED_DELIVERIES.get()).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM order_delivery_requests", Integer.class)).isZero();
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"invalid-catalog", "invalid-delivery", "delivery-down", "delivery-conflict"})
-    void doesNotReportDeliverySuccessForInvalidOrFailedResponses(String responseMode) throws Exception {
-        String order = confirmedOrder();
-        mode = responseMode;
-        assertProblem(send("POST", order + "/delivery", null), mode.equals("delivery-conflict") ? 409 : 503);
-        int expectedIntents = mode.equals("invalid-catalog") ? 0 : 1;
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM order_delivery_requests", Integer.class)).isEqualTo(expectedIntents);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events", Integer.class)).isZero();
     }
 
     @Test
@@ -228,12 +260,15 @@ class OrderDeliveryIntegrationTests {
                     .containsExactlyInAnyOrder(true, false);
         }
         var stored = orders.findById(id).orElseThrow();
+        int events = jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE aggregate_id = ?", Integer.class, id);
         if (stored.status() == OrderStatus.CANCELLED) {
             assertThat(requests.findByOrderId(id)).isEmpty();
             assertThat(stored.deliveryRequestedAt()).isNull();
+            assertThat(events).isZero();
         } else {
             assertThat(requests.findByOrderId(id)).contains(request);
             assertThat(stored.deliveryRequestedAt()).isEqualTo(time);
+            assertThat(events).isEqualTo(1);
         }
     }
 
@@ -270,9 +305,22 @@ class OrderDeliveryIntegrationTests {
         return path;
     }
 
+    private void bindEventsQueue() {
+        admin.declareQueue(new Queue(EVENTS_QUEUE, true, false, false));
+        admin.declareBinding(new Binding(EVENTS_QUEUE, Binding.DestinationType.QUEUE, OrderEvents.EXCHANGE,
+                OrderEvents.DELIVERY_REQUESTED_KEY, Map.of()));
+    }
+
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
+        return send(method, path, body, null);
+    }
+
+    private HttpResponse<String> send(String method, String path, String body, String requestId) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .timeout(java.time.Duration.ofSeconds(10));
+        if (requestId != null) {
+            request.header("X-Request-Id", requestId);
+        }
         if (body != null) {
             request.header("Content-Type", "application/json");
         }
@@ -291,7 +339,6 @@ class OrderDeliveryIntegrationTests {
         try {
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             server.createContext("/api/catalog/restaurants", OrderDeliveryIntegrationTests::catalog);
-            server.createContext("/api/deliveries/by-order", OrderDeliveryIntegrationTests::delivery);
             server.createContext("/api/payments", OrderDeliveryIntegrationTests::payment);
             server.start();
             return server;
@@ -318,29 +365,6 @@ class OrderDeliveryIntegrationTests {
         restaurant.set("pickupLocation", mode.equals("no-location") ? JSON.nullNode()
                 : JSON.createObjectNode().put("latitude", -23.55).put("longitude", -46.63));
         respond(exchange, catalogStatus, restaurant.toString());
-    }
-
-    private static void delivery(HttpExchange exchange) throws IOException {
-        if (!exchange.getRequestMethod().equals("PUT")) {
-            respond(exchange, 405, "{}");
-            return;
-        }
-        if (mode.equals("delivery-down") || mode.equals("delivery-conflict")) {
-            respond(exchange, mode.equals("delivery-down") ? 503 : 409, "{}");
-            return;
-        }
-        ObjectNode request = (ObjectNode) JSON.readTree(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-        if (receipt == null) {
-            receipt = request.deepCopy();
-            receipt.put("id", UUID.randomUUID().toString()).put("status", "CREATED")
-                    .put("orderId", exchange.getRequestURI().getPath().substring("/api/deliveries/by-order/".length()));
-            CREATED_DELIVERIES.incrementAndGet();
-        }
-        if (mode.equals("invalid-delivery")) {
-            respond(exchange, 200, "{}");
-        } else {
-            respond(exchange, mode.equals("lost-response") ? 503 : 200, receipt.toString());
-        }
     }
 
     /** Approves every charge, echoing the request the way the Payment Service does. */
