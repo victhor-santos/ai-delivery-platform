@@ -101,3 +101,58 @@ jobs:
 
       - name: Type-check and build
         run: npm run build
+
+  e2e:
+    name: End to end (Compose demo)
+    needs: [java, python, frontend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create the demo environment
+        run: |
+          cp .env.example .env
+          scripts/initialize-auth-secret.sh
+
+      - name: Train the route model
+        shell: pwsh
+        run: scripts/prepare-route-model.ps1
+
+      - name: Start the demo
+        run: docker compose --profile demo up -d --build --wait --wait-timeout 600
+
+      - name: Smoke with broker and Python downtime, then container recreation
+        shell: pwsh
+        run: scripts/smoke-route-demo.ps1 -CheckRecovery -CheckPersistence
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install the browser tests
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Type-check the browser tests
+        working-directory: e2e
+        run: npm run typecheck
+
+      - name: Browser tests
+        working-directory: e2e
+        run: npm test
+
+      - name: Service logs
+        if: failure()
+        run: docker compose --profile demo logs --no-color --timestamps
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7
