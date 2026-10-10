@@ -68,22 +68,32 @@ export function RouteSection({ delivery, canPlan = false }: { delivery: Delivery
       {notice && <Alert>{notice}</Alert>}
       <RouteMap origin={delivery.origin} destination={delivery.destination} route={plan?.route ?? null} />
       {plan ? (
-        <dl className="facts">
-          <dt>Percurso</dt>
-          <dd>{describeRoute(plan.route)}</dd>
-          <dt>Distância</dt>
-          <dd>{distanceFormatter.format(plan.distanceKm)} km</dd>
-          <dt>Tempo previsto</dt>
-          <dd>{minutes(plan.predictedTravelTimeMinutes)}</dd>
-          <dt>Partida considerada</dt>
-          <dd>{timeFormatter.format(new Date(plan.departureAt))}</dd>
-          <dt>Modelo</dt>
-          <dd>
-            <code>{plan.modelVersion}</code> sobre <code>{plan.graphVersion}</code>
-          </dd>
-          <dt>Dados</dt>
-          <dd>{DATA_ORIGINS[plan.dataOrigin] ?? plan.dataOrigin}</dd>
-        </dl>
+        <>
+          <dl className="route-stats">
+            <div>
+              <dt>Distância</dt>
+              <dd>{distanceFormatter.format(plan.distanceKm)} km</dd>
+            </div>
+            <div>
+              <dt>Tempo previsto</dt>
+              <dd>{minutes(plan.predictedTravelTimeMinutes)}</dd>
+            </div>
+            <div>
+              <dt>Percurso</dt>
+              <dd>{describeRoute(plan.route)}</dd>
+            </div>
+          </dl>
+          <dl className="facts">
+            <dt>Partida considerada</dt>
+            <dd>{timeFormatter.format(new Date(plan.departureAt))}</dd>
+            <dt>Modelo</dt>
+            <dd>
+              <code>{plan.modelVersion}</code> sobre <code>{plan.graphVersion}</code>
+            </dd>
+            <dt>Dados</dt>
+            <dd>{DATA_ORIGINS[plan.dataOrigin] ?? plan.dataOrigin}</dd>
+          </dl>
+        </>
       ) : (
         data && (
           <p className="muted">

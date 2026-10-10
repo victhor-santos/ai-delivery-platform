@@ -46,8 +46,9 @@ export function RegisterPage() {
   }
 
   return (
-    <section className="card narrow">
+    <section className="card narrow auth-card">
       <h1>Criar conta</h1>
+      <p>Leva menos de um minuto.</p>
       {error && <Alert>{error}</Alert>}
       <form onSubmit={handleSubmit}>
         <label>

@@ -15,21 +15,35 @@ export function HomePage() {
     return <Alert>{error}</Alert>
   }
   if (!profile) {
-    return <p aria-busy="true">Carregando…</p>
+    return (
+      <p className="loading" aria-busy="true">
+        Carregando…
+      </p>
+    )
   }
+  const operator = profile.role === 'OPERATOR'
   return (
-    <section className="card">
+    <section className="card welcome">
       <h1>Olá, {profile.name}</h1>
       <p>
         Conectado como <strong>{profile.email}</strong>.
       </p>
-      <p>
-        {profile.role === 'OPERATOR' ? (
-          <Link to="/operations">Acompanhar as entregas</Link>
-        ) : (
-          <Link to="/restaurants">Escolher um restaurante</Link>
-        )}
+      <p className="muted">
+        {operator
+          ? 'Acompanhe as entregas, atribua entregadores e calcule as rotas.'
+          : 'Escolha um restaurante, monte o pedido e acompanhe a entrega até a sua porta.'}
       </p>
+      <div className="actions">
+        {operator ? (
+          <Link className="button-link" to="/operations">
+            Acompanhar as entregas
+          </Link>
+        ) : (
+          <Link className="button-link" to="/restaurants">
+            Escolher um restaurante
+          </Link>
+        )}
+      </div>
     </section>
   )
 }

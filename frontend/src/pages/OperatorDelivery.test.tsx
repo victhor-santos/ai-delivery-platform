@@ -47,14 +47,30 @@ const PLAN: RoutePlan = {
 
 type State = { delivery: Delivery; plan: RoutePlan | null }
 
+const STATUSES = ['CREATED', 'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'] as const
+
+function listRoutes(current: () => Delivery) {
+  const pageOf = (items: Delivery[], size: number) =>
+    json(200, { items: items.slice(0, size), page: 0, size, totalElements: items.length })
+  const routes: Record<string, () => Response> = {
+    'GET /api/deliveries?page=0&size=20': () => pageOf([current()], 20),
+    'GET /api/deliveries?page=0&size=1': () => pageOf([current()], 1),
+  }
+  for (const status of STATUSES) {
+    const matching = () => (current().status === status ? [current()] : [])
+    routes[`GET /api/deliveries?page=0&size=20&status=${status}`] = () => pageOf(matching(), 20)
+    routes[`GET /api/deliveries?page=0&size=1&status=${status}`] = () => pageOf(matching(), 1)
+  }
+  return routes
+}
+
 function server(delivery: Delivery, plan: (state: State) => Response = (state) => {
   state.plan = PLAN
   return json(200, PLAN)
 }, initialPlan: RoutePlan | null = null) {
   const state: State = { delivery, plan: initialPlan }
   const fetchMock = mockFetch({
-    'GET /api/deliveries?page=0&size=20': () => json(200, { items: [state.delivery], page: 0, size: 20, totalElements: 1 }),
-    'GET /api/deliveries?page=0&size=20&status=CANCELLED': () => json(200, { items: [], page: 0, size: 20, totalElements: 0 }),
+    ...listRoutes(() => state.delivery),
     'GET /api/deliveries/d1': () => json(200, state.delivery),
     'GET /api/deliveries/d1/route': () =>
       state.plan ? json(200, state.plan) : problem(404, 'A entrega ainda não possui um plano de rota.'),
@@ -92,7 +108,7 @@ async function openDelivery() {
 }
 
 describe('operations console', () => {
-  it('lists the deliveries for the operator and filters them by status', async () => {
+  it('lists the deliveries for the operator with counts and filters them by status', async () => {
     const { calls } = server(DELIVERY)
     signInAsOperator()
     const user = userEvent.setup()
@@ -106,10 +122,14 @@ describe('operations console', () => {
     expect(calls('/api/deliveries?page=0&size=20')[0][1]?.headers).toMatchObject({
       Authorization: `Bearer ${OPERATOR_TOKEN}`,
     })
+    const filters = screen.getByRole('list', { name: 'Situação' })
+    expect(within(filters).getByRole('button', { name: /^Todas,\s*1$/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(filters).getByRole('button', { name: /^Aguardando entregador,\s*1$/ })).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Situação' }), 'Canceladas')
+    await user.click(within(filters).getByRole('button', { name: /^Canceladas,\s*0$/ }))
 
     expect(await screen.findByText('Nenhuma entrega nesta situação.')).toBeInTheDocument()
+    expect(within(filters).getByRole('button', { name: /^Canceladas,\s*0$/ })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('link', { name: 'Operação' })).toBeInTheDocument()
   })
 

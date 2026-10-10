@@ -4,7 +4,7 @@ import { getDelivery } from '../api/deliveries'
 import { useAuth } from '../auth/AuthContext'
 import { Alert } from '../components/Alert'
 import { DeliveryTimeline } from '../deliveries/DeliveryTimeline'
-import { deliveryStatusLabel } from '../deliveries/deliveryStatus'
+import { deliveryStatusLabel, deliveryStatusTone } from '../deliveries/deliveryStatus'
 import { OperationsPanel } from '../deliveries/OperationsPanel'
 import { RouteSection } from '../deliveries/RouteSection'
 import { useDeliveryTracking } from '../deliveries/useDeliveryTracking'
@@ -20,10 +20,10 @@ export function OperatorDeliveryPage() {
 
   return (
     <section className="card delivery" aria-label="Entrega">
-      <p>
-        <Link to="/operations">Voltar às entregas</Link>
-      </p>
-      <h1>Entrega {delivery && <span className="badge">{deliveryStatusLabel(delivery)}</span>}</h1>
+      <Link className="back-link" to="/operations">
+        ← Entregas
+      </Link>
+      <h1>Entrega {delivery && <span className={`badge tone-${deliveryStatusTone(delivery)}`}>{deliveryStatusLabel(delivery)}</span>}</h1>
       {tracking.pending && <Alert>Entrega não encontrada.</Alert>}
       {tracking.error && <Alert>{tracking.error}</Alert>}
       {!delivery && !tracking.pending && !tracking.error && <p aria-busy="true">Carregando entrega…</p>}

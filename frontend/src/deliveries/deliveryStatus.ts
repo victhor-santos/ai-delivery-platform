@@ -17,6 +17,21 @@ export function deliveryStatusLabel(delivery: Delivery): string {
   }
 }
 
+export type Tone = 'success' | 'warning' | 'info' | 'danger'
+
+export function deliveryStatusTone(delivery: Delivery): Tone {
+  switch (delivery.status) {
+    case 'CREATED':
+      return 'warning'
+    case 'DELIVERED':
+      return 'success'
+    case 'CANCELLED':
+      return 'danger'
+    default:
+      return 'info'
+  }
+}
+
 export type Step = { label: string; at: string | null }
 
 // Uma entrega cancelada encerra a linha do tempo no cancelamento; os passos seguintes não acontecerão.

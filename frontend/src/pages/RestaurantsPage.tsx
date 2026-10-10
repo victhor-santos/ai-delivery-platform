@@ -1,8 +1,25 @@
 import { useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { listRestaurants } from '../api/catalog'
+import { listRestaurants, type Restaurant } from '../api/catalog'
 import { useLoad } from '../api/useLoad'
+import { syntheticPointAt } from '../checkout/syntheticCity'
 import { Alert } from '../components/Alert'
+
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter((word) => word.length > 2)
+  const first = words[0] ?? name.trim()
+  const last = words.length > 1 ? words[words.length - 1] : ''
+  return ((first[0] ?? '?') + (last[0] ?? first[1] ?? '')).toUpperCase()
+}
+
+function pickupLabel(restaurant: Restaurant): string {
+  const location = restaurant.pickupLocation
+  if (!location) {
+    return 'Sem local de coleta'
+  }
+  const point = syntheticPointAt(location.latitude, location.longitude)
+  return point ? `Coleta no ponto ${point.id}` : 'Coleta fora da cidade sintética'
+}
 
 function pageFrom(params: URLSearchParams): number {
   const page = Number(params.get('page') ?? '0')
@@ -21,29 +38,49 @@ export function RestaurantsPage() {
 
   return (
     <section>
-      <h1>Restaurantes</h1>
+      <header className="page-header">
+        <div>
+          <h1>Restaurantes</h1>
+          <p>Escolha onde pedir. Os preços e a coleta vêm do catálogo.</p>
+        </div>
+      </header>
       {error && <Alert>{error}</Alert>}
-      {!error && !data && <p aria-busy="true">Carregando…</p>}
-      {data && data.content.length === 0 && <p>Nenhum restaurante cadastrado.</p>}
+      {!error && !data && (
+        <p className="loading" aria-busy="true">
+          Carregando…
+        </p>
+      )}
+      {data && data.content.length === 0 && <p className="empty">Nenhum restaurante cadastrado.</p>}
       {data && data.content.length > 0 && (
-        <ul className="list">
+        <ul className="restaurant-grid">
           {data.content.map((restaurant) => (
-            <li key={restaurant.id} className="card">
-              <Link to={`/restaurants/${restaurant.id}`}>{restaurant.name}</Link>
-              {!restaurant.active && <span className="badge">Fechado</span>}
+            <li key={restaurant.id} className={`card restaurant-card${restaurant.active ? '' : ' closed'}`}>
+              <span className="avatar" aria-hidden="true">
+                {initials(restaurant.name)}
+              </span>
+              <div className="details">
+                <Link to={`/restaurants/${restaurant.id}`}>{restaurant.name}</Link>
+                <small>{pickupLabel(restaurant)}</small>
+              </div>
+              {!restaurant.active && <span className="badge tone-danger">Fechado</span>}
             </li>
           ))}
         </ul>
       )}
       {data && data.totalPages > 1 && (
         <nav className="pager" aria-label="Páginas">
-          <button type="button" disabled={page === 0} onClick={() => goTo(page - 1)}>
+          <button type="button" className="secondary" disabled={page === 0} onClick={() => goTo(page - 1)}>
             Anterior
           </button>
           <span>
             Página {page + 1} de {data.totalPages}
           </span>
-          <button type="button" disabled={page + 1 >= data.totalPages} onClick={() => goTo(page + 1)}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={page + 1 >= data.totalPages}
+            onClick={() => goTo(page + 1)}
+          >
             Próxima
           </button>
         </nav>
