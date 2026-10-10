@@ -6,7 +6,7 @@ COPY ${SERVICE_PATH}/.mvn ./.mvn
 COPY ${SERVICE_PATH}/pom.xml ./pom.xml
 RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
 COPY ${SERVICE_PATH}/src ./src
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -DskipTests package
+RUN --mount=type=cache,target=/root/.m2,sharing=locked ./mvnw -B -DskipTests package
 
 FROM eclipse-temurin:21-jre-jammy AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends curl \

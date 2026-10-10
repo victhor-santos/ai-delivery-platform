@@ -1,0 +1,19 @@
+{
+  "name": "delivery-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^24.13.3",
+    "typescript": "~6.0.2"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}
