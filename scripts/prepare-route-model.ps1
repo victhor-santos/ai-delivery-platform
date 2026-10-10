@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $image = 'delivery-order-system/route-intelligence-service:local'
+$userArguments = if ($IsLinux) { @('--user', "$(& id -u):$(& id -g)") } else { @() }
 
 function Get-AbsoluteDirectory([string]$Directory) {
     if ([System.IO.Path]::IsPathRooted($Directory)) {
@@ -41,21 +42,21 @@ try {
         $datasetParent = Split-Path -Parent $dataset
         $datasetName = Split-Path -Leaf $dataset
         New-Item -ItemType Directory -Path $datasetParent -Force | Out-Null
-        Invoke-Docker -DockerArguments @('run', '--rm', '--mount', "type=bind,source=$datasetParent,target=/data",
+        Invoke-Docker -DockerArguments (@('run', '--rm') + $userArguments + @('--mount', "type=bind,source=$datasetParent,target=/data",
             '--entrypoint', 'python', $image, '-m', 'training.generate_dataset',
-            '--output', "/data/$datasetName")
+            '--output', "/data/$datasetName"))
     }
 
     $artifactParent = Split-Path -Parent $artifact
     $artifactName = Split-Path -Leaf $artifact
     New-Item -ItemType Directory -Path $artifactParent -Force | Out-Null
-    Invoke-Docker -DockerArguments @('run', '--rm', '--mount', "type=bind,source=$dataset,target=/data,readonly",
+    Invoke-Docker -DockerArguments (@('run', '--rm') + $userArguments + @('--mount', "type=bind,source=$dataset,target=/data,readonly",
         '--mount', "type=bind,source=$artifactParent,target=/artifacts", '--entrypoint', 'python',
-        $image, '-m', 'training.train', '--dataset', '/data', '--output', "/artifacts/$artifactName")
-    Invoke-Docker -DockerArguments @('run', '--rm', '--mount', "type=bind,source=$dataset,target=/data,readonly",
+        $image, '-m', 'training.train', '--dataset', '/data', '--output', "/artifacts/$artifactName"))
+    Invoke-Docker -DockerArguments (@('run', '--rm') + $userArguments + @('--mount', "type=bind,source=$dataset,target=/data,readonly",
         '--mount', "type=bind,source=$artifact,target=/models", '--entrypoint', 'python',
         $image, '-m', 'training.evaluate', '--dataset', '/data', '--artifact', '/models',
-        '--output', '/models/test-report.json')
+        '--output', '/models/test-report.json'))
     Write-Output "Model prepared at $artifact. Set ROUTE_INTELLIGENCE_MODEL_DIR to this directory for Compose."
 } finally {
     Pop-Location
